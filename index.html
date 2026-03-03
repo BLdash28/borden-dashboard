@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Borden Lácteos — Dashboard POS Centroamérica</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F2EEE7;--warm:#FDFAF5;--dark:#1C1714;--mid:#3E342B;
+  --accent:#C8873A;--green:#2A7A58;--red:#C0402F;--blue:#3A6FA8;--purple:#6B4FA8;--teal:#2A7A72;
+  --muted:#8A7B6E;--border:rgba(28,23,20,0.09);--shadow:0 1px 14px rgba(28,23,20,0.06);
+  --light:#EEE9E0;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--dark);min-height:100vh;}
+
+/* SIDEBAR */
+.sidebar{position:fixed;left:0;top:0;bottom:0;width:214px;background:var(--dark);display:flex;flex-direction:column;z-index:100;}
+.logo-area{padding:24px 22px 20px;border-bottom:1px solid rgba(255,255,255,0.06);}
+.logo-main{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:#F2EEE7;letter-spacing:-.5px;line-height:1.2;}
+.logo-tag{font-size:9px;color:var(--muted);letter-spacing:2.5px;text-transform:uppercase;margin-top:5px;}
+.nav{padding:14px 0;flex:1;overflow-y:auto;}
+.nav-section{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#3A302A;padding:14px 20px 5px;}
+.nav-item{display:flex;align-items:center;gap:10px;padding:9px 20px;font-size:12.5px;color:rgba(242,238,231,0.45);cursor:pointer;transition:all .15s;border-left:2px solid transparent;}
+.nav-item:hover{color:rgba(242,238,231,0.82);background:rgba(255,255,255,0.03);}
+.nav-item.active{color:#F2EEE7;background:rgba(200,135,58,0.13);border-left-color:var(--accent);}
+.nav-icon{font-size:14px;width:16px;text-align:center;}
+.sidebar-foot{padding:14px 20px;border-top:1px solid rgba(255,255,255,0.06);}
+.live{display:flex;align-items:center;gap:7px;font-size:10px;color:var(--muted);}
+.dot{width:6px;height:6px;border-radius:50%;background:#4ade80;animation:blink 2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* MAIN */
+.main{margin-left:214px;min-height:100vh;}
+.topbar{background:var(--warm);border-bottom:1px solid var(--border);padding:15px 30px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+.topbar-title{font-family:'Syne',sans-serif;font-size:17px;font-weight:700;letter-spacing:-.4px;}
+.topbar-sub{font-size:11px;color:var(--muted);margin-top:2px;}
+.filters{display:flex;gap:6px;}
+.flt{padding:5px 12px;border:1px solid var(--border);background:white;border-radius:6px;font-size:11px;font-family:'DM Sans',sans-serif;color:var(--mid);cursor:pointer;transition:all .15s;}
+.flt:hover{border-color:var(--accent);color:var(--accent);}
+.flt.active{background:var(--accent);color:white;border-color:var(--accent);}
+.content{padding:26px 30px;}
+
+/* VIEWS */
+.view{display:none;animation:fadeUp .35s ease both;}
+.view.active{display:block;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* KPI ROW */
+.kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px;}
+.kpi-row-5{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px;}
+.kpi{background:white;border:1px solid var(--border);border-radius:11px;padding:18px 20px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+.kpi-bar{position:absolute;top:0;left:0;right:0;height:3px;border-radius:11px 11px 0 0;}
+.kpi-lbl{font-size:9.5px;letter-spacing:1.8px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+.kpi-val{font-family:'Syne',sans-serif;font-size:26px;font-weight:700;letter-spacing:-1px;line-height:1;}
+.kpi-sub{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:11px;}
+.badge{padding:2px 7px;border-radius:20px;font-size:10px;font-weight:500;}
+.badge.g{background:rgba(42,122,88,.12);color:var(--green);}
+.badge.r{background:rgba(192,64,47,.12);color:var(--red);}
+.badge.a{background:rgba(200,135,58,.12);color:var(--accent);}
+.badge.b{background:rgba(58,111,168,.12);color:var(--blue);}
+.badge.p{background:rgba(107,79,168,.12);color:var(--purple);}
+.kpi-note{color:var(--muted);font-size:10.5px;}
+
+/* GRID LAYOUTS */
+.row2{display:grid;grid-template-columns:1.5fr 1fr;gap:14px;margin-bottom:22px;}
+.row2eq{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:22px;}
+.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin-bottom:22px;}
+.row-full{margin-bottom:22px;}
+
+/* CARD */
+.card{background:white;border:1px solid var(--border);border-radius:11px;padding:20px;box-shadow:var(--shadow);}
+.card-hd{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px;}
+.card-title{font-family:'Syne',sans-serif;font-size:13px;font-weight:700;}
+.card-sub{font-size:10.5px;color:var(--muted);margin-top:2px;}
+.chip{font-size:9.5px;padding:3px 9px;border-radius:20px;background:var(--bg);color:var(--muted);white-space:nowrap;}
+
+/* SVG CHART */
+.chart-wrap{position:relative;width:100%;}
+svg.chart{overflow:visible;}
+.axis-lbl{font-size:9px;fill:#8A7B6E;font-family:'DM Sans',sans-serif;}
+.gridl{stroke:#EDE8E0;stroke-width:1;}
+.leg-row{display:flex;gap:14px;flex-wrap:wrap;}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted);}
+.leg-line{width:12px;height:2px;border-radius:2px;display:inline-block;}
+.leg-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+
+/* HBAR */
+.hbar-list{display:flex;flex-direction:column;gap:8px;}
+.hbar-item{}
+.hbar-hd{display:flex;justify-content:space-between;margin-bottom:3px;font-size:11px;}
+.hbar-name{color:var(--mid);max-width:70%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.hbar-val{font-weight:600;color:var(--dark);}
+.hbar-bg{height:5px;background:var(--bg);border-radius:3px;overflow:hidden;}
+.hbar-fill{height:100%;border-radius:3px;transition:width 1s cubic-bezier(.16,1,.3,1);}
+
+/* DONUT */
+.donut-cont{display:flex;align-items:center;gap:20px;}
+.donut-leg{flex:1;display:flex;flex-direction:column;gap:8px;}
+.dleg{display:flex;align-items:center;justify-content:space-between;font-size:11.5px;}
+.dleg-left{display:flex;align-items:center;gap:7px;color:var(--mid);}
+.dleg-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+.dleg-val{font-weight:700;font-size:11px;}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse;font-size:11.5px;}
+.tbl thead th{text-align:left;padding:0 0 9px;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);font-weight:500;}
+.tbl thead th.r{text-align:right;}
+.tbl tbody tr{border-bottom:1px solid var(--border);transition:background .12s;cursor:pointer;}
+.tbl tbody tr:last-child{border-bottom:none;}
+.tbl tbody tr:hover{background:var(--bg);}
+.tbl td{padding:8px 0;color:var(--dark);vertical-align:middle;}
+.tbl td.r{text-align:right;}
+.tbl td.c{text-align:center;}
+
+/* COUNTRY DETAIL PANEL */
+.ccard.selected{box-shadow:0 0 0 2px var(--accent),0 4px 20px rgba(28,23,20,0.12);transform:translateY(-2px);}
+.pdetail-hd{display:flex;align-items:center;gap:14px;margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);}
+.pdetail-flag{font-size:36px;line-height:1;}
+.pdetail-name{font-family:'Syne',sans-serif;font-size:20px;font-weight:800;letter-spacing:-.5px;}
+.pdetail-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+.pdetail-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;}
+.pdetail-section{margin-bottom:14px;}
+.pdetail-section-title{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;}
+.pdetail-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.close-btn{margin-left:auto;background:none;border:1px solid var(--border);border-radius:7px;padding:5px 12px;font-size:11px;font-family:'DM Sans',sans-serif;color:var(--muted);cursor:pointer;transition:all .15s;}
+.close-btn:hover{border-color:var(--accent);color:var(--accent);}
+.sparkline-wrap{height:50px;width:100%;}
+.country-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:22px;}
+/* COUNTRY DETAIL PANEL */
+.ccard.selected{box-shadow:0 0 0 2.5px var(--accent),0 6px 22px rgba(28,23,20,0.13)!important;transform:translateY(-3px)!important;}
+.pdetail-hd{display:flex;align-items:center;gap:16px;margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--border);}
+.pdetail-flag{font-size:38px;line-height:1;flex-shrink:0;}
+.pdetail-name{font-family:'Syne',sans-serif;font-size:21px;font-weight:800;letter-spacing:-.5px;}
+.pdetail-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+.pdetail-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px;}
+.pdetail-kpi{background:var(--bg);border-radius:9px;padding:10px 12px;}
+.pdetail-kpi-lbl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+.pdetail-kpi-val{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;}
+.pdetail-kpi-sub{font-size:9.5px;color:var(--muted);margin-top:2px;}
+.pdetail-body{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;}
+.pdetail-sec-title{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px;font-weight:500;}
+.close-btn{margin-left:auto;flex-shrink:0;background:none;border:1px solid var(--border);border-radius:7px;padding:5px 13px;font-size:11px;font-family:'DM Sans',sans-serif;color:var(--muted);cursor:pointer;transition:all .15s;}
+.close-btn:hover{border-color:var(--red);color:var(--red);}
+
+.ccard{background:white;border:1px solid var(--border);border-radius:10px;padding:14px;box-shadow:var(--shadow);text-align:center;cursor:pointer;transition:transform .15s,box-shadow .15s;}
+.ccard:hover{transform:translateY(-2px);box-shadow:0 4px 20px rgba(28,23,20,0.10);}
+.ccard-flag{font-size:24px;margin-bottom:5px;}
+.ccard-name{font-size:9.5px;color:var(--muted);letter-spacing:.5px;margin-bottom:3px;text-transform:uppercase;}
+.ccard-val{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;}
+.ccard-qty{font-size:10px;color:var(--muted);margin-top:2px;}
+.ccard-bar{height:3px;border-radius:2px;margin-top:8px;background:var(--bg);overflow:hidden;}
+.ccard-bar-fill{height:100%;border-radius:2px;transition:width 1s cubic-bezier(.16,1,.3,1);}
+
+/* LOLLIPOP */
+.lolly-list{display:flex;flex-direction:column;gap:6px;}
+.lolly{display:flex;align-items:center;gap:10px;font-size:11px;}
+.lolly-name{width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--mid);flex-shrink:0;}
+.lolly-track{flex:1;height:2px;background:var(--bg);border-radius:2px;position:relative;}
+.lolly-fill{height:2px;border-radius:2px;background:var(--accent);transition:width 1s cubic-bezier(.16,1,.3,1);}
+.lolly-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);position:absolute;right:-1px;top:-3px;}
+.lolly-val{width:52px;text-align:right;font-weight:600;font-size:11px;color:var(--dark);}
+
+/* SEARCH BOX */
+.search-box{width:100%;padding:8px 14px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;background:white;color:var(--dark);margin-bottom:14px;}
+.search-box:focus{border-color:var(--accent);}
+
+/* STATUS PILL */
+.pill{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:500;display:inline-block;}
+.pill-ok{background:rgba(42,122,88,.12);color:var(--green);}
+.pill-low{background:rgba(200,135,58,.12);color:var(--accent);}
+.pill-crit{background:rgba(192,64,47,.12);color:var(--red);}
+.pill-a{background:rgba(42,122,88,.10);color:var(--green);}
+.pill-i{background:rgba(192,64,47,.10);color:var(--red);}
+
+/* TOOLTIP */
+.tip{position:fixed;background:var(--dark);color:#F2EEE7;padding:6px 11px;border-radius:7px;font-size:10.5px;pointer-events:none;opacity:0;transition:opacity .1s;z-index:9999;white-space:nowrap;}
+.tip.show{opacity:1;}
+
+/* EXPAND PANEL ─ filas expandibles */
+.xrow{cursor:pointer;user-select:none;}
+.xrow:hover .hbar-hd .hbar-name,.xrow:hover .lolly-name{color:var(--accent);}
+.xrow.open .hbar-hd .hbar-name,.xrow.open .lolly-name{color:var(--accent);font-weight:500;}
+.xrow .chevron{display:inline-block;font-size:9px;color:var(--muted);transition:transform .25s;margin-left:5px;flex-shrink:0;}
+.xrow.open .chevron{transform:rotate(90deg);color:var(--accent);}
+.xpanel{max-height:0;overflow:hidden;opacity:0;transition:max-height .38s cubic-bezier(.16,1,.3,1),opacity .28s ease;}
+.xpanel-inner{padding:10px 0 6px;border-top:1px dashed var(--border);margin-top:6px;}
+.xrow.open .xpanel{max-height:220px;opacity:1;}
+.xrow-lolly.open .xpanel{max-height:220px;opacity:1;}
+.xrow-fmt.open .xpanel{max-height:220px;opacity:1;}
+.xpanel-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 10px;}
+.xpanel-grid.cols3{grid-template-columns:repeat(3,1fr);}
+.xpanel-grid.cols5{grid-template-columns:repeat(5,1fr);}
+.xstat{background:var(--bg);border-radius:7px;padding:8px 10px;}
+.xstat-lbl{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:3px;}
+.xstat-val{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--dark);}
+.xstat-sub{font-size:9.5px;color:var(--muted);margin-top:1px;}
+.xmini-bar{height:4px;background:var(--light);border-radius:2px;margin-top:6px;overflow:hidden;}
+.xmini-fill{height:100%;border-radius:2px;transition:width 0.8s cubic-bezier(.16,1,.3,1);}
+/* Table expand row */
+.tbl tbody tr.xrow-tr{cursor:pointer;}
+.tbl tbody tr.xrow-tr:hover td{background:var(--bg);}
+.tbl tbody tr.xrow-tr.open td{background:#FBF8F2;}
+.tbl tbody tr.xrow-tr .tr-chevron{display:inline-block;font-size:9px;color:var(--muted);transition:transform .25s;margin-right:6px;}
+.tbl tbody tr.xrow-tr.open .tr-chevron{transform:rotate(90deg);color:var(--accent);}
+.tbl tbody tr.expand-tr td{padding:0;border-bottom:1px solid var(--border);}
+.tbl tbody tr.expand-tr .xpanel-inner{padding:10px 14px 10px;}
+.xrow-lolly{cursor:pointer;user-select:none;}
+.xrow-lolly:hover .lolly-name{color:var(--accent);}
+.xrow-lolly.open .lolly-name{color:var(--accent);font-weight:500;}
+.xrow-lolly .chevron{font-size:9px;color:var(--muted);transition:transform .25s;flex-shrink:0;width:10px;text-align:center;}
+.xrow-lolly.open .chevron{transform:rotate(90deg);color:var(--accent);}
+.xrow-fmt{cursor:pointer;user-select:none;border-radius:7px;padding:4px 6px 4px 2px;transition:background .12s;}
+.xrow-fmt:hover{background:var(--bg);}
+.xrow-fmt.open{background:var(--bg);}
+.xrow-fmt .chevron{font-size:9px;color:var(--muted);transition:transform .25s;flex-shrink:0;}
+.xrow-fmt.open .chevron{transform:rotate(90deg);color:var(--accent);}
+
+/* WEEK BAR */
+.week-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:22px;}
+.week-card{background:white;border:1px solid var(--border);border-radius:10px;padding:14px 16px;text-align:center;box-shadow:var(--shadow);}
+.week-lbl{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+.week-val{font-family:'Syne',sans-serif;font-size:18px;font-weight:700;}
+.week-qty{font-size:10px;color:var(--muted);margin-top:3px;}
+.week-bar{height:4px;border-radius:2px;margin-top:10px;background:var(--bg);overflow:hidden;}
+.week-bar-fill{height:100%;border-radius:2px;background:var(--accent);}
+
+/* FORMAT BARS */
+.fmt-item{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.fmt-label{width:130px;font-size:11.5px;color:var(--mid);flex-shrink:0;}
+.fmt-track{flex:1;height:8px;background:var(--bg);border-radius:4px;overflow:hidden;}
+.fmt-fill{height:100%;border-radius:4px;transition:width 1s cubic-bezier(.16,1,.3,1);}
+.fmt-val{width:60px;text-align:right;font-size:11px;font-weight:600;color:var(--dark);}
+.fmt-stores{width:40px;text-align:right;font-size:10px;color:var(--muted);}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<nav class="sidebar">
+  <div class="logo-area">
+    <div class="logo-main">Borden<br>Lácteos</div>
+    <div class="logo-tag">POS Dashboard · CA</div>
+  </div>
+  <div class="nav">
+    <div class="nav-section">Vistas</div>
+    <div class="nav-item active" onclick="show('resumen',this)"><span class="nav-icon">◈</span> Resumen Ejecutivo</div>
+    <div class="nav-item" onclick="show('ventas',this)"><span class="nav-icon">↗</span> Ventas Diarias</div>
+    <div class="nav-item" onclick="show('inventario',this)"><span class="nav-icon">⊡</span> Inventario POS</div>
+    <div class="nav-section">Dimensiones</div>
+    <div class="nav-item" onclick="show('pais',this)"><span class="nav-icon">◎</span> Por País</div>
+    <div class="nav-item" onclick="show('categoria',this)"><span class="nav-icon">≋</span> Por Categoría</div>
+    <div class="nav-item" onclick="show('tienda',this)"><span class="nav-icon">⊕</span> Por Tienda</div>
+    <div class="nav-item" onclick="show('producto',this)"><span class="nav-icon">▤</span> Por Producto (SKU)</div>
+  </div>
+  <div class="sidebar-foot">
+    <div class="live"><div class="dot"></div>Enero 2026 · 27 días</div>
+  </div>
+</nav>
+
+<!-- MAIN -->
+<div class="main">
+  <header class="topbar">
+    <div>
+      <div class="topbar-title" id="viewTitle">Resumen Ejecutivo</div>
+      <div class="topbar-sub">01 Ene — 27 Ene 2026 · Borden · 5 países · 234 tiendas Walmart</div>
+    </div>
+    <div class="filters">
+      <button class="flt active">Enero 2026</button>
+      <button class="flt">WK 48</button>
+      <button class="flt">WK 49-51</button>
+      <button class="flt">WK 52</button>
+    </div>
+  </header>
+
+  <div class="content">
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- VIEW 1: RESUMEN EJECUTIVO                                       -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="view active" id="view-resumen">
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-bar" style="background:var(--green)"></div><div class="kpi-lbl">Ventas Totales USD</div><div class="kpi-val">$147,511</div><div class="kpi-sub"><span class="badge a">27 días</span><span class="kpi-note">~$5,463 / día</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--accent)"></div><div class="kpi-lbl">Unidades Vendidas</div><div class="kpi-val">41,634</div><div class="kpi-sub"><span class="badge a">~1,542</span><span class="kpi-note">unidades / día</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--blue)"></div><div class="kpi-lbl">SKUs Activos</div><div class="kpi-val">57</div><div class="kpi-sub"><span class="badge b">38 activos</span><span class="kpi-note">11 inactivos</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--purple)"></div><div class="kpi-lbl">Tiendas Reportando</div><div class="kpi-val">234</div><div class="kpi-sub"><span class="badge p">5 países</span><span class="kpi-note">Walmart CA</span></div></div>
+    </div>
+    <div class="row2">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Ventas Diarias POS</div><div class="card-sub">USD · Enero 2026 · todas las tiendas</div></div><div class="leg-row"><div class="leg-item"><div class="leg-line" style="background:var(--accent)"></div>Ventas USD</div><div class="leg-item"><div class="leg-line" style="background:var(--blue);opacity:.6"></div>Unidades</div></div></div><div class="chart-wrap" style="height:175px"><svg class="chart" id="c-main-line" width="100%" height="175"></svg></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Mix por Categoría</div><div class="card-sub">% ventas totales USD</div></div></div><div class="donut-cont"><svg width="120" height="120" viewBox="0 0 120 120" id="c-donut-main"></svg><div class="donut-leg" id="c-donut-main-leg"></div></div></div>
+    </div>
+    <div class="row3">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Top 10 Productos</div><div class="card-sub">Por ventas USD</div></div></div><div class="hbar-list" id="r-top-prod"></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Top 8 Tiendas</div><div class="card-sub">Por ventas USD</div></div></div><div class="lolly-list" id="r-top-store"></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Inventario On-Hand</div><div class="card-sub">Top productos · stock vs ventas</div></div></div><table class="tbl"><thead><tr><th>Producto</th><th class="r">Ventas</th><th class="r">On-Hand</th><th>Estado</th></tr></thead><tbody id="r-inv-table"></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- VIEW 2: VENTAS DIARIAS                                          -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="view" id="view-ventas">
+    <div class="week-grid" id="v-week-cards"></div>
+    <div class="row2">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Ventas Diarias por País</div><div class="card-sub">USD · Enero 2026 · líneas apiladas</div></div><div class="leg-row" id="v-country-leg"></div></div><div class="chart-wrap" style="height:200px"><svg class="chart" id="c-country-lines" width="100%" height="200"></svg></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Ventas por Semana Walmart</div><div class="card-sub">WM Week · USD y unidades</div></div></div><div class="chart-wrap" style="height:200px"><svg class="chart" id="c-week-bars" width="100%" height="200"></svg></div></div>
+    </div>
+    <div class="row2eq">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Ventas Diarias Total</div><div class="card-sub">Área acumulada · USD</div></div></div><div class="chart-wrap" style="height:175px"><svg class="chart" id="c-area-total" width="100%" height="175"></svg></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Unidades Diarias</div><div class="card-sub">POS Qty vendidas · todas las tiendas</div></div></div><div class="chart-wrap" style="height:175px"><svg class="chart" id="c-qty-line" width="100%" height="175"></svg></div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- VIEW 3: INVENTARIO POS                                          -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="view" id="view-inventario">
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-bar" style="background:var(--green)"></div><div class="kpi-lbl">On-Hand Promedio/Tienda</div><div class="kpi-val">27.4</div><div class="kpi-sub"><span class="badge g">unidades</span><span class="kpi-note">por tienda/SKU</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--accent)"></div><div class="kpi-lbl">SKUs en Stock Bajo</div><div class="kpi-val">8</div><div class="kpi-sub"><span class="badge a">On-Hand &lt;15</span><span class="kpi-note">requieren revisión</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--red)"></div><div class="kpi-lbl">SKUs Críticos</div><div class="kpi-val">3</div><div class="kpi-sub"><span class="badge r">On-Hand &lt;8</span><span class="kpi-note">riesgo de quiebre</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--blue)"></div><div class="kpi-lbl">SKUs Inactivos</div><div class="kpi-val">11</div><div class="kpi-sub"><span class="badge b">Item Status = I</span><span class="kpi-note">de 49 totales</span></div></div>
+    </div>
+    <div class="row2">
+      <div class="card" style="grid-column:1/-1"><div class="card-hd"><div><div class="card-title">On-Hand Diario Total (todas las tiendas)</div><div class="card-sub">Suma de stock histórico en tienda · Enero 2026</div></div></div><div class="chart-wrap" style="height:150px"><svg class="chart" id="c-inv-daily" width="100%" height="150"></svg></div></div>
+    </div>
+    <div class="card"><div class="card-hd"><div><div class="card-title">Inventario por SKU — On-Hand Promedio vs Ventas</div><div class="card-sub">Todos los SKUs con actividad de venta</div></div><input class="search-box" id="inv-search" placeholder="🔍 Buscar producto..." oninput="filterInv(this.value)"></div><table class="tbl"><thead><tr><th>Producto</th><th>Categoría</th><th class="r">Ventas USD</th><th class="r">Uds Vend.</th><th class="r">On-Hand Avg</th><th class="c">Estado Stock</th></tr></thead><tbody id="inv-full-table"></tbody></table></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- VIEW 4: POR PAÍS                                                -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="view" id="view-pais">
+    <div class="country-grid" id="p-country-cards"></div>
+
+    <!-- PANEL DE DETALLE POR PAÍS -->
+    <div id="p-detail-panel" style="display:none;margin-bottom:22px;animation:fadeUp .3s ease both">
+      <div class="card" style="border-left:4px solid var(--accent)" id="p-detail-card">
+        <!-- populated by JS -->
+      </div>
+    </div>
+
+    <div class="row2">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Ventas Diarias por País</div><div class="card-sub">USD · líneas individuales</div></div><div class="leg-row" id="p-leg"></div></div><div class="chart-wrap" style="height:200px"><svg class="chart" id="c-pais-lines" width="100%" height="200"></svg></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Participación de Mercado</div><div class="card-sub">% ventas USD por país</div></div></div><div class="donut-cont"><svg width="130" height="130" viewBox="0 0 130 130" id="c-pais-donut"></svg><div class="donut-leg" id="c-pais-donut-leg"></div></div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:22px" id="p-top-skus-row"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- VIEW 5: POR CATEGORÍA                                           -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="view" id="view-categoria">
+    <div class="kpi-row-5" id="cat-kpis"></div>
+    <div class="row2">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Ventas Diarias por Categoría</div><div class="card-sub">Quesos vs Leche & Crema · USD</div></div><div class="leg-row"><div class="leg-item"><div class="leg-line" style="background:var(--accent)"></div>Quesos D90</div><div class="leg-item"><div class="leg-line" style="background:var(--green)"></div>Leche & Crema D95</div></div></div><div class="chart-wrap" style="height:185px"><svg class="chart" id="c-cat-lines" width="100%" height="185"></svg></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Comparativa de Categorías</div><div class="card-sub">Ventas, SKUs, Tiendas</div></div></div><div id="cat-compare"></div></div>
+    </div>
+    <div class="row2eq">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Top Productos — Quesos (D90)</div><div class="card-sub">Por ventas USD</div></div><span class="chip" style="background:rgba(200,135,58,.12);color:var(--accent)">Quesos</span></div><div class="hbar-list" id="cat-cheese-prod"></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Top Productos — Leche & Crema (D95)</div><div class="card-sub">Por ventas USD</div></div><span class="chip" style="background:rgba(42,122,88,.12);color:var(--green)">Leche</span></div><div class="hbar-list" id="cat-milk-prod"></div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- VIEW 6: POR TIENDA                                              -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="view" id="view-tienda">
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-bar" style="background:var(--green)"></div><div class="kpi-lbl">Total Tiendas</div><div class="kpi-val">234</div><div class="kpi-sub"><span class="badge g">reportando</span><span class="kpi-note">5 países</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--accent)"></div><div class="kpi-lbl">Mejor Tienda</div><div class="kpi-val">WM ESCAZÚ</div><div class="kpi-sub"><span class="badge a">$4,027</span><span class="kpi-note">Costa Rica</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--blue)"></div><div class="kpi-lbl">Venta Promedio/Tienda</div><div class="kpi-val">$630</div><div class="kpi-sub"><span class="badge b">período</span><span class="kpi-note">27 días</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--purple)"></div><div class="kpi-lbl">Formatos de Tienda</div><div class="kpi-val">8</div><div class="kpi-sub"><span class="badge p">Fin. Rpt Codes</span><span class="kpi-note">HM · ME · MI · PZ…</span></div></div>
+    </div>
+    <div class="row2eq">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Top 20 Tiendas por Ventas</div><div class="card-sub">USD · período completo</div></div></div><div class="lolly-list" id="t-top-stores"></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Ventas por Formato de Tienda</div><div class="card-sub">Financial Report Code + descripción</div></div></div><div id="t-fmt-list"></div></div>
+    </div>
+    <div class="card"><div class="card-hd"><div><div class="card-title">Detalle Top 20 Tiendas</div><div class="card-sub">Ventas, unidades y SKUs vendidos</div></div></div><table class="tbl"><thead><tr><th>#</th><th>Tienda</th><th>País</th><th class="r">Ventas USD</th><th class="r">Unidades</th><th class="r">SKUs</th></tr></thead><tbody id="t-stores-table"></tbody></table></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- VIEW 7: POR PRODUCTO (SKU)                                      -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <div class="view" id="view-producto">
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-bar" style="background:var(--green)"></div><div class="kpi-lbl">SKUs Totales</div><div class="kpi-val">49</div><div class="kpi-sub"><span class="badge g">38 activos</span><span class="kpi-note">11 inactivos</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--accent)"></div><div class="kpi-lbl">Mejor SKU</div><div class="kpi-val">$10,071</div><div class="kpi-sub"><span class="badge a">3PK Leche Deslac</span><span class="kpi-note">1,711 uds</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--blue)"></div><div class="kpi-lbl">Precio Prom. USD/Ud</div><div class="kpi-val">$3.54</div><div class="kpi-sub"><span class="badge b">por unidad</span><span class="kpi-note">todas las categorías</span></div></div>
+      <div class="kpi"><div class="kpi-bar" style="background:var(--purple)"></div><div class="kpi-lbl">SKUs &gt;$1K en ventas</div><div class="kpi-val">39</div><div class="kpi-sub"><span class="badge p">80%</span><span class="kpi-note">del portafolio</span></div></div>
+    </div>
+    <div class="row2">
+      <div class="card"><div class="card-hd"><div><div class="card-title">Top 20 SKUs por Ventas USD</div><div class="card-sub">Quesos (naranja) vs Leche & Crema (verde)</div></div></div><div class="hbar-list" id="sku-bars"></div></div>
+      <div class="card"><div class="card-hd"><div><div class="card-title">Distribución por Categoría</div><div class="card-sub">SKUs · ventas · unidades · on-hand</div></div></div>
+
+        <!-- Donut + stats side by side -->
+        <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px">
+          <svg width="110" height="110" viewBox="0 0 110 110" id="c-sku-donut"></svg>
+          <div style="flex:1;display:flex;flex-direction:column;gap:6px" id="c-sku-donut-leg"></div>
+        </div>
+
+        <!-- Métricas por categoría en 2 columnas -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px" id="cat-stat-cards"></div>
+
+        <!-- Separador -->
+        <div style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:8px">
+          <div class="card-sub">On-Hand Promedio — Top SKUs</div>
+        </div>
+        <div class="hbar-list" id="sku-onhand-bars"></div>
+      </div>
+    </div>
+    <div class="card"><div class="card-hd"><div><div class="card-title">Catálogo Completo de SKUs</div><div class="card-sub">Todos los productos con actividad de venta</div></div></div><input class="search-box" id="sku-search" placeholder="🔍 Buscar SKU, UPC o nombre..." oninput="filterSKU(this.value)"><table class="tbl"><thead><tr><th>UPC</th><th>Producto</th><th>Categoría</th><th class="r">Ventas USD</th><th class="r">Unidades</th><th class="r">Tiendas</th><th class="r">On-Hand Avg</th><th class="c">Estado</th></tr></thead><tbody id="sku-full-table"></tbody></table></div>
+  </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<div class="tip" id="tip"></div>
+
+<script>
+// ── DATOS ─────────────────────────────────────────────────────────────────────
+const D = {
+  days:["01/01","01/02","01/03","01/04","01/05","01/06","01/07","01/08","01/09","01/10","01/11","01/12","01/13","01/14","01/15","01/16","01/17","01/18","01/19","01/20","01/21","01/22","01/23","01/24","01/25","01/26","01/27"],
+  sales:[3783.44,6450.18,6758.03,7054.47,5980.16,5376.01,5129.53,4554.62,4834.45,7030.32,6579.02,4708.84,5126.71,4785.14,4928.13,5585.3,6845.48,6561.53,4974.94,4171.31,4258.43,4786.54,4733.91,6720.81,6978.52,4870.28,3945.54],
+  qty:[1340,2161,2104,2170,1991,1545,1434,1218,1288,2020,1788,1239,1347,1236,1257,1381,1816,1719,1304,1132,1088,1379,1333,1893,1970,1358,1123],
+  byCountry:{
+    CR:[2390.33,4541.05,4343.31,4679.01,3436.29,3397.68,3225.54,2876.92,3219.81,4690.22,4088.0,3019.7,3405.41,3365.92,3536.7,4039.09,4815.12,4318.64,3044.79,2746.69,2816.28,3116.52,3018.77,4164.33,3981.64,2978.4,2333.88],
+    GT:[865.58,944.15,1229.63,1468.77,1523.54,1157.59,1091.48,1010.61,961.1,1367.21,1477.4,959.83,914.8,770.89,742.78,814.73,1062.85,1216.32,1219.59,898.27,809.24,886.5,821.72,1325.76,1575.06,917.9,898.49],
+    HN:[447.23,770.95,987.62,750.21,865.43,726.4,675.1,569.59,511.66,828.53,923.24,659.57,665.89,484.56,559.09,571.83,791.01,842.24,666.52,437.85,536.96,684.63,779.75,1110.83,1101.65,839.2,684.64],
+    NI:[57.53,141.67,156.29,155.58,154.9,94.34,135.87,97.5,141.87,144.36,90.38,69.74,140.61,163.77,89.57,150.8,176.49,184.32,44.04,88.49,95.95,98.9,113.68,119.89,320.17,134.77,28.53],
+    SV:[22.78,52.37,41.19,0.89,0,0,1.55,0,0,0,0,0,0,0,0,8.85,0,0,0,0,0,0,0,0,0,0,0]
+  },
+  weeks:{labels:["WK 48","WK 49","WK 50","WK 51","WK 52"],sales:[10233.62,39687.27,38743.45,36332.14,22515.15],qty:[3501,11750,10268,9771,6344]},
+  catDaily:{
+    cheese:[2323.93,3263.49,3770.5,3714.64,3356.36,2830.54,2775.22,2556.15,2406.65,3674.7,3581.69,2545.1,2613.66,2152.57,2412.86,2512.85,3042.01,3301.63,2767.12,2065.67,2137.05,2538.57,2724.59,3591.34,3824.95,2689.06,2239.82],
+    milk:[1459.51,3186.69,2987.53,3339.83,2623.8,2545.47,2354.32,1998.47,2427.81,3355.62,2997.33,2163.73,2513.04,2632.58,2515.27,3072.45,3803.48,3259.89,2207.82,2105.63,2121.38,2247.97,2009.32,3129.47,3153.57,2181.22,1705.71]
+  },
+  countries:[
+    {code:'CR',flag:'🇨🇷',name:'Costa Rica',sales:95590.02,qty:24697,skus:28,stores:114,color:'#C8873A'},
+    {code:'GT',flag:'🇬🇹',name:'Guatemala',sales:28931.81,qty:9107,skus:17,stores:40,color:'#2A7A58'},
+    {code:'HN',flag:'🇭🇳',name:'Honduras',sales:19472.18,qty:5951,skus:21,stores:40,color:'#3A6FA8'},
+    {code:'NI',flag:'🇳🇮',name:'Nicaragua',sales:3390.00,qty:1636,skus:9,stores:33,color:'#6B4FA8'},
+    {code:'SV',flag:'🇸🇻',name:'El Salvador',sales:127.63,qty:243,skus:5,stores:8,color:'#2A7A72'},
+  ],
+  countryTopSKU:{
+    CR:[['3PK Leche Des Deslac 3L',10071.38],['3PK Leche Entera 3L',7853.48],['3PK Leche Semidescre 3L',7287.85],['Leche Semidescre Deslac 1L',6716.93],['3PK Leche Semi Deslac 3L',5929.35]],
+    GT:[['Queso Mexi Blend 226GR',7692.40],['Queso Colby Jack Snack 212GR',2145.45],['Queso Gouda Snack 212GR',2083.98],['Queso MildCheddar 226GR',2063.40],['Queso Gouda Rebanado 170GR',1985.24]],
+    HN:[['Queso Mozzarella 226GR',4019.72],['Queso Amer. Amarillo 185GR',1950.81],['Queso Amer. Deslac 226GR',1428.58],['Queso Pepper Jack 226GR',1211.03],['Queso MexiBlend 226GR',1192.83]],
+    NI:[['Leche Semidescre 3PK 3L',574.66],['Leche Entera 1L',548.02],['Leche Descremada 3PK 3L',483.64],['Leche Descre Deslac 3PK 3L',468.08],['Leche Descremada Deslac 1L',464.94]],
+    SV:[['Leche Entera 1L',85.62],['Leche Descremada 12x1L',28.12],['12PK Leche Semi Deslac',8.85],['12PK Leche Descremada',3.54],['Leche Semidescre Deslac 1L',1.50]]
+  },
+  topStores:[
+    {n:'WM ESCAZÚ',c:'CR',s:4026.73,q:679,sk:21},{n:'WM SAN SEBASTIÁN',c:'CR',s:3955.87,q:894,sk:23},
+    {n:'WM CARTAGO',c:'CR',s:3335.44,q:747,sk:26},{n:'WM GUADALUPE',c:'CR',s:3307.10,q:692,sk:27},
+    {n:'WM CURRIDABAT',c:'CR',s:2931.30,q:860,sk:22},{n:'WM TÍBAS',c:'CR',s:2889.84,q:753,sk:26},
+    {n:'WM HEREDIA',c:'CR',s:2875.01,q:758,sk:24},{n:'WM BLVD DEL NORTE',c:'HN',s:2663.67,q:757,sk:19},
+    {n:'WM ALAJUELA',c:'CR',s:2362.94,q:540,sk:23},{n:'WM BLVD FFAA',c:'HN',s:2210.37,q:550,sk:21},
+    {n:'MXM SAN GERARDO',c:'CR',s:2029.65,q:480,sk:24},{n:'WM DESAMPARADOS',c:'CR',s:1976.68,q:499,sk:23},
+    {n:'PAIZ PROCERES',c:'HN',s:1972.74,q:636,sk:21},{n:'MXM CARTAGO',c:'CR',s:1924.96,q:354,sk:26},
+    {n:'WM CIUDAD QUESADA',c:'CR',s:1842.81,q:379,sk:25},{n:'WM SANTA ANA',c:'CR',s:1770.48,q:389,sk:16},
+    {n:'WM LA CEIBA',c:'HN',s:1700.68,q:458,sk:16},{n:'PAIZ VISTA HERMOSA',c:'GT',s:1533.82,q:359,sk:15},
+    {n:'WM PUERTA PARADA',c:'GT',s:1517.90,q:316,sk:14},{n:'MXM SAN PABLO NORTE',c:'CR',s:1478.75,q:392,sk:23}
+  ],
+  finSales:[
+    {code:'HM',desc:'Home Market',s:55775.03,stores:37},
+    {code:'ME',desc:'Mercado Express',s:34408.80,stores:38},
+    {code:'MI',desc:'Micro Tienda',s:30511.63,stores:112},
+    {code:'PZ',desc:'Plaza / C. Comercial',s:25590.87,stores:35},
+    {code:'LN',desc:'Local Norte',s:1186.36,stores:9},
+    {code:'LJ',desc:'Local Junior',s:29.88,stores:2},
+    {code:'DF',desc:'Duty Free',s:4.81,stores:1},
+    {code:'PI',desc:'Punto de Ingreso',s:4.27,stores:1},
+  ],
+  prods:[
+    {u:745210597009,n:'BORDEN 3PK LECHE DES DESLAC 3L',cat:'D95',s:10071.38,q:1711,st:103,oh:14.0},
+    {u:745210597006,n:'BORDEN 3PK LECHE ENTERA 3L',cat:'D95',s:7853.48,q:1331,st:99,oh:15.0},
+    {u:5300006886,n:'BORDEN QUESO MEXI BLEND 226GR',cat:'D90',s:7692.40,q:2954,st:37,oh:102.4},
+    {u:745210597007,n:'BORDEN 3PK LECHE SEMIDESCRE 3L',cat:'D95',s:7287.85,q:1256,st:97,oh:20.5},
+    {u:745210597005,n:'BORDEN LECHE SEMIDESCRE DESLAC 1L',cat:'D95',s:6716.93,q:3164,st:110,oh:17.2},
+    {u:5300007162,n:'BORDEN QUESO MOZZARELLA 226GR',cat:'D90',s:5931.25,q:1602,st:83,oh:19.0},
+    {u:745210597010,n:'BORDEN 3PK LECHE SEMI DESLAC 3L',cat:'D95',s:5929.35,q:1006,st:101,oh:8.2},
+    {u:745210597004,n:'BORDEN LECHE DESCREMADA DESLAC 1L',cat:'D95',s:5009.88,q:2353,st:100,oh:20.7},
+    {u:745210597008,n:'BORDEN 3PK LECHE DESCREMADA 3L',cat:'D95',s:4831.26,q:820,st:99,oh:6.8},
+    {u:745210597002,n:'BORDEN LECHE SEMIDESCRE 1L',cat:'D95',s:4347.63,q:2049,st:108,oh:19.8},
+    {u:5300006406,n:'BORDEN QUESO MUENSTER REBANADO 170GR',cat:'D90',s:4342.95,q:919,st:78,oh:21.8},
+    {u:5300006728,n:'BORDEN QUESO GOUDA REBANADO 170GR',cat:'D90',s:4205.80,q:985,st:56,oh:17.1},
+    {u:745210597003,n:'BORDEN LECHE DESCREMADA 1L',cat:'D95',s:4178.63,q:1967,st:107,oh:16.9},
+    {u:5300005264,n:'BORDEN QUESO MILDCHEDDAR 226GR',cat:'D90',s:4144.34,q:1485,st:85,oh:35.4},
+    {u:745210597001,n:'BORDEN LECHE ENTERA 1L',cat:'D95',s:3928.91,q:2023,st:106,oh:16.1},
+    {u:5300000051,n:'BORDEN QUESO CHEDDAR CHUNK 226GR',cat:'D90',s:3753.55,q:910,st:68,oh:18.5},
+    {u:5300007140,n:'BORDEN QUESO MOZZARELLA REBANADO 170GR',cat:'D90',s:3261.35,q:682,st:50,oh:17.3},
+    {u:5300007636,n:'BORDEN QUESO SMOKED PROVOL 170GR',cat:'D90',s:3179.29,q:657,st:42,oh:6.9},
+    {u:5300005236,n:'BORDEN QUESO CHEDDAR REBANADO 170GR',cat:'D90',s:3039.93,q:1015,st:51,oh:18.2},
+    {u:5300000068,n:'BORDEN QUESO PEPPER JACK 226GR',cat:'D90',s:3025.51,q:818,st:47,oh:28.5},
+  ],
+  invDaily:[87313,86715,85319,85658,90656,93674,94460,94860,94185,83152,82101,81373,82553,83064,87423,89892,89309,88082,87133,86901,86711,86203,86757,88007,87555,88550,89588],
+  countryDetail:{
+    CR:{
+      top_stores:[['WM ESCAZÚ',4026.73,679,21],['WM SAN SEBASTIÁN',3955.87,894,23],['WM CARTAGO',3335.44,747,26],['WM GUADALUPE',3307.10,692,27],['WM CURRIDABAT',2931.30,860,22]],
+      cat:[['Leche & Crema D95',66581.29,17828],['Quesos D90',29008.73,6869]],
+      fmt:[['HM · Home Market',36342.86,15],['ME · Mercado Express',34408.80,38],['MI · Micro Tienda',24834.09,60],['PI · Punto Ingreso',4.27,1]],
+      daily:[2390.33,4541.05,4343.31,4679.01,3436.29,3397.68,3225.54,2876.92,3219.81,4690.22,4088.0,3019.7,3405.41,3365.92,3536.7,4039.09,4815.12,4318.64,3044.79,2746.69,2816.28,3116.52,3018.77,4164.33,3981.64,2978.4,2333.88]
+    },
+    GT:{
+      top_stores:[['PAIZ VISTA HERMOSA',1533.82,359,15],['WM PUERTA PARADA',1517.90,316,14],['WM DEL NORTE',1369.60,354,14],['WM ROOSEVELT',1266.91,277,15],['PAIZ VISTA HERMOSA 2',1066.03,249,15]],
+      cat:[['Quesos D90',28931.81,9107]],
+      fmt:[['PZ · Plaza/C.Comercial',18048.55,27],['HM · Home Market',10878.46,12],['DF · Duty Free',4.81,1]],
+      daily:[865.58,944.15,1229.63,1468.77,1523.54,1157.59,1091.48,1010.61,961.1,1367.21,1477.4,959.83,914.8,770.89,742.78,814.73,1062.85,1216.32,1219.59,898.27,809.24,886.5,821.72,1325.76,1575.06,917.9,898.49]
+    },
+    HN:{
+      top_stores:[['WM BLVD DEL NORTE',2663.67,757,19],['WM BLVD FFAA',2210.37,550,21],['PAIZ PROCERES',1972.74,636,21],['WM LA CEIBA',1700.68,458,16],['WM EL SAUCE',1415.67,383,20]],
+      cat:[['Quesos D90',19472.18,5951]],
+      fmt:[['HM · Home Market',7990.39,4],['PZ · Plaza/C.Comercial',7542.32,8],['MI · Micro Tienda',3939.47,28]],
+      daily:[447.23,770.95,987.62,750.21,865.43,726.4,675.1,569.59,511.66,828.53,923.24,659.57,665.89,484.56,559.09,571.83,791.01,842.24,666.52,437.85,536.96,684.63,779.75,1110.83,1101.65,839.2,684.64]
+    },
+    NI:{
+      top_stores:[['WM CARRETERA MASAYA',267.96,134,8],['UNIÓN VILLA FONTANA',250.84,146,8],['MP MATAGALPA',222.43,104,7],['WM CARRETERA SUR',221.99,115,8],['UNIÓN LARREYNAGA',209.53,77,7]],
+      cat:[['Leche & Crema D95',3390.00,1636]],
+      fmt:[['MI · Micro Tienda',1713.68,22],['LN · Local Norte',1186.36,9],['HM · Home Market',489.96,2]],
+      daily:[57.53,141.67,156.29,155.58,154.9,94.34,135.87,97.5,141.87,144.36,90.38,69.74,140.61,163.77,89.57,150.8,176.49,184.32,44.04,88.49,95.95,98.9,113.68,119.89,320.17,134.77,28.53]
+    },
+    SV:{
+      top_stores:[['WM SAN SALVADOR CENTRO',54.12,120,2],['DDJ TERRAZAS',25.23,57,2],['MD BLVD EJÉRCITO',15.14,32,2],['WM BOULEVARD',10.63,3,2],['MD SANTA ANA',9.24,21,1]],
+      cat:[['Leche & Crema D95',127.63,243]],
+      fmt:[['HM · Home Market',73.37,4],['LJ · Local Junior',29.88,2],['MI · Micro Tienda',24.38,2]],
+      daily:[22.78,52.37,41.19,0.89,0,0,1.55,0,0,0,0,0,0,0,0,8.85,0,0,0,0,0,0,0,0,0,0,0]
+    }
+  }
+};
+
+// ── UTILIDADES ────────────────────────────────────────────────────────────────
+const TIP = document.getElementById('tip');
+function tip(e,t){TIP.textContent=t;TIP.classList.add('show');mTip(e);}
+function mTip(e){TIP.style.left=(e.clientX+12)+'px';TIP.style.top=(e.clientY-28)+'px';}
+function hTip(){TIP.classList.remove('show');}
+
+function fmt$(v){return '$'+v.toLocaleString('en-US',{maximumFractionDigits:0});}
+function fmtK(v){return '$'+(v/1000).toFixed(1)+'K';}
+
+function linePath(vals,maxV,W,H,pad){
+  const n=vals.length;
+  return vals.map((v,i)=>{
+    const x=pad.l+i/(n-1)*(W-pad.l-pad.r);
+    const y=pad.t+(H-pad.t-pad.b)*(1-v/maxV);
+    return (i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1);
+  }).join(' ');
+}
+
+function makeLineSVG(svgId, series, labels, H, colors, skipEvery=3){
+  const el=document.getElementById(svgId);
+  if(!el)return;
+  const W=el.parentElement.clientWidth||500;
+  el.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const pad={t:10,r:16,b:28,l:48};
+  const iW=W-pad.l-pad.r, iH=H-pad.t-pad.b;
+  const allVals=series.flatMap(s=>s.vals);
+  const maxV=Math.max(...allVals)*1.12;
+
+  // Grid
+  [0,.25,.5,.75,1].forEach(f=>{
+    const y=pad.t+iH*(1-f);
+    const gl=document.createElementNS('http://www.w3.org/2000/svg','line');
+    gl.setAttribute('x1',pad.l);gl.setAttribute('x2',pad.l+iW);gl.setAttribute('y1',y);gl.setAttribute('y2',y);gl.setAttribute('class','gridl');
+    el.appendChild(gl);
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',pad.l-4);t.setAttribute('y',y+3);t.setAttribute('text-anchor','end');t.setAttribute('class','axis-lbl');
+    t.textContent='$'+(maxV*f/1000).toFixed(1)+'K';
+    el.appendChild(t);
+  });
+
+  // X labels
+  labels.forEach((l,i)=>{
+    if(i%skipEvery!==0)return;
+    const x=pad.l+i/(labels.length-1)*iW;
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x',x);t.setAttribute('y',H-5);t.setAttribute('text-anchor','middle');t.setAttribute('class','axis-lbl');
+    t.textContent=l;el.appendChild(t);
+  });
+
+  // Area + Line per series
+  series.forEach((s,si)=>{
+    const pts=s.vals.map((v,i)=>[pad.l+i/(s.vals.length-1)*iW, pad.t+iH*(1-v/maxV)]);
+    const d=pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+    // Area fill
+    const area=`${d} L${pts[pts.length-1][0]},${pad.t+iH} L${pts[0][0]},${pad.t+iH} Z`;
+    const af=document.createElementNS('http://www.w3.org/2000/svg','path');
+    af.setAttribute('d',area);af.setAttribute('fill',colors[si]);af.setAttribute('fill-opacity','0.07');af.setAttribute('stroke','none');
+    el.appendChild(af);
+    // Line
+    const lp=document.createElementNS('http://www.w3.org/2000/svg','path');
+    lp.setAttribute('d',d);lp.setAttribute('fill','none');lp.setAttribute('stroke',colors[si]);lp.setAttribute('stroke-width','2');lp.setAttribute('stroke-linejoin','round');
+    el.appendChild(lp);
+    // Dots
+    pts.forEach((p,i)=>{
+      const c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+      c.setAttribute('cx',p[0]);c.setAttribute('cy',p[1]);c.setAttribute('r','3');c.setAttribute('fill',colors[si]);c.style.cursor='pointer';
+      const v=s.vals[i];
+      c.addEventListener('mouseenter',e=>tip(e,`${labels[i]}  ${s.name}: ${fmtK(v)}`));
+      c.addEventListener('mousemove',mTip);c.addEventListener('mouseleave',hTip);
+      el.appendChild(c);
+    });
+  });
+}
+
+function makeDonut(svgId, legId, data, cx, cy, R, r){
+  const svg=document.getElementById(svgId);
+  const leg=legId?document.getElementById(legId):null;
+  if(!svg)return;
+  const total=data.reduce((a,d)=>a+d.v,0);
+  let angle=-Math.PI/2;
+  data.forEach(d=>{
+    const sweep=d.v/total*Math.PI*2;
+    const a1=angle, a2=angle+sweep;
+    const x1=cx+Math.cos(a1)*R, y1=cy+Math.sin(a1)*R;
+    const x2=cx+Math.cos(a2)*R, y2=cy+Math.sin(a2)*R;
+    const qx1=cx+Math.cos(a1)*r, qy1=cy+Math.sin(a1)*r;
+    const qx2=cx+Math.cos(a2)*r, qy2=cy+Math.sin(a2)*r;
+    const large=sweep>Math.PI?1:0;
+    const path=document.createElementNS('http://www.w3.org/2000/svg','path');
+    path.setAttribute('d',`M${x1},${y1} A${R},${R} 0 ${large},1 ${x2},${y2} L${qx2},${qy2} A${r},${r} 0 ${large},0 ${qx1},${qy1} Z`);
+    path.setAttribute('fill',d.color);path.style.cursor='pointer';
+    path.addEventListener('mouseenter',e=>{path.style.opacity='.75';tip(e,`${d.name}: ${fmtK(d.v)} (${(d.v/total*100).toFixed(1)}%)`)});
+    path.addEventListener('mousemove',mTip);path.addEventListener('mouseleave',()=>{path.style.opacity='1';hTip();});
+    svg.appendChild(path);
+    angle+=sweep;
+    if(leg){
+      const li=document.createElement('div');li.className='dleg';
+      li.innerHTML=`<div class="dleg-left"><div class="dleg-dot" style="background:${d.color}"></div><span>${d.name}</span></div><span class="dleg-val">${(d.v/total*100).toFixed(1)}%</span>`;
+      leg.appendChild(li);
+      const sub=document.createElement('div');sub.style.cssText='font-size:9.5px;color:#8A7B6E;padding-left:15px;margin-top:-4px;margin-bottom:3px;';
+      sub.textContent=fmtK(d.v);leg.appendChild(sub);
+    }
+  });
+}
+
+function toggleExpand(el){
+  const isOpen=el.classList.contains('open');
+  // close siblings
+  el.parentElement.querySelectorAll('.xrow.open,.xrow-lolly.open,.xrow-fmt.open').forEach(s=>{if(s!==el)s.classList.remove('open');});
+  el.classList.toggle('open',!isOpen);
+}
+
+function hbars(containerId, items, color, maxV=null, extraFn=null){
+  const wrap=document.getElementById(containerId);if(!wrap)return;
+  const m=maxV||items[0][1];
+  const totalV=items.reduce((a,[,v])=>a+v,0);
+  items.forEach(([name,val],i)=>{
+    const pct=(val/m*100).toFixed(1);
+    const pctTotal=(val/totalV*100).toFixed(1);
+    const c=typeof color==='string'?color:color[i%color.length];
+    const extra=extraFn?extraFn(i):{};
+    const div=document.createElement('div');div.className='hbar-item xrow';
+    div.innerHTML=`
+      <div class="hbar-hd" style="cursor:pointer">
+        <span style="display:flex;align-items:center;min-width:0;max-width:72%;gap:4px">
+          <span class="hbar-name" title="${name}">${name}</span>
+          <span class="chevron">▶</span>
+        </span>
+        <span class="hbar-val">${fmtK(val)}</span>
+      </div>
+      <div class="hbar-bg"><div class="hbar-fill" style="width:0%;background:${c}" data-w="${pct}"></div></div>
+      <div class="xpanel"><div class="xpanel-inner">
+        <div class="xpanel-grid${extra.qty!==undefined&&extra.oh!==undefined?' cols5':''}">
+          <div class="xstat"><div class="xstat-lbl">Ventas USD</div><div class="xstat-val">${fmtK(val)}</div><div class="xstat-sub">${fmt$(val)} exacto</div></div>
+          <div class="xstat"><div class="xstat-lbl">% del grupo</div><div class="xstat-val">${pctTotal}%</div><div class="xmini-bar"><div class="xmini-fill" style="background:${c};width:${pctTotal}%"></div></div></div>
+          ${extra.qty!==undefined?`<div class="xstat"><div class="xstat-lbl">Unidades</div><div class="xstat-val">${Number(extra.qty).toLocaleString()}</div><div class="xstat-sub">uds vendidas</div></div>`:''}
+          ${extra.stores!==undefined?`<div class="xstat"><div class="xstat-lbl">Tiendas</div><div class="xstat-val">${extra.stores}</div><div class="xstat-sub">puntos de venta</div></div>`:''}
+          ${extra.oh!==undefined?`<div class="xstat"><div class="xstat-lbl">On-Hand Avg</div><div class="xstat-val">${Number(extra.oh).toFixed(1)}</div><div class="xstat-sub">uds en tienda</div></div>`:''}
+          ${extra.cat!==undefined?`<div class="xstat"><div class="xstat-lbl">Categoría</div><div class="xstat-val" style="font-size:11px">${extra.cat==='D90'?'🧀 Quesos D90':'🥛 Leche D95'}</div></div>`:''}
+          ${extra.upc!==undefined?`<div class="xstat"><div class="xstat-lbl">UPC</div><div class="xstat-val" style="font-size:10px;letter-spacing:-.3px">${extra.upc}</div></div>`:''}
+        </div>
+      </div></div>`;
+    div.addEventListener('click',()=>toggleExpand(div));
+    wrap.appendChild(div);
+  });
+  setTimeout(()=>wrap.querySelectorAll('.hbar-fill').forEach(el=>el.style.width=el.dataset.w+'%'),250);
+}
+
+function lollipops(containerId, items, colorFn){
+  const wrap=document.getElementById(containerId);if(!wrap)return;
+  const maxV=items[0].s;
+  const totalV=items.reduce((a,d)=>a+d.s,0);
+  items.forEach(d=>{
+    const pct=(d.s/maxV*100).toFixed(1);
+    const pctTotal=(d.s/totalV*100).toFixed(1);
+    const color=colorFn?colorFn(d):getCountryColor(d.c||'CR');
+    const flag={CR:'🇨🇷',GT:'🇬🇹',HN:'🇭🇳',NI:'🇳🇮',SV:'🇸🇻'}[d.c]||'';
+    const pais={CR:'Costa Rica',GT:'Guatemala',HN:'Honduras',NI:'Nicaragua',SV:'El Salvador'}[d.c]||d.c||'';
+    const wrapper=document.createElement('div');wrapper.className='xrow-lolly';
+    wrapper.innerHTML=`
+      <div class="lolly" style="cursor:pointer">
+        <span class="lolly-name">${d.n||d.name}</span>
+        <div class="lolly-track">
+          <div class="lolly-fill" style="width:0%;background:${color}" data-w="${pct}"></div>
+          <div class="lolly-dot" style="background:${color}"></div>
+        </div>
+        <span class="lolly-val">${fmtK(d.s)}</span>
+        <span class="chevron" style="margin-left:4px">▶</span>
+      </div>
+      <div class="xpanel"><div class="xpanel-inner">
+        <div class="xpanel-grid${d.sk!==undefined?' cols5':'cols3'}">
+          <div class="xstat"><div class="xstat-lbl">Ventas USD</div><div class="xstat-val">${fmtK(d.s)}</div><div class="xstat-sub">${fmt$(d.s)}</div></div>
+          <div class="xstat"><div class="xstat-lbl">% del grupo</div><div class="xstat-val">${pctTotal}%</div><div class="xmini-bar"><div class="xmini-fill" style="background:${color};width:${pctTotal}%"></div></div></div>
+          ${d.q!==undefined?`<div class="xstat"><div class="xstat-lbl">Unidades</div><div class="xstat-val">${d.q.toLocaleString()}</div><div class="xstat-sub">uds vendidas</div></div>`:''}
+          ${d.sk!==undefined?`<div class="xstat"><div class="xstat-lbl">SKUs</div><div class="xstat-val">${d.sk}</div><div class="xstat-sub">productos</div></div>`:''}
+          ${d.c?`<div class="xstat"><div class="xstat-lbl">País</div><div class="xstat-val" style="font-size:13px">${flag} ${pais}</div></div>`:''}
+        </div>
+      </div></div>`;
+    wrapper.addEventListener('click',()=>toggleExpand(wrapper));
+    wrap.appendChild(wrapper);
+  });
+  setTimeout(()=>wrap.querySelectorAll('.lolly-fill').forEach(el=>el.style.width=el.dataset.w+'%'),250);
+}
+
+function getCountryColor(code){
+  return {CR:'#C8873A',GT:'#2A7A58',HN:'#3A6FA8',NI:'#6B4FA8',SV:'#2A7A72'}[code]||'#8A7B6E';
+}
+
+// ── VIEW NAVIGATION ───────────────────────────────────────────────────────────
+const viewTitles={resumen:'Resumen Ejecutivo',ventas:'Ventas Diarias',inventario:'Inventario POS',pais:'Análisis por País',categoria:'Análisis por Categoría',tienda:'Análisis por Tienda',producto:'Análisis por Producto (SKU)'};
+function show(id, el){
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('view-'+id).classList.add('active');
+  el.classList.add('active');
+  document.getElementById('viewTitle').textContent=viewTitles[id];
+  buildView(id);
+}
+
+const built={};
+function buildView(id){
+  if(built[id])return;
+  built[id]=true;
+  if(id==='resumen')buildResumen();
+  else if(id==='ventas')buildVentas();
+  else if(id==='inventario')buildInventario();
+  else if(id==='pais')buildPais();
+  else if(id==='categoria')buildCategoria();
+  else if(id==='tienda')buildTienda();
+  else if(id==='producto')buildProducto();
+}
+
+// ── BUILD: RESUMEN ────────────────────────────────────────────────────────────
+function buildResumen(){
+  makeLineSVG('c-main-line',[{name:'Ventas USD',vals:D.sales}],D.days,175,['#C8873A']);
+  makeDonut('c-donut-main','c-donut-main-leg',[{name:'Quesos D90',v:77412.72,color:'#C8873A'},{name:'Leche & Crema D95',v:70098.92,color:'#2A7A58'}],60,60,52,36);
+  hbars('r-top-prod',D.prods.slice(0,10).map(p=>[p.n.replace('BORDEN ',''),p.s]),D.prods.slice(0,10).map((_,i)=>i%2===0?'#C8873A':'#2A7A58'),null,i=>({qty:D.prods[i].q,stores:D.prods[i].st,oh:D.prods[i].oh,cat:D.prods[i].cat}));
+  lollipops('r-top-store',D.topStores.slice(0,8));
+  // inv table resumen
+  const tbody=document.getElementById('r-inv-table');
+  D.prods.slice(0,8).forEach(p=>{
+    const [stLabel,sc]=stockStatus(p.oh);
+    const ppu=(p.s/p.q).toFixed(2);
+    const tr=document.createElement('tr');tr.className='xrow-tr';
+    tr.innerHTML=`<td style="font-size:11px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span class="tr-chevron">▶</span>${p.n.replace('BORDEN ','')}</td><td class="r" style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700">${fmtK(p.s)}</td><td class="r" style="font-weight:600">${p.oh.toFixed(1)}</td><td><span class="pill ${sc}">${stLabel}</span></td>`;
+    const expTr=document.createElement('tr');expTr.className='expand-tr';
+    const expTd=document.createElement('td');expTd.setAttribute('colspan','4');
+    expTd.innerHTML=`<div class="xpanel"><div class="xpanel-inner"><div class="xpanel-grid">
+      <div class="xstat"><div class="xstat-lbl">Unidades</div><div class="xstat-val">${p.q.toLocaleString()}</div></div>
+      <div class="xstat"><div class="xstat-lbl">Precio/Ud</div><div class="xstat-val">$${ppu}</div></div>
+      <div class="xstat"><div class="xstat-lbl">Tiendas</div><div class="xstat-val">${p.st}</div></div>
+      <div class="xstat"><div class="xstat-lbl">Categoría</div><div class="xstat-val" style="font-size:10px">${p.cat==='D90'?'🧀 Quesos':'🥛 Leche'}</div></div>
+    </div></div></div>`;
+    expTr.appendChild(expTd);
+    tr.addEventListener('click',()=>{
+      const isOpen=tr.classList.contains('open');
+      tbody.querySelectorAll('tr.xrow-tr.open').forEach(r=>r.classList.remove('open'));
+      tbody.querySelectorAll('tr.expand-tr .xpanel').forEach(px=>px.style.maxHeight='0');
+      if(!isOpen){tr.classList.add('open');expTd.querySelector('.xpanel').style.maxHeight='200px';}
+    });
+    tbody.appendChild(tr);tbody.appendChild(expTr);
+  });
+}
+
+// ── BUILD: VENTAS ─────────────────────────────────────────────────────────────
+function buildVentas(){
+  // Week cards
+  const wc=document.getElementById('v-week-cards');
+  const maxWS=Math.max(...D.weeks.sales);
+  D.weeks.labels.forEach((lbl,i)=>{
+    const pct=(D.weeks.sales[i]/maxWS*100).toFixed(1);
+    const div=document.createElement('div');div.className='week-card';
+    div.innerHTML=`<div class="week-lbl">${lbl}</div><div class="week-val">${fmtK(D.weeks.sales[i])}</div><div class="week-qty">${D.weeks.qty[i].toLocaleString()} uds</div><div class="week-bar"><div class="week-bar-fill" style="width:0%" data-w="${pct}"></div></div>`;
+    wc.appendChild(div);
+  });
+  setTimeout(()=>wc.querySelectorAll('.week-bar-fill').forEach(el=>el.style.width=el.dataset.w+'%'),200);
+
+  // Country lines
+  const cColors=['#C8873A','#2A7A58','#3A6FA8','#6B4FA8','#2A7A72'];
+  const cNames=['Costa Rica','Guatemala','Honduras','Nicaragua','El Salvador'];
+  const series=Object.entries(D.byCountry).map(([code,vals],i)=>({name:cNames[i],vals}));
+  makeLineSVG('c-country-lines',series,D.days,200,cColors,4);
+  // Legend
+  const leg=document.getElementById('v-country-leg');
+  cNames.forEach((n,i)=>{
+    const d=document.createElement('div');d.className='leg-item';
+    d.innerHTML=`<div class="leg-line" style="background:${cColors[i]}"></div>${n}`;leg.appendChild(d);
+  });
+
+  // Week bars
+  const wbSvg=document.getElementById('c-week-bars');
+  const WW=wbSvg.parentElement.clientWidth||400, HH=200;
+  wbSvg.setAttribute('viewBox',`0 0 ${WW} ${HH}`);
+  const pad={t:10,r:16,b:28,l:52};
+  const iW=WW-pad.l-pad.r, iH=HH-pad.t-pad.b;
+  const maxWV=Math.max(...D.weeks.sales)*1.15;
+  const bw=iW/D.weeks.labels.length*0.6;
+  const gap=iW/D.weeks.labels.length;
+  [0,.25,.5,.75,1].forEach(f=>{
+    const y=pad.t+iH*(1-f);
+    const gl=document.createElementNS('http://www.w3.org/2000/svg','line');
+    gl.setAttribute('x1',pad.l);gl.setAttribute('x2',pad.l+iW);gl.setAttribute('y1',y);gl.setAttribute('y2',y);gl.setAttribute('class','gridl');wbSvg.appendChild(gl);
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('x',pad.l-4);t.setAttribute('y',y+3);t.setAttribute('text-anchor','end');t.setAttribute('class','axis-lbl');t.textContent='$'+(maxWV*f/1000).toFixed(0)+'K';wbSvg.appendChild(t);
+  });
+  D.weeks.sales.forEach((v,i)=>{
+    const x=pad.l+i*gap+gap/2-bw/2;
+    const bh=(v/maxWV)*iH;
+    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x',x);rect.setAttribute('y',pad.t+iH-bh);rect.setAttribute('width',bw);rect.setAttribute('height',bh);rect.setAttribute('fill','#C8873A');rect.setAttribute('rx','3');rect.style.cursor='pointer';
+    rect.addEventListener('mouseenter',e=>tip(e,`${D.weeks.labels[i]}: ${fmtK(v)} · ${D.weeks.qty[i].toLocaleString()} uds`));
+    rect.addEventListener('mousemove',mTip);rect.addEventListener('mouseleave',hTip);
+    wbSvg.appendChild(rect);
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('x',x+bw/2);t.setAttribute('y',HH-5);t.setAttribute('text-anchor','middle');t.setAttribute('class','axis-lbl');t.textContent=D.weeks.labels[i];wbSvg.appendChild(t);
+  });
+
+  // Area total
+  makeLineSVG('c-area-total',[{name:'Ventas USD',vals:D.sales}],D.days,175,['#C8873A'],4);
+  makeLineSVG('c-qty-line',[{name:'Unidades',vals:D.qty}],D.days,175,['#3A6FA8'],4);
+}
+
+// ── BUILD: INVENTARIO ─────────────────────────────────────────────────────────
+let invData = null;
+function buildInventario(){
+  // Daily on-hand chart
+  const el=document.getElementById('c-inv-daily');
+  const W=el.parentElement.clientWidth||700,H=150;
+  el.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  const pad={t:8,r:16,b:24,l:60};
+  const iW=W-pad.l-pad.r,iH=H-pad.t-pad.b;
+  const maxV=Math.max(...D.invDaily)*1.08;
+  [0,.5,1].forEach(f=>{
+    const y=pad.t+iH*(1-f);
+    const gl=document.createElementNS('http://www.w3.org/2000/svg','line');
+    gl.setAttribute('x1',pad.l);gl.setAttribute('x2',pad.l+iW);gl.setAttribute('y1',y);gl.setAttribute('y2',y);gl.setAttribute('class','gridl');el.appendChild(gl);
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('x',pad.l-4);t.setAttribute('y',y+3);t.setAttribute('text-anchor','end');t.setAttribute('class','axis-lbl');t.textContent=(maxV*f/1000).toFixed(0)+'K';el.appendChild(t);
+  });
+  const n=D.invDaily.length;
+  const pts=D.invDaily.map((v,i)=>[pad.l+i/(n-1)*iW, pad.t+iH*(1-v/maxV)]);
+  const d=pts.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const af=document.createElementNS('http://www.w3.org/2000/svg','path');
+  af.setAttribute('d',`${d} L${pts[n-1][0]},${pad.t+iH} L${pts[0][0]},${pad.t+iH} Z`);af.setAttribute('fill','#2A7A58');af.setAttribute('fill-opacity','0.12');af.setAttribute('stroke','none');el.appendChild(af);
+  const lp=document.createElementNS('http://www.w3.org/2000/svg','path');
+  lp.setAttribute('d',d);lp.setAttribute('fill','none');lp.setAttribute('stroke','#2A7A58');lp.setAttribute('stroke-width','2');lp.setAttribute('stroke-linejoin','round');el.appendChild(lp);
+  pts.forEach((p,i)=>{
+    const c=document.createElementNS('http://www.w3.org/2000/svg','circle');c.setAttribute('cx',p[0]);c.setAttribute('cy',p[1]);c.setAttribute('r','2.5');c.setAttribute('fill','#2A7A58');c.style.cursor='pointer';
+    c.addEventListener('mouseenter',e=>tip(e,`${D.days[i]}: ${D.invDaily[i].toLocaleString()} uds On-Hand`));c.addEventListener('mousemove',mTip);c.addEventListener('mouseleave',hTip);el.appendChild(c);
+  });
+  D.days.filter((_,i)=>i%4===0).forEach((lbl,ii)=>{
+    const i=ii*4;const x=pad.l+i/(n-1)*iW;
+    const t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('x',x);t.setAttribute('y',H-3);t.setAttribute('text-anchor','middle');t.setAttribute('class','axis-lbl');t.textContent=lbl;el.appendChild(t);
+  });
+
+  // Full inventory table
+  invData = D.prods.slice();
+  renderInvTable(invData);
+}
+
+function stockStatus(oh){return oh<8?['Crítico','pill-crit']:oh<15?['Bajo','pill-low']:['OK','pill-ok'];}
+
+function renderInvTable(rows){
+  const tbody=document.getElementById('inv-full-table');tbody.innerHTML='';
+  rows.forEach(p=>{
+    const [st,sc]=stockStatus(p.oh);
+    const catShort=p.cat==='D90'?'Quesos':'Leche & Crema';
+    const dailyRate=(p.s/27).toFixed(2);
+    const daysStock=p.oh>0?(p.oh/(p.s/27/5)).toFixed(0):'—';
+    const tr=document.createElement('tr');tr.className='xrow-tr';
+    tr.innerHTML=`<td style="font-size:11px;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span class="tr-chevron">▶</span>${p.n.replace('BORDEN ','')}</td><td><span class="pill ${p.cat==='D90'?'pill-a':'pill-b'}" style="${p.cat==='D90'?'':'background:rgba(42,122,88,.10);color:#2A7A58'}">${catShort}</span></td><td class="r" style="font-weight:600">${fmtK(p.s)}</td><td class="r">${p.q.toLocaleString()}</td><td class="r" style="font-weight:600">${p.oh.toFixed(1)}</td><td class="c"><span class="pill ${sc}">${st}</span></td>`;
+    const expandTr=document.createElement('tr');expandTr.className='expand-tr';
+    const expandTd=document.createElement('td');expandTd.setAttribute('colspan','6');
+    expandTd.innerHTML=`<div class="xpanel"><div class="xpanel-inner">
+      <div class="xpanel-grid cols5">
+        <div class="xstat"><div class="xstat-lbl">Venta/Día</div><div class="xstat-val">$${dailyRate}</div><div class="xstat-sub">promedio diario</div></div>
+        <div class="xstat"><div class="xstat-lbl">Precio / Ud</div><div class="xstat-val">$${(p.s/p.q).toFixed(2)}</div><div class="xstat-sub">USD por unidad</div></div>
+        <div class="xstat"><div class="xstat-lbl">Días de stock</div><div class="xstat-val">${daysStock}</div><div class="xstat-sub">estimado aprox.</div></div>
+        <div class="xstat"><div class="xstat-lbl">Tiendas</div><div class="xstat-val">${p.st}</div><div class="xstat-sub">puntos de venta</div></div>
+        <div class="xstat"><div class="xstat-lbl">UPC</div><div class="xstat-val" style="font-size:10px">${p.u}</div></div>
+      </div>
+    </div></div>`;
+    expandTr.appendChild(expandTd);
+    tr.addEventListener('click',()=>{
+      const isOpen=tr.classList.contains('open');
+      tbody.querySelectorAll('tr.xrow-tr.open').forEach(r=>r.classList.remove('open'));
+      tbody.querySelectorAll('tr.expand-tr .xpanel').forEach(p=>p.style.maxHeight='0');
+      if(!isOpen){
+        tr.classList.add('open');
+        expandTd.querySelector('.xpanel').style.maxHeight='200px';
+      }
+    });
+    tbody.appendChild(tr);
+    tbody.appendChild(expandTr);
+  });
+}
+
+function filterInv(q){
+  const f=D.prods.filter(p=>p.n.toLowerCase().includes(q.toLowerCase()));
+  renderInvTable(f);
+}
+
+// ── BUILD: PAÍS ────────────────────────────────────────────────────────────────
+function buildPais(){
+  const maxS=D.countries[0].sales;
+  const wrap=document.getElementById('p-country-cards');
+  D.countries.forEach(c=>{
+    const pct=(c.sales/maxS*100).toFixed(1);
+    const d=document.createElement('div');d.className='ccard';d.dataset.code=c.code;
+    d.innerHTML=
+      '<div class="ccard-flag">'+c.flag+'</div>'+
+      '<div class="ccard-name">'+c.name.toUpperCase()+'</div>'+
+      '<div class="ccard-val">'+fmtK(c.sales)+'</div>'+
+      '<div class="ccard-qty">'+c.qty.toLocaleString()+' uds · '+c.stores+' tiendas</div>'+
+      '<div class="ccard-bar"><div class="ccard-bar-fill" style="width:0%;background:'+c.color+'" data-w="'+pct+'"></div></div>';
+    d.addEventListener('click',function(){
+      const already=d.classList.contains('selected');
+      wrap.querySelectorAll('.ccard').forEach(el=>el.classList.remove('selected'));
+      const panel=document.getElementById('p-detail-panel');
+      if(already){panel.style.display='none';return;}
+      d.classList.add('selected');
+      renderCountryDetail(c.code);
+      panel.style.display='block';
+      panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+    });
+    wrap.appendChild(d);
+  });
+  setTimeout(()=>wrap.querySelectorAll('.ccard-bar-fill').forEach(el=>el.style.width=el.dataset.w+'%'),200);
+
+  // Lines
+  const cColors=D.countries.map(c=>c.color);
+  const series=D.countries.map(c=>({name:c.name,vals:D.byCountry[c.code]}));
+  makeLineSVG('c-pais-lines',series,D.days,200,cColors,4);
+  const leg=document.getElementById('p-leg');
+  D.countries.forEach(c=>{
+    const d=document.createElement('div');d.className='leg-item';
+    d.innerHTML='<div class="leg-line" style="background:'+c.color+'"></div>'+c.flag+' '+c.name;
+    leg.appendChild(d);
+  });
+
+  // Donut
+  makeDonut('c-pais-donut','c-pais-donut-leg',D.countries.map(c=>({name:c.name,v:c.sales,color:c.color})),65,65,52,36);
+
+  // Top SKU per country
+  const row=document.getElementById('p-top-skus-row');
+  D.countries.forEach(c=>{
+    const card=document.createElement('div');card.className='card';
+    const lowSales=c.code==='NI'||c.code==='SV';
+    const badge=lowSales?'Emergente':c.code==='CR'?'Principal':'Crecimiento';
+    const alertHtml=lowSales
+      ? '<div style="margin-top:10px;padding:7px 10px;background:rgba(107,79,168,.07);border-radius:7px;font-size:10px;color:var(--purple)">⚠ Operación en desarrollo · Total '+(c.code==='NI'?'$3,390':'$128')+' en el período</div>'
+      : '';
+    card.innerHTML=
+      '<div class="card-hd"><div>'+
+        '<div class="card-title">'+c.flag+' Top 5 — '+c.name+'</div>'+
+        '<div class="card-sub">Por ventas USD · '+c.stores+' tiendas · '+c.skus+' SKUs</div>'+
+      '</div>'+
+      '<span class="chip" style="background:'+c.color+'22;color:'+c.color+'">'+badge+'</span></div>'+
+      '<div class="hbar-list" id="p-sku-'+c.code+'"></div>'+alertHtml;
+    row.appendChild(card);
+  });
+  D.countries.forEach(c=>{
+    hbars('p-sku-'+c.code, D.countryTopSKU[c.code], c.color);
+  });
+}
+
+function renderCountryDetail(code){
+  const c   = D.countries.find(x=>x.code===code);
+  const det = D.countryDetail[code];
+  const card= document.getElementById('p-detail-card');
+  card.style.borderLeftColor = c.color;
+
+  // Build sparkline path
+  const W=260, H=44, pad=4;
+  const vals=det.daily.filter(v=>v>0);
+  const mxV=Math.max(...vals);
+  const pts=det.daily.map((v,i)=>{
+    const x=pad+i/(det.daily.length-1)*(W-pad*2);
+    const y=pad+(H-pad*2)*(1-v/mxV);
+    return (i===0?'M':'L')+x.toFixed(1)+','+y.toFixed(1);
+  }).join(' ');
+  const area=pts+' L'+(W-pad)+','+(H-pad)+' L'+pad+','+(H-pad)+' Z';
+
+  // KPI calcs
+  const totalSales=c.sales;
+  const avgDay    =(totalSales/det.daily.filter(v=>v>0).length).toFixed(0);
+  const ppu       =(totalSales/c.qty).toFixed(2);
+  const pctGlobal =(totalSales/147511*100).toFixed(1);
+  const bestStore =det.top_stores[0];
+
+  // Category labels
+  const catRows=det.cat.map(([n,s,q])=>
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)">'+
+      '<span style="font-size:11.5px;color:var(--mid)">'+n+'</span>'+
+      '<div style="text-align:right"><div style="font-weight:700;font-size:11.5px">'+fmtK(s)+'</div><div style="font-size:10px;color:var(--muted)">'+q.toLocaleString()+' uds</div></div>'+
+    '</div>'
+  ).join('');
+
+  // Format rows
+  const maxFmt=det.fmt[0][1];
+  const fmtRows=det.fmt.map(([name,s,stores])=>{
+    const pct=(s/maxFmt*100).toFixed(1);
+    return '<div style="margin-bottom:9px">'+
+      '<div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">'+
+        '<span style="color:var(--mid)">'+name+'</span>'+
+        '<span style="font-weight:600">'+fmtK(s)+' · '+stores+' tnd</span>'+
+      '</div>'+
+      '<div style="height:5px;background:var(--bg);border-radius:3px;overflow:hidden">'+
+        '<div style="height:100%;width:'+pct+'%;background:'+c.color+';border-radius:3px;transition:width .8s cubic-bezier(.16,1,.3,1)"></div>'+
+      '</div></div>';
+  }).join('');
+
+  // Top stores rows
+  const storeRows=det.top_stores.map(([n,s,q,sk],i)=>
+    '<tr style="border-bottom:1px solid var(--border)">'+
+      '<td style="padding:7px 0;font-size:10px;color:var(--muted);width:16px">'+(i+1)+'</td>'+
+      '<td style="padding:7px 0;font-size:11px;font-weight:500;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+n+'</td>'+
+      '<td style="padding:7px 0;text-align:right;font-weight:700;font-size:11px">'+fmtK(s)+'</td>'+
+      '<td style="padding:7px 0;text-align:right;font-size:10.5px;color:var(--muted)">'+q.toLocaleString()+' uds</td>'+
+      '<td style="padding:7px 0;text-align:right;font-size:10.5px;color:var(--muted)">'+sk+' SKUs</td>'+
+    '</tr>'
+  ).join('');
+
+  card.innerHTML =
+    // Header
+    '<div class="pdetail-hd">'+
+      '<div class="pdetail-flag">'+c.flag+'</div>'+
+      '<div>'+
+        '<div class="pdetail-name" style="color:'+c.color+'">'+c.name+'</div>'+
+        '<div class="pdetail-sub">Enero 2026 · '+c.stores+' tiendas · '+c.skus+' SKUs activos · Walmart Centroamérica</div>'+
+      '</div>'+
+      '<button class="close-btn" onclick="closeCountryDetail()">✕ Cerrar</button>'+
+    '</div>'+
+
+    // KPIs
+    '<div class="pdetail-kpis">'+
+      '<div class="pdetail-kpi" style="border-top:3px solid '+c.color+'"><div class="pdetail-kpi-lbl">Ventas Totales</div><div class="pdetail-kpi-val">'+fmtK(totalSales)+'</div><div class="pdetail-kpi-sub">USD período</div></div>'+
+      '<div class="pdetail-kpi" style="border-top:3px solid '+c.color+'"><div class="pdetail-kpi-lbl">% del total CA</div><div class="pdetail-kpi-val">'+pctGlobal+'%</div><div class="pdetail-kpi-sub">participación</div></div>'+
+      '<div class="pdetail-kpi" style="border-top:3px solid '+c.color+'"><div class="pdetail-kpi-lbl">Unidades</div><div class="pdetail-kpi-val">'+c.qty.toLocaleString()+'</div><div class="pdetail-kpi-sub">uds vendidas</div></div>'+
+      '<div class="pdetail-kpi" style="border-top:3px solid '+c.color+'"><div class="pdetail-kpi-lbl">Promedio/Día</div><div class="pdetail-kpi-val">$'+Number(avgDay).toLocaleString()+'</div><div class="pdetail-kpi-sub">USD/día</div></div>'+
+      '<div class="pdetail-kpi" style="border-top:3px solid '+c.color+'"><div class="pdetail-kpi-lbl">Precio/Unidad</div><div class="pdetail-kpi-val">$'+ppu+'</div><div class="pdetail-kpi-sub">USD promedio</div></div>'+
+    '</div>'+
+
+    // Sparkline
+    '<div style="margin-bottom:18px">'+
+      '<div class="pdetail-sec-title">Tendencia de ventas diarias</div>'+
+      '<svg width="100%" height="50" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="border-radius:6px">'+
+        '<path d="'+area+'" fill="'+c.color+'" fill-opacity=".1" stroke="none"/>'+
+        '<path d="'+pts+'" fill="none" stroke="'+c.color+'" stroke-width="2" stroke-linejoin="round"/>'+
+      '</svg>'+
+    '</div>'+
+
+    // 3-col body
+    '<div class="pdetail-body">'+
+
+      // Col 1: Top tiendas
+      '<div>'+
+        '<div class="pdetail-sec-title">Top 5 tiendas</div>'+
+        '<table style="width:100%;border-collapse:collapse">'+storeRows+'</table>'+
+      '</div>'+
+
+      // Col 2: Categorías + Formatos
+      '<div>'+
+        '<div class="pdetail-sec-title">Por categoría</div>'+
+        catRows+
+        '<div class="pdetail-sec-title" style="margin-top:16px">Por formato de tienda</div>'+
+        fmtRows+
+      '</div>'+
+
+      // Col 3: Top SKUs
+      '<div>'+
+        '<div class="pdetail-sec-title">Top 5 SKUs</div>'+
+        '<div class="hbar-list" id="pdetail-sku-'+code+'"></div>'+
+      '</div>'+
+
+    '</div>';
+
+  // Render SKU bars inside panel
+  hbars('pdetail-sku-'+code, D.countryTopSKU[code], c.color);
+}
+
+function closeCountryDetail(){
+  document.getElementById('p-detail-panel').style.display='none';
+  document.querySelectorAll('.ccard').forEach(el=>el.classList.remove('selected'));
+}
+
+// ── BUILD: CATEGORÍA ─────────────────────────────────────────────────────────
+function buildCategoria(){
+  // KPIs
+  const kpis=[
+    {lbl:'Ventas Quesos D90',val:'$77,413',sub:'25 SKUs',badge:'a',note:'52.5% del total',color:'var(--accent)'},
+    {lbl:'Ventas Leche & Crema D95',val:'$70,099',sub:'14 SKUs',badge:'g',note:'47.5% del total',color:'var(--green)'},
+    {lbl:'Precio Prom. Queso/Ud',val:'$3.53',sub:'por unidad',badge:'a',note:'21,927 uds vendidas',color:'var(--accent)'},
+    {lbl:'Precio Prom. Leche/Ud',val:'$3.56',sub:'por unidad',badge:'g',note:'19,707 uds vendidas',color:'var(--green)'},
+    {lbl:'Mejor SKU Global',val:'3PK Deslac',sub:'$10,071',badge:'b',note:'Categoría Leche',color:'var(--blue)'},
+  ];
+  const kpiRow=document.getElementById('cat-kpis');
+  kpis.forEach(k=>{
+    const d=document.createElement('div');d.className='kpi';
+    d.innerHTML=`<div class="kpi-bar" style="background:${k.color}"></div><div class="kpi-lbl">${k.lbl}</div><div class="kpi-val" style="font-size:20px">${k.val}</div><div class="kpi-sub"><span class="badge ${k.badge}">${k.sub}</span><span class="kpi-note">${k.note}</span></div>`;
+    kpiRow.appendChild(d);
+  });
+
+  // Lines
+  makeLineSVG('c-cat-lines',[{name:'Quesos D90',vals:D.catDaily.cheese},{name:'Leche & Crema D95',vals:D.catDaily.milk}],D.days,185,['#C8873A','#2A7A58'],4);
+
+  // Compare
+  const compare=document.getElementById('cat-compare');
+  const rows=[
+    {lbl:'Ventas USD',d90:'$77,413',d95:'$70,099',winner:'D90'},
+    {lbl:'% del Total',d90:'52.5%',d95:'47.5%',winner:'D90'},
+    {lbl:'Unidades Vendidas',d90:'21,927',d95:'19,707',winner:'D90'},
+    {lbl:'Precio Prom. / Ud',d90:'$3.53',d95:'$3.56',winner:'D95'},
+    {lbl:'SKUs activos',d90:'25',d95:'14',winner:'D90'},
+    {lbl:'Tiendas con venta',d90:'137',d95:'154',winner:'D95'},
+  ];
+  compare.innerHTML=`<table class="tbl"><thead><tr><th>Métrica</th><th class="r">Quesos D90</th><th class="r">Leche D95</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.lbl}</td><td class="r" style="font-weight:600;color:${r.winner==='D90'?'var(--accent)':'var(--dark)'}">${r.d90}</td><td class="r" style="font-weight:600;color:${r.winner==='D95'?'var(--green)':'var(--dark)'}">${r.d95}</td></tr>`).join('')}</tbody></table>`;
+
+  // Products by category
+  const cheese=D.prods.filter(p=>p.cat==='D90');
+  const milk=D.prods.filter(p=>p.cat==='D95');
+  hbars('cat-cheese-prod',cheese.slice(0,8).map(p=>[p.n.replace('BORDEN ',''),p.s]),'#C8873A',null,i=>({qty:cheese[i].q,stores:cheese[i].st,oh:cheese[i].oh,upc:cheese[i].u}));
+  hbars('cat-milk-prod',milk.slice(0,8).map(p=>[p.n.replace('BORDEN ',''),p.s]),'#2A7A58',null,i=>({qty:milk[i].q,stores:milk[i].st,oh:milk[i].oh,upc:milk[i].u}));
+}
+
+// ── BUILD: TIENDA ─────────────────────────────────────────────────────────────
+function buildTienda(){
+  lollipops('t-top-stores',D.topStores.slice(0,12),d=>getCountryColor(d.c));
+
+  const fmtDescriptions={
+    'HM':'Supermercado de mayor tamaño, alta rotación de productos premium.',
+    'ME':'Formato intermedio con surtido completo y afluencia diaria alta.',
+    'MI':'Tienda de proximidad con operación compacta y SKUs esenciales.',
+    'PZ':'Ubicación en centro comercial, ticket promedio más alto.',
+    'LN':'Tienda formato norte, presencia en Nicaragua.',
+    'LJ':'Formato junior de menor tamaño, El Salvador.',
+    'DF':'Punto duty free, volumen marginal.',
+    'PI':'Punto de ingreso / frontera, volumen mínimo.',
+  };
+  const fmtList=document.getElementById('t-fmt-list');
+  const maxFS=D.finSales[0].s;
+  const totalFS=D.finSales.reduce((a,f)=>a+f.s,0);
+  const fmtColors={'HM':'#C8873A','ME':'#2A7A58','MI':'#3A6FA8','PZ':'#6B4FA8','LN':'#2A7A72','LJ':'#8A7B6E','DF':'#A8603A','PI':'#6A883A'};
+
+  D.finSales.forEach(function(f){
+    const pct   = (f.s/maxFS*100).toFixed(1);
+    const pctT  = (f.s/totalFS*100).toFixed(1);
+    const avg   = '$'+Number((f.s/f.stores).toFixed(0)).toLocaleString();
+    const c     = fmtColors[f.code]||'#C8873A';
+    const desc  = fmtDescriptions[f.code]||'';
+
+    // wrapper
+    const wrapper = document.createElement('div');
+    wrapper.className = 'xrow-fmt';
+    wrapper.style.marginBottom = '6px';
+
+    // header row
+    const header = document.createElement('div');
+    header.className = 'fmt-item';
+    header.style.cssText = 'cursor:pointer;margin-bottom:0;';
+    header.innerHTML =
+      '<span class="fmt-label"><b>'+f.code+'</b> \u00b7 '+f.desc+'</span>'+
+      '<div class="fmt-track"><div class="fmt-fill" style="width:0%;background:'+c+'" data-w="'+pct+'"></div></div>'+
+      '<span class="fmt-val">'+fmtK(f.s)+'</span>'+
+      '<span class="fmt-stores">'+f.stores+' tnd</span>'+
+      '<span class="chevron" style="margin-left:8px">&#9654;</span>';
+
+    // expand panel
+    const panel = document.createElement('div');
+    panel.className = 'xpanel';
+
+    const inner = document.createElement('div');
+    inner.className = 'xpanel-inner';
+
+    if(desc){
+      const note = document.createElement('div');
+      note.style.cssText = 'font-size:10.5px;color:var(--muted);font-style:italic;margin-bottom:10px;';
+      note.textContent = desc;
+      inner.appendChild(note);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'xpanel-grid';
+    grid.style.gridTemplateColumns = 'repeat(4,1fr)';
+    grid.innerHTML =
+      '<div class="xstat"><div class="xstat-lbl">Ventas USD</div><div class="xstat-val">'+fmt$(f.s)+'</div>'+
+        '<div class="xmini-bar"><div class="xmini-fill" style="background:'+c+';width:'+pctT+'%"></div></div></div>'+
+      '<div class="xstat"><div class="xstat-lbl">% del total</div><div class="xstat-val">'+pctT+'%</div>'+
+        '<div class="xstat-sub">sobre $147K</div></div>'+
+      '<div class="xstat"><div class="xstat-lbl">Tiendas</div><div class="xstat-val">'+f.stores+'</div>'+
+        '<div class="xstat-sub">puntos de venta</div></div>'+
+      '<div class="xstat"><div class="xstat-lbl">Prom. / Tienda</div><div class="xstat-val">'+avg+'</div>'+
+        '<div class="xstat-sub">USD en el período</div></div>';
+
+    inner.appendChild(grid);
+    panel.appendChild(inner);
+    wrapper.appendChild(header);
+    wrapper.appendChild(panel);
+    wrapper.addEventListener('click', function(){ toggleExpand(wrapper); });
+    fmtList.appendChild(wrapper);
+  });
+
+  setTimeout(function(){
+    fmtList.querySelectorAll('.fmt-fill').forEach(function(el){ el.style.width=el.dataset.w+'%'; });
+  }, 250);
+
+  // Table
+  const tbody=document.getElementById('t-stores-table');
+  const flags={CR:'🇨🇷',GT:'🇬🇹',HN:'🇭🇳',NI:'🇳🇮',SV:'🇸🇻'};
+  D.topStores.forEach((s,i)=>{
+    const ppu=(s.s/s.q).toFixed(2);
+    const tr=document.createElement('tr');tr.className='xrow-tr';
+    tr.innerHTML=`<td style="color:var(--muted);font-size:11px"><span class="tr-chevron">▶</span>${i+1}</td><td style="font-size:11.5px;font-weight:500">${s.n}</td><td><span style="font-size:12px">${flags[s.c]||''}</span></td><td class="r" style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700">${fmtK(s.s)}</td><td class="r">${s.q.toLocaleString()}</td><td class="r">${s.sk}</td>`;
+    const expTr=document.createElement('tr');expTr.className='expand-tr';
+    const expTd=document.createElement('td');expTd.setAttribute('colspan','6');
+    expTd.innerHTML=`<div class="xpanel"><div class="xpanel-inner"><div class="xpanel-grid cols5">
+      <div class="xstat"><div class="xstat-lbl">Ventas exactas</div><div class="xstat-val" style="font-size:12px">${fmt$(s.s)}</div></div>
+      <div class="xstat"><div class="xstat-lbl">Precio/Ud</div><div class="xstat-val">$${ppu}</div><div class="xstat-sub">USD promedio</div></div>
+      <div class="xstat"><div class="xstat-lbl">Unidades</div><div class="xstat-val">${s.q.toLocaleString()}</div></div>
+      <div class="xstat"><div class="xstat-lbl">SKUs vendidos</div><div class="xstat-val">${s.sk}</div><div class="xstat-sub">de ${s.c==='CR'?28:s.c==='GT'?17:s.c==='HN'?21:9} disp.</div></div>
+      <div class="xstat"><div class="xstat-lbl">País</div><div class="xstat-val" style="font-size:13px">${flags[s.c]} ${{CR:'Costa Rica',GT:'Guatemala',HN:'Honduras',NI:'Nicaragua',SV:'El Salvador'}[s.c]||''}</div></div>
+    </div></div></div>`;
+    expTr.appendChild(expTd);
+    tr.addEventListener('click',()=>{
+      const isOpen=tr.classList.contains('open');
+      tbody.querySelectorAll('tr.xrow-tr.open').forEach(r=>r.classList.remove('open'));
+      tbody.querySelectorAll('tr.expand-tr .xpanel').forEach(p=>p.style.maxHeight='0');
+      if(!isOpen){tr.classList.add('open');expTd.querySelector('.xpanel').style.maxHeight='200px';}
+    });
+    tbody.appendChild(tr);tbody.appendChild(expTr);
+  });
+}
+
+// ── BUILD: PRODUCTO ────────────────────────────────────────────────────────────
+let skuData = null;
+function buildProducto(){
+  // Top 20 hbars with extra
+  hbars('sku-bars',D.prods.map(p=>[p.n.replace('BORDEN ',''),p.s]),D.prods.map(p=>p.cat==='D90'?'#C8873A':'#2A7A58'),null,i=>({qty:D.prods[i].q,stores:D.prods[i].st,oh:D.prods[i].oh,cat:D.prods[i].cat,upc:D.prods[i].u}));
+
+  // Donut + category stats
+  const cheeseProds = D.prods.filter(p=>p.cat==='D90');
+  const milkProds   = D.prods.filter(p=>p.cat==='D95');
+  const cheeseSales = cheeseProds.reduce((a,p)=>a+p.s,0);
+  const milkSales   = milkProds.reduce((a,p)=>a+p.s,0);
+  const cheeseQty   = cheeseProds.reduce((a,p)=>a+p.q,0);
+  const milkQty     = milkProds.reduce((a,p)=>a+p.q,0);
+  const cheeseOH    = cheeseProds.reduce((a,p)=>a+p.oh,0)/cheeseProds.length;
+  const milkOH      = milkProds.reduce((a,p)=>a+p.oh,0)/milkProds.length;
+  const cheeseStores= Math.max(...cheeseProds.map(p=>p.st));
+  const milkStores  = Math.max(...milkProds.map(p=>p.st));
+
+  makeDonut('c-sku-donut','c-sku-donut-leg',[
+    {name:'Quesos D90',  v:cheeseSales, color:'#C8873A'},
+    {name:'Leche D95',   v:milkSales,   color:'#2A7A58'}
+  ],55,55,46,32);
+
+  // Category stat cards
+  const statWrap = document.getElementById('cat-stat-cards');
+  const catDefs = [
+    {
+      label:'🧀 Quesos D90', color:'#C8873A', bg:'rgba(200,135,58,.07)',
+      stats:[
+        {l:'Ventas USD',    v:fmtK(cheeseSales),         s:fmt$(cheeseSales)},
+        {l:'% del total',   v:(cheeseSales/(cheeseSales+milkSales)*100).toFixed(1)+'%', s:'sobre $147K'},
+        {l:'Unidades',      v:cheeseQty.toLocaleString(), s:'uds vendidas'},
+        {l:'Precio/Ud',     v:'$'+(cheeseSales/cheeseQty).toFixed(2), s:'USD promedio'},
+        {l:'SKUs activos',  v:cheeseProds.length,         s:'productos'},
+        {l:'On-Hand Avg',   v:cheeseOH.toFixed(1),        s:'uds en tienda'},
+      ]
+    },
+    {
+      label:'🥛 Leche & Crema D95', color:'#2A7A58', bg:'rgba(42,122,88,.07)',
+      stats:[
+        {l:'Ventas USD',    v:fmtK(milkSales),            s:fmt$(milkSales)},
+        {l:'% del total',   v:(milkSales/(cheeseSales+milkSales)*100).toFixed(1)+'%', s:'sobre $147K'},
+        {l:'Unidades',      v:milkQty.toLocaleString(),   s:'uds vendidas'},
+        {l:'Precio/Ud',     v:'$'+(milkSales/milkQty).toFixed(2), s:'USD promedio'},
+        {l:'SKUs activos',  v:milkProds.length,            s:'productos'},
+        {l:'On-Hand Avg',   v:milkOH.toFixed(1),           s:'uds en tienda'},
+      ]
+    }
+  ];
+
+  catDefs.forEach(cat=>{
+    const block = document.createElement('div');
+    block.style.cssText=`background:${cat.bg};border-radius:9px;padding:12px;`;
+    block.innerHTML=`
+      <div style="font-size:11px;font-weight:600;color:${cat.color};margin-bottom:10px;letter-spacing:-.2px">${cat.label}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        ${cat.stats.map(st=>`
+          <div>
+            <div style="font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)">${st.l}</div>
+            <div style="font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--dark);line-height:1.2">${st.v}</div>
+            <div style="font-size:9.5px;color:var(--muted)">${st.s}</div>
+          </div>`).join('')}
+      </div>`;
+    statWrap.appendChild(block);
+  });
+
+  // On-hand bars with extra
+  const topByOH=D.prods.filter(p=>p.oh>0).sort((a,b)=>b.oh-a.oh).slice(0,8);
+  hbars('sku-onhand-bars',topByOH.map(p=>[p.n.replace('BORDEN ',''),p.oh]),topByOH.map(p=>p.cat==='D90'?'#C8873A':'#2A7A58'),topByOH[0].oh,i=>({qty:topByOH[i].q,stores:topByOH[i].st,cat:topByOH[i].cat}));
+
+  // Full SKU table
+  skuData = D.prods.slice();
+  renderSKUTable(skuData);
+}
+
+function renderSKUTable(rows){
+  const tbody=document.getElementById('sku-full-table');tbody.innerHTML='';
+  rows.forEach(p=>{
+    const [st,sc]=stockStatus(p.oh);
+    const catShort=p.cat==='D90'?'Quesos D90':'Leche & Crema D95';
+    const catColor=p.cat==='D90'?'background:rgba(200,135,58,.10);color:#C8873A':'background:rgba(42,122,88,.10);color:#2A7A58';
+    const catC=p.cat==='D90'?'#C8873A':'#2A7A58';
+    const ppu=(p.s/p.q).toFixed(2);
+    const tr=document.createElement('tr');tr.className='xrow-tr';
+    tr.innerHTML=`<td style="font-size:10px;color:var(--muted)"><span class="tr-chevron">▶</span>${p.u}</td><td style="font-size:11px;font-weight:500;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.n.replace('BORDEN ','')}</td><td><span class="pill" style="${catColor}">${catShort}</span></td><td class="r" style="font-family:'Syne',sans-serif;font-size:12px;font-weight:700">${fmtK(p.s)}</td><td class="r">${p.q.toLocaleString()}</td><td class="r">${p.st}</td><td class="r" style="font-weight:600">${p.oh.toFixed(1)}</td><td class="c"><span class="pill ${sc}">${st}</span></td>`;
+    const expandTr=document.createElement('tr');expandTr.className='expand-tr';
+    const expandTd=document.createElement('td');expandTd.setAttribute('colspan','8');
+    expandTd.innerHTML=`<div class="xpanel"><div class="xpanel-inner">
+      <div class="xpanel-grid cols5">
+        <div class="xstat"><div class="xstat-lbl">Precio / Ud</div><div class="xstat-val">$${ppu}</div><div class="xstat-sub">USD promedio</div></div>
+        <div class="xstat"><div class="xstat-lbl">Venta total</div><div class="xstat-val">${fmt$(p.s)}</div><div class="xmini-bar"><div class="xmini-fill" style="background:${catC};width:${(p.s/10071.38*100).toFixed(1)}%"></div></div></div>
+        <div class="xstat"><div class="xstat-lbl">On-Hand Avg</div><div class="xstat-val">${p.oh.toFixed(1)}</div><div class="xstat-sub">uds por tienda</div></div>
+        <div class="xstat"><div class="xstat-lbl">Cobertura Tiendas</div><div class="xstat-val">${p.st}</div><div class="xstat-sub">de 234 totales</div></div>
+        <div class="xstat"><div class="xstat-lbl">Categoría</div><div class="xstat-val" style="font-size:11px">${p.cat==='D90'?'🧀 Quesos D90':'🥛 Leche D95'}</div></div>
+      </div>
+    </div></div>`;
+    expandTr.appendChild(expandTd);
+    tr.addEventListener('click',()=>{
+      const isOpen=tr.classList.contains('open');
+      tbody.querySelectorAll('tr.xrow-tr.open').forEach(r=>r.classList.remove('open'));
+      tbody.querySelectorAll('tr.expand-tr .xpanel').forEach(p=>p.style.maxHeight='0');
+      if(!isOpen){
+        tr.classList.add('open');
+        expandTd.querySelector('.xpanel').style.maxHeight='200px';
+      }
+    });
+    tbody.appendChild(tr);
+    tbody.appendChild(expandTr);
+  });
+}
+
+function filterSKU(q){
+  const f=D.prods.filter(p=>p.n.toLowerCase().includes(q.toLowerCase())||String(p.u).includes(q));
+  renderSKUTable(f);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+buildResumen();
+built['resumen']=true;
+
+// nav filter buttons
+document.querySelectorAll('.flt').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    document.querySelectorAll('.flt').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+</script>
+</body>
+</html>
