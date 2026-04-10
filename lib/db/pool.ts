@@ -13,10 +13,17 @@ declare global {
  * Supabase direct connection (port 5432).
  * Connection string from: Project Settings → Database → URI
  */
+// Eliminar sslmode del URL para que pg use solo la opción ssl del Pool
+// (pg v8 no combina bien sslmode=require con ssl:{rejectUnauthorized:false})
+const connStr = (process.env.DATABASE_URL ?? '')
+  .replace(/([?&])sslmode=[^&]*/g, '$1')
+  .replace(/[?&]$/, '')
+
 export const pool =
   global._pgPool ??
   (global._pgPool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: connStr,
+    ssl: { rejectUnauthorized: false },
     max: 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 15_000,
