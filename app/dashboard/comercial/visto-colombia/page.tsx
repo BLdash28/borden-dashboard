@@ -1325,6 +1325,7 @@ export default function VistaColombia() {
   const [modulo, setModulo] = useState('kpis')
   const [allData, setAllData]     = useState<Row[]>([])
   const [loading, setLoading]     = useState(true)
+  const [apiError, setApiError]   = useState<string | null>(null)
   const [bm, setBm]               = useState<BmData>(BM_EMPTY)
   const [ajustes, setAjustes]     = useState<Ajuste[]>([])
   const [editCtx, setEditCtx]     = useState<EditCtx | null>(null)
@@ -1348,8 +1349,8 @@ export default function VistaColombia() {
   useEffect(() => {
     setLoading(true)
     Promise.all([
-      fetch('/api/ventas/colombia').then(r => r.json()),
-      fetch('/api/inventario/colombia').then(r => r.json()),
+      fetch('/api/ventas/colombia').then(r => r.json()).catch(() => ({ rows: [], cadenas: [], formatos: [] })),
+      fetch('/api/inventario/colombia').then(r => r.json()).catch(() => ({ eanQtyMap: {}, skuQtyMap: {}, skuEanMap: {}, skuDescMap: {}, descMap: {} })),
       fetch('/api/precios/colombia').then(r => r.json()).catch(() => ({ byEan: {}, bySku: {} })),
       fetch('/api/base-maestra/colombia').then(r => r.json()).catch(() => ({})),
       fetch('/api/ajustes/colombia').then(r => r.json()).catch(() => ([])),
@@ -1411,6 +1412,7 @@ export default function VistaColombia() {
             tasa_usd_cop:          4320,
           }
         })
+        setApiError(null)
         setAllData(apiRows)
         setOpsCadenas(ventasD.cadenas || [])
         setOpsFormatos(ventasD.formatos || [])
@@ -1430,7 +1432,10 @@ export default function VistaColombia() {
         })
         setAjustes(Array.isArray(ajustesD) ? ajustesD : [])
       })
-      .catch(console.error)
+      .catch((err: any) => {
+        console.error('Colombia data load error:', err)
+        setApiError(err?.message || 'Error al cargar datos')
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -1621,12 +1626,28 @@ export default function VistaColombia() {
             <div className="w-8 h-8 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3" />
             <p className="text-sm font-semibold">Cargando datos de Colombia…</p>
           </div>
+        ) : apiError ? (
+          <div className="flex flex-col items-center justify-center h-64 text-slate-400">
+            <AlertTriangle size={32} className="mb-3 text-red-400" />
+            <p className="font-semibold text-red-500">Error al cargar datos</p>
+            <p className="text-xs mt-1 text-slate-500">{apiError}</p>
+          </div>
         ) : filteredData.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-slate-400">
             <Filter size={32} className="mb-3 opacity-30" />
-            <p className="font-semibold">Sin datos con los filtros actuales</p>
-            <button onClick={() => setFil(prev => ({ ...prev, formato: [], subcategoria: [], cadena: [], subcadena: [], departamento: [], ciudad: [] }))}
-              className="mt-3 text-xs text-blue-500 hover:underline">Limpiar filtros</button>
+            <p className="font-semibold">
+              {allData.length === 0
+                ? 'Sin datos de ventas CO en la base de datos'
+                : 'Sin datos con los filtros actuales'}
+            </p>
+            {allData.length === 0 ? (
+              <p className="text-xs mt-2 text-slate-400 max-w-xs text-center">
+                Sube datos de ventas Colombia (pais=CO) desde la página Sellout → Importar CSV
+              </p>
+            ) : (
+              <button onClick={() => setFil(prev => ({ ...prev, formato: [], subcategoria: [], cadena: [], subcadena: [], departamento: [], ciudad: [] }))}
+                className="mt-3 text-xs text-blue-500 hover:underline">Limpiar filtros</button>
+            )}
           </div>
         ) : (
           <>
