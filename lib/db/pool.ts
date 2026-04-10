@@ -24,7 +24,7 @@ export const pool =
   (global._pgPool = new Pool({
     connectionString: connStr,
     ssl: { rejectUnauthorized: false },
-    max: 5,
+    max: 10,
     idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 15_000,
+    connectionTimeoutMillis: 50_000,
   }))

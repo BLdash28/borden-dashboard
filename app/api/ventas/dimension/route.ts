@@ -4,9 +4,13 @@ import { getUserRestrictions } from '@/lib/auth/restrictions'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: (process.env.DATABASE_URL ?? '')
+    .replace(/([?&])sslmode=[^&]*/g, '$1')
+    .replace(/[?&]$/, ''),
   ssl: { rejectUnauthorized: false },
-  max: 5,
+  max: 3,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 25_000,
 })
 
 const DIM_COLS: Record<string, string> = {
