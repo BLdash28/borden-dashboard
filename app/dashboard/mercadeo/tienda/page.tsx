@@ -97,7 +97,7 @@ export default function MercadeoTiendaPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Unidades Totales',  value: loading ? '...' : fmtU(totalUds) + ' uds',                                        sub: 'total período',             icon: <Package size={18}/>,      color: 'border-l-amber-500'   },
           { label: 'Tiendas Activas',   value: loading ? '...' : String(rows.length),                                             sub: 'puntos de venta con venta', icon: <Store size={18}/>,         color: 'border-l-blue-500'    },

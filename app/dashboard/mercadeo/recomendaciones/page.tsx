@@ -184,7 +184,7 @@ export default function RecomendacionesPage() {
       )}
 
       {/* KPIs por acción */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {(['impulsar', 'mantener', 'revisar', 'descontinuar'] as Accion[]).map(a => {
           const cfg = ACCION_CFG[a]
           return (

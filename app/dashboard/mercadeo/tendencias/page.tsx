@@ -137,7 +137,7 @@ export default function MercadeoTendenciasPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Total Unidades',   value: loading ? '...' : fmtU(totalUds),       sub: `${rows.length} períodos`,                                                                     icon: <TrendingUp size={18}/>,  color: 'border-l-amber-500'   },
           { label: 'Promedio/Período', value: loading ? '...' : fmtU(promMensual),     sub: agrup === 'mes' ? 'uds/mes' : agrup === 'semana' ? 'uds/semana' : 'uds/día',                  icon: <Calendar size={18}/>,    color: 'border-l-blue-500'    },
