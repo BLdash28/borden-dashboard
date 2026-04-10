@@ -957,6 +957,12 @@ function EditPrecioModal({
 function ModPrecios({ data, fil }: { data: Row[]; fil: Filtros }) {
   const tasa   = fil.tasa
   const moneda = fil.moneda
+
+  // Precios en precios_colombia están en COP nativo — NO multiplicar por tasa
+  const fmtPco = (n: number) =>
+    moneda === 'USD'
+      ? '$' + (n / tasa).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : 'COP ' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
   const [editRow,    setEditRow]    = useState<PrecioRow | null>(null)
   const [overrides,  setOverrides]  = useState<Record<string, Partial<PrecioRow>>>({})
 
@@ -1067,12 +1073,12 @@ function ModPrecios({ data, fil }: { data: Row[]; fil: Filtros }) {
               {precios.map((r, i) => (
                 <tr key={i} className="border-t border-slate-50 hover:bg-violet-50/30 transition-colors">
                   <td className="px-3 py-2.5 font-semibold text-slate-700 max-w-[160px] truncate">{r.desc}</td>
-                  <td className="px-3 py-2.5 text-violet-700 font-bold tabular-nums">{fmtPrice(r.pc, moneda, tasa)}</td>
-                  <td className="px-3 py-2.5 text-slate-500 tabular-nums">{fmtPrice(r.pcomp, moneda, tasa)}</td>
+                  <td className="px-3 py-2.5 text-violet-700 font-bold tabular-nums">{fmtPco(r.pc)}</td>
+                  <td className="px-3 py-2.5 text-slate-500 tabular-nums">{fmtPco(r.pcomp)}</td>
                   <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: r.spread > 0 ? C.amber : r.spread < 0 ? C.green : '#94a3b8' }}>
-                    {r.spread !== 0 ? (r.spread > 0 ? '+' : '') + fmtPrice(r.spread, moneda, tasa) : '—'}
+                    {r.spread !== 0 ? (r.spread > 0 ? '+' : '') + fmtPco(Math.abs(r.spread)) : '—'}
                   </td>
-                  <td className="px-3 py-2.5 font-bold text-blue-800 tabular-nums">{fmtPrice(r.pv, moneda, tasa)}</td>
+                  <td className="px-3 py-2.5 font-bold text-blue-800 tabular-nums">{fmtPco(r.pv)}</td>
                   <td className="px-3 py-2.5 font-bold" style={{ color: r.margen !== null && r.margen >= 15 ? C.green : r.margen !== null && r.margen >= 8 ? C.amber : C.red }}>
                     {r.margen !== null ? r.margen + '%' : '—'}
                   </td>
