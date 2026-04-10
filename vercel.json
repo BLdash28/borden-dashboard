@@ -4,6 +4,12 @@
   "outputDirectory": ".next",
   "installCommand": "npm install",
   "functions": {
+    "app/api/ventas/resumen/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/ventas/dimension/route.ts": {
+      "maxDuration": 30
+    },
     "app/api/ventas/sellout/upload/route.ts": {
       "maxDuration": 60
     }
