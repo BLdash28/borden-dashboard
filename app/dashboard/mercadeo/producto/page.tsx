@@ -1,7 +1,5 @@
 'use client'
 import { showError } from '@/lib/toast'
-'use client'
-import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback } from 'react'
 import { RefreshCw, ShoppingBag, Package, TrendingUp, ArrowUp, ArrowDown, Minus } from 'lucide-react'
 import BarChartPro from '@/components/dashboard/BarChartPro'
