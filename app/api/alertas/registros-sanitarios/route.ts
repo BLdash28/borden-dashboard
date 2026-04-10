@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { Resend } from 'resend'
 
+export const dynamic = 'force-dynamic'
+
 // ── Clientes ──────────────────────────────────────────────────────────────────
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
