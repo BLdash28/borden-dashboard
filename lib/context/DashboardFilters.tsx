@@ -3,6 +3,15 @@ import React, {
   createContext, useContext, useState, useEffect, useRef, useMemo, useCallback,
 } from 'react'
 
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return debounced
+}
+
 const MESES_LABEL = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const PAISES_OPTS  = ['CO','CR','GT','HN','NI','SV']
 const BASE_CATS    = ['Helados','Leches','Quesos']
@@ -89,6 +98,12 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
 
   const initDone = useRef(false)
 
+  // ── Debounced filter values (300 ms) to avoid waterfall on rapid changes ──
+  const dPaises   = useDebounce(fPaises,   300)
+  const dCats     = useDebounce(fCats,     300)
+  const dSubcats  = useDebounce(fSubcats,  300)
+  const dClientes = useDebounce(fClientes, 300)
+
   // ── Init: cargar periodos ──────────────────────────────────────────────────
   useEffect(() => {
     if (initDone.current) return
@@ -107,7 +122,6 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
   }, []) // eslint-disable-line
 
   // ── Cascade: países → categorías ──────────────────────────────────────────
-  // Siempre se carga (es el primer nivel, reemplaza la carga estática BASE_CATS)
   const fetchCats = useCallback((paises: string[]) => {
     setLoadingCats(true)
     const q = new URLSearchParams({ dim: 'categoria' })
@@ -124,11 +138,10 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
       .finally(() => setLoadingCats(false))
   }, [])
 
-  useEffect(() => { fetchCats(fPaises) }, [fPaises, fetchCats])
+  useEffect(() => { fetchCats(dPaises) }, [dPaises, fetchCats])
 
-  // ── Cascade: países + categorías → subcategorías (lazy: solo si hay selección) ──
+  // ── Cascade: países + categorías → subcategorías (lazy) ───────────────────
   const fetchSubcats = useCallback((paises: string[], cats: string[]) => {
-    // Sin selección padre no hay valor en mostrar todos; limpia y sale
     if (!paises.length && !cats.length) { setSubcatsOpts([]); setFSubcats([]); return }
     setLoadingSubcats(true)
     const q = new URLSearchParams({ dim: 'subcategoria' })
@@ -145,11 +158,10 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
       .finally(() => setLoadingSubcats(false))
   }, [])
 
-  useEffect(() => { fetchSubcats(fPaises, fCats) }, [fPaises, fCats, fetchSubcats])
+  useEffect(() => { fetchSubcats(dPaises, dCats) }, [dPaises, dCats, fetchSubcats])
 
-  // ── Cascade: países + cats + subcats → clientes (lazy: solo si hay selección) ──
+  // ── Cascade: países + cats + subcats → clientes (lazy) ────────────────────
   const fetchClientes = useCallback((paises: string[], cats: string[], subcats: string[]) => {
-    // Sin selección padre no hay valor en mostrar todos; limpia y sale
     if (!paises.length && !cats.length && !subcats.length) { setClientesOpts([]); setFClientes([]); return }
     setLoadingClientes(true)
     const q = new URLSearchParams({ dim: 'cliente' })
@@ -167,7 +179,7 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
       .finally(() => setLoadingClientes(false))
   }, [])
 
-  useEffect(() => { fetchClientes(fPaises, fCats, fSubcats) }, [fPaises, fCats, fSubcats, fetchClientes])
+  useEffect(() => { fetchClientes(dPaises, dCats, dSubcats) }, [dPaises, dCats, dSubcats, fetchClientes])
 
   // ── Cascade: países + clientes → formatos ─────────────────────────────────
   const fetchFormatos = useCallback((paises: string[], clientes: string[]) => {
@@ -187,7 +199,7 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
       .finally(() => setLoadingFormatos(false))
   }, [])
 
-  useEffect(() => { fetchFormatos(fPaises, fClientes) }, [fPaises, fClientes, fetchFormatos])
+  useEffect(() => { fetchFormatos(dPaises, dClientes) }, [dPaises, dClientes, fetchFormatos])
 
   // ── Cascade: años → meses disponibles ────────────────────────────────────
   const mesOpts = useMemo((): MesOpt[] => {

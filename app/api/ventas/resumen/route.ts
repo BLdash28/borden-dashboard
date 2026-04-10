@@ -3,6 +3,7 @@ import { pool } from '@/lib/db/pool'
 import { handleApiError, AppError } from '@/lib/api/errors'
 import { VentasResumenQuerySchema, parsePaisList } from '@/lib/validation/ventas'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
+import { withCache, cacheHeaders } from '@/lib/db/cache'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,13 +24,20 @@ export async function GET(req: NextRequest) {
 
     // ── Periods listing (no per-user restrictions needed) ────────
     if (tipo === 'periodos') {
-      const r = await pool.query(
-        'SELECT ano, mes, COUNT(DISTINCT pais) AS n_paises, COUNT(*) AS filas, ' +
-        'ROUND(SUM(ventas_valor)::numeric,0) AS valor_usd ' +
-        'FROM v_ventas WHERE ano > 2000 ' +
-        'GROUP BY ano, mes ORDER BY ano DESC, mes DESC'
+      const { data: periodos } = await withCache(
+        'periodos',
+        async () => {
+          const r = await pool.query(
+            'SELECT ano, mes, COUNT(DISTINCT pais) AS n_paises, COUNT(*) AS filas, ' +
+            'ROUND(SUM(ventas_valor)::numeric,0) AS valor_usd ' +
+            'FROM v_ventas WHERE ano > 2000 ' +
+            'GROUP BY ano, mes ORDER BY ano DESC, mes DESC'
+          )
+          return r.rows
+        },
+        10 * 60_000 // 10 min TTL — periods list rarely changes
       )
-      return NextResponse.json({ periodos: r.rows })
+      return NextResponse.json({ periodos }, { headers: cacheHeaders(600) })
     }
 
     // ── Parse multi-select arrays ────────────────────────────────

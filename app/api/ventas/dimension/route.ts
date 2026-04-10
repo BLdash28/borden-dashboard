@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { Pool } from 'pg'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
+import { withCache, cacheHeaders } from '@/lib/db/cache'
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -134,19 +135,32 @@ export async function GET(req: NextRequest) {
       groupByExpr = col
     }
 
-    const r = await client.query(
-      `SELECT ${selectExpr}, ` +
-      'ROUND(SUM(ventas_valor)::numeric,4)    AS ventas_valor, ' +
-      'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades, ' +
-      'COUNT(DISTINCT sku)                    AS num_skus ' +
-      'FROM v_ventas ' + where + ' ' +
-      `GROUP BY ${groupByExpr} ORDER BY ventas_valor DESC`,
-      params
+    // Cache key: dim + full param string (unique per filter combo)
+    const cacheKey = `dim:${dim}:${where}:${params.join(',')}`
+
+    const { data: rows } = await withCache(
+      cacheKey,
+      async () => {
+        const r = await client.query(
+          `SELECT ${selectExpr}, ` +
+          'ROUND(SUM(ventas_valor)::numeric,4)    AS ventas_valor, ' +
+          'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades, ' +
+          'COUNT(DISTINCT sku)                    AS num_skus ' +
+          'FROM v_ventas ' + where + ' ' +
+          `GROUP BY ${groupByExpr} ORDER BY ventas_valor DESC LIMIT 300`,
+          params
+        )
+        return r.rows
+      },
+      5 * 60_000 // 5 min TTL — dimension options are stable within a session
     )
     client.release()
 
     const modo = mesesArr.length ? 'mes' : anosArr.length ? 'ano' : 'todos'
-    return NextResponse.json({ rows: r.rows, anos: anosArr, meses: mesesArr, modo, dim })
+    return NextResponse.json(
+      { rows, anos: anosArr, meses: mesesArr, modo, dim },
+      { headers: cacheHeaders(300) }
+    )
   } catch (err: any) {
     console.error('dimension route error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
