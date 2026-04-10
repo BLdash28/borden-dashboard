@@ -148,26 +148,28 @@ export function generateMockData(): Row[] {
 }
 
 // ── Helpers de formato ─────────────────────────────────────────────────────────
+/**
+ * Los valores almacenados en DB (ventas_valor) están en USD.
+ * - Modo USD: mostrar tal cual (n = USD)
+ * - Modo COP: multiplicar por tasa para convertir USD → COP
+ */
 export function fmtCOP(n: number, moneda: 'COP' | 'USD', tasa: number): string {
-  const v = moneda === 'USD' ? n / tasa : n
   if (moneda === 'USD') {
-    if (v >= 1e6) return 'USD ' + (v / 1e6).toFixed(2) + 'M'
-    if (v >= 1e3) return 'USD ' + (v / 1e3).toFixed(1) + 'K'
-    return 'USD ' + v.toFixed(0)
+    return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   }
-  return 'COP ' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const cop = n * tasa
+  return 'COP ' + cop.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
-/** Formato para precios unitarios — muestra dígitos completos con separador de miles */
+/** Formato para precios unitarios (almacenados en USD) */
 export function fmtPrice(n: number, moneda: 'COP' | 'USD', tasa: number): string {
-  if (moneda === 'USD') return '$' + (n / tasa).toFixed(2)
-  return 'COP ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  if (moneda === 'USD') return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return 'COP ' + (n * tasa).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/** Número completo con separador de miles — sin abreviación K/M */
 export function fmtN(n: number): string {
-  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
-  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K'
-  return String(Math.round(n))
+  return Math.round(n).toLocaleString('en-US')
 }
 
 export function exportCSV(data: any[], filename: string) {
