@@ -38,9 +38,14 @@ export default function ResetPasswordPage() {
     }
     setLoading(true)
     setError('')
-    const { error } = await supabase.auth.updateUser({ password })
-    if (error) {
-      setError(error.message)
+    const res = await fetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    })
+    const data = await res.json()
+    if (!res.ok) {
+      setError(data.error ?? 'Error al actualizar la contraseña.')
       setLoading(false)
     } else {
       setDone(true)
