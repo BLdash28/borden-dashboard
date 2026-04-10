@@ -8,9 +8,10 @@ export default function MfaChallengePage() {
   const supabase = createClient()
   const router   = useRouter()
 
-  const [code,    setCode]    = useState('')
-  const [error,   setError]   = useState('')
-  const [loading, setLoading] = useState(false)
+  const [code,      setCode]      = useState('')
+  const [error,     setError]     = useState('')
+  const [loading,   setLoading]   = useState(false)
+  const [remember,  setRemember]  = useState(false)
 
   const verificar = async () => {
     if (code.length !== 6) { setError('El código debe tener 6 dígitos.'); return }
@@ -35,6 +36,11 @@ export default function MfaChallengePage() {
         code,
       })
       if (vErr) throw vErr
+
+      // Recordar dispositivo 30 días
+      if (remember) {
+        await fetch('/api/auth/trust-device', { method: 'POST' })
+      }
 
       router.push('/dashboard')
       router.refresh()
@@ -101,6 +107,18 @@ export default function MfaChallengePage() {
               {error}
             </div>
           )}
+
+          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={remember}
+              onChange={e => setRemember(e.target.checked)}
+              className="w-4 h-4 rounded accent-[var(--acc)]"
+            />
+            <span className="text-xs" style={{ color: 'var(--t3)' }}>
+              Recordar este dispositivo por 30 días
+            </span>
+          </label>
 
           <button
             onClick={verificar}

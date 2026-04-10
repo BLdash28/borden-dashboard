@@ -61,9 +61,12 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
-    // Rutas del dashboard: si tiene MFA pendiente → challenge
+    // Rutas del dashboard: si tiene MFA pendiente → challenge (salvo dispositivo de confianza)
     if (pathname.startsWith('/dashboard') && needsMfa) {
-      return NextResponse.redirect(new URL('/auth/mfa-challenge', request.url))
+      const trusted = request.cookies.get('mfa_trusted_device')?.value
+      if (!trusted) {
+        return NextResponse.redirect(new URL('/auth/mfa-challenge', request.url))
+      }
     }
   }
 
