@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { RefreshCw, ChevronRight, X, Download } from 'lucide-react'
 import LineChartPro, { type LineDef } from '@/components/dashboard/LineChartPro'
@@ -97,7 +98,7 @@ export default function VentasPaisPage() {
         setCatOpts(opts)
         setFCats(prev => prev.filter(c => opts.includes(c)))
       })
-      .catch(console.error)
+      .catch((e: any) => showError(e?.message || 'Error al cargar datos'))
   }, [fPaises]) // eslint-disable-line
 
   // ── Opciones subcategoría (cascade de fPaises + fCats, lazy) ────────────
@@ -113,7 +114,7 @@ export default function VentasPaisPage() {
         setSubcatOpts(opts)
         setFSubcats(prev => prev.filter(s => opts.includes(s)))
       })
-      .catch(console.error)
+      .catch((e: any) => showError(e?.message || 'Error al cargar datos'))
   }, [fPaises, fCats]) // eslint-disable-line
 
   // ── Opciones cliente (cascade de fPaises + fCats + fSubcats, lazy) ───────
@@ -130,7 +131,7 @@ export default function VentasPaisPage() {
         setClienteOpts(opts)
         setFClientes(prev => prev.filter(c => opts.includes(c)))
       })
-      .catch(console.error)
+      .catch((e: any) => showError(e?.message || 'Error al cargar datos'))
   }, [fPaises, fCats, fSubcats]) // eslint-disable-line
 
   // ── Carga principal ───────────────────────────────────
@@ -150,7 +151,7 @@ export default function VentasPaisPage() {
     fetch('/api/ventas/pais?' + p.toString())
       .then(r => r.json())
       .then(j => {
-        if (j.error) { console.error(j.error); return }
+        if (j.error) { showError(j.error || 'Error al cargar datos'); return }
         const parsed: DiaRow[] = (j.rows || []).map((row: any) => ({
           pais:            String(row.pais || ''),
           dia:             toNum(row.dia),

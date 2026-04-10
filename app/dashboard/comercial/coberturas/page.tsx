@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { RotateCcw, RefreshCw } from 'lucide-react'
 import BarChartPro from '@/components/dashboard/BarChartPro'
@@ -51,7 +52,7 @@ export default function CoberturasPage() {
     fetch('/api/inventario/doh?' + p)
       .then(r => r.json())
       .then(j => {
-        if (j.error) { console.error(j.error); return }
+        if (j.error) { showError(j.error || 'Error al cargar datos'); return }
         setKpi(j.kpi)
         if (j.pdvsByPais) setPdvsByPais(j.pdvsByPais)
         setSkus((j.skus || []).map((s: any) => ({
@@ -70,7 +71,7 @@ export default function CoberturasPage() {
         if (j.catOpts)    setCatOpts(j.catOpts)
         if (j.subcatOpts) setSubcatOpts(j.subcatOpts)
       })
-      .catch(console.error)
+      .catch((e: any) => showError(e?.message || 'Error al cargar datos'))
       .finally(() => setLoading(false))
   }, [])
 

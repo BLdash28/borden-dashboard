@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   RefreshCw, TrendingUp, ShoppingCart, DollarSign, Calendar,
@@ -122,7 +123,7 @@ export default function ResumenPage() {
     fetch('/api/ventas/resumen?' + p.toString())
       .then(r => r.json())
       .then(j => {
-        if (j.error) { console.error(j.error); return }
+        if (j.error) { showError(j.error || 'Error al cargar datos'); return }
         setKpi(j.kpi)
         const diasRaw = (j.dias || []).map((d: any) => ({
           dia: toNum(d.dia),

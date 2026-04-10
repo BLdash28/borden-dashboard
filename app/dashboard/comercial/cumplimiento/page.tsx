@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { RefreshCw, TrendingDown, AlertCircle, CheckCircle, Pencil, Plus, X } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
@@ -266,7 +267,7 @@ export default function CumplimientoPage() {
     fetch('/api/ventas/cumplimiento?' + p)
       .then(r => r.json())
       .then(j => {
-        if (j.error) { console.error(j.error); return }
+        if (j.error) { showError(j.error || 'Error al cargar datos'); return }
         setAnoActual(j.ano_actual)
         setMesActual(j.mes_actual)
         setPorPais((j.por_pais || []).map((r: Record<string, unknown>) => ({

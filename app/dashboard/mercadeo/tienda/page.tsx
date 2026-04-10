@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback } from 'react'
 import { RefreshCw, Store, Package, Globe2, AlertTriangle } from 'lucide-react'
 import BarChartPro from '@/components/dashboard/BarChartPro'
@@ -35,7 +36,7 @@ export default function MercadeoTiendaPage() {
     fetch('/api/ventas/dimension?' + p.toString())
       .then(r => r.json())
       .then(j => {
-        if (j.error) { console.error(j.error); return }
+        if (j.error) { showError(j.error || 'Error al cargar datos'); return }
         setRows((j.rows || []).map((r: any) => ({
           nombre:          String(r.nombre || '(sin nombre)'),
           ventas_unidades: toNum(r.ventas_unidades),

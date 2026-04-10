@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useState, useMemo, useCallback } from 'react'
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
@@ -1433,7 +1434,7 @@ export default function VistaColombia() {
         setAjustes(Array.isArray(ajustesD) ? ajustesD : [])
       })
       .catch((err: any) => {
-        console.error('Colombia data load error:', err)
+        showError(err?.message || 'Error al cargar datos de Colombia')
         setApiError(err?.message || 'Error al cargar datos')
       })
       .finally(() => setLoading(false))

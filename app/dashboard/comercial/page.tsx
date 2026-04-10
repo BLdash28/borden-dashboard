@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useState, useEffect, useCallback } from 'react'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import BarChartPro from '@/components/dashboard/BarChartPro'
@@ -36,7 +37,7 @@ export default function ResumenComercial() {
 
       const res  = await fetch(`/api/ventas/resumen?${p}`)
       const data = await res.json()
-      if (data.error) { console.error('resumen error:', data.error); return }
+      if (data.error) { showError(data.error || 'Error al cargar datos'); return }
 
       const totalValor    = Number(data.kpi?.total_valor)    || 0
       const totalUnidades = Number(data.kpi?.total_unidades) || 0

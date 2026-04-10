@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { RefreshCw, Download, TrendingUp, TrendingDown, Minus, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
@@ -162,7 +163,7 @@ export default function CrecimientosPage() {
     fetch('/api/ventas/crecimientos?' + p)
       .then(r => r.json())
       .then(j => {
-        if (j.error) { console.error(j.error); return }
+        if (j.error) { showError(j.error || 'Error al cargar datos'); return }
         setAnoActual(j.ano_actual)
         setAnoAnterior(j.ano_anterior)
         setMesCorte(j.mes_corte)

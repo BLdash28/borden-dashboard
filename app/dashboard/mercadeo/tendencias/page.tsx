@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus, Calendar } from 'lucide-react'
 import LineChartPro from '@/components/dashboard/LineChartPro'
@@ -36,7 +37,7 @@ export default function MercadeoTendenciasPage() {
     fetch('/api/mercadeo/tendencias?' + p.toString())
       .then(r => r.json())
       .then(j => {
-        if (j.error) { console.error(j.error); return }
+        if (j.error) { showError(j.error || 'Error al cargar datos'); return }
 
         if (agrupVal === 'mes') {
           const raw = (j.rows || []).map((r: any) => ({

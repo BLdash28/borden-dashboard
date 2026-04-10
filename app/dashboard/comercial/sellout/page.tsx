@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { RefreshCw, Download, Upload, X, AlertTriangle, CheckCircle } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
@@ -209,7 +210,7 @@ export default function SelloutPage() {
     fetch('/api/ventas/sellout?' + p)
       .then(r => r.json())
       .then(j => {
-        if (j.error) { console.error(j.error); return }
+        if (j.error) { showError(j.error || 'Error al cargar datos'); return }
         setRows((j.rows || []).map((r: Record<string, unknown>) => ({
           ano:             toNum(r.ano),
           mes:             toNum(r.mes),

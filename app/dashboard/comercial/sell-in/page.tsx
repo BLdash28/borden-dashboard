@@ -1,4 +1,5 @@
 'use client'
+import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { RefreshCw, Download } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
@@ -165,7 +166,7 @@ export default function SellInPage() {
     fetch('/api/ventas/sell-in?' + p)
       .then(r => r.json())
       .then(j => {
-        if (j.error) { console.error(j.error); return }
+        if (j.error) { showError(j.error || 'Error al cargar datos'); return }
         setRows((j.rows ?? []).map((r: Record<string, unknown>) => ({
           pais:            String(r.pais        ?? ''),
           cliente:         String(r.cliente     ?? ''),
