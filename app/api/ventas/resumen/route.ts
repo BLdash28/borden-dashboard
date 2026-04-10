@@ -144,88 +144,96 @@ export async function GET(req: NextRequest) {
     conds.push('ano > 2000')
     const where = conds.join(' AND ')
 
-    // ── Parallel queries (pool manages connections per query) ────
-    const [kpiQ, timeQ, semanasQ, catQ, paisQ, skuQ, subcatQ, clienteQ] = await Promise.all([
-      pool.query(
-        'SELECT ROUND(SUM(ventas_valor)::numeric,2)    AS total_valor, ' +
-        'ROUND(SUM(ventas_unidades)::numeric,0) AS total_unidades, ' +
-        'COUNT(DISTINCT pais)                   AS n_paises, ' +
-        'COUNT(DISTINCT sku)                    AS n_skus, ' +
-        'COUNT(DISTINCT cliente)                AS n_clientes, ' +
-        'COUNT(*)                               AS n_filas ' +
-        `FROM v_ventas WHERE ${where}`,
-        params
-      ),
-      modo === 'mes'
-        ? pool.query(
-            'SELECT dia, ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
-            'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
-            `FROM v_ventas WHERE ${where} AND dia > 0 GROUP BY dia ORDER BY dia`,
-            params
-          )
-        : pool.query(
-            'SELECT ano, mes, ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
-            'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
-            `FROM v_ventas WHERE ${where} GROUP BY ano, mes ORDER BY ano, mes`,
+    // ── Full response cache (5 min TTL) ─────────────────────────
+    const cacheKey = `resumen:${new URL(req.url).searchParams.toString()}`
+    const { data: result } = await withCache(
+      cacheKey,
+      async () => {
+        const [kpiQ, timeQ, semanasQ, catQ, paisQ, skuQ, subcatQ, clienteQ] = await Promise.all([
+          pool.query(
+            'SELECT ROUND(SUM(ventas_valor)::numeric,2)    AS total_valor, ' +
+            'ROUND(SUM(ventas_unidades)::numeric,0) AS total_unidades, ' +
+            'COUNT(DISTINCT pais)                   AS n_paises, ' +
+            'COUNT(DISTINCT sku)                    AS n_skus, ' +
+            'COUNT(DISTINCT cliente)                AS n_clientes, ' +
+            'COUNT(*)                               AS n_filas ' +
+            `FROM v_ventas WHERE ${where}`,
             params
           ),
-      pool.query(
-        'SELECT EXTRACT(WEEK FROM make_date(ano::int, mes::int, GREATEST(dia::int,1)))::int AS semana, ' +
-        'ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
-        'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
-        `FROM v_ventas WHERE ${where} AND dia > 0 GROUP BY semana ORDER BY semana`,
-        params
-      ),
-      pool.query(
-        'SELECT categoria, ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
-        'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
-        `FROM v_ventas WHERE ${where} GROUP BY categoria ORDER BY ventas_valor DESC`,
-        params
-      ),
-      pool.query(
-        'SELECT pais, ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
-        'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
-        `FROM v_ventas WHERE ${where} GROUP BY pais ORDER BY ventas_valor DESC`,
-        params
-      ),
-      pool.query(
-        'SELECT sku, descripcion, MIN(categoria) AS categoria, ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor, ' +
-        'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
-        `FROM v_ventas WHERE ${where} GROUP BY sku, descripcion ORDER BY ventas_valor DESC LIMIT 10`,
-        params
-      ),
-      pool.query(
-        'SELECT subcategoria AS nombre, ' +
-        'ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
-        'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
-        `FROM v_ventas WHERE ${where} AND subcategoria IS NOT NULL AND subcategoria != '' ` +
-        'GROUP BY subcategoria ORDER BY ventas_unidades DESC LIMIT 10',
-        params
-      ),
-      pool.query(
-        'SELECT cliente AS nombre, ' +
-        'ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
-        'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
-        `FROM v_ventas WHERE ${where} AND cliente IS NOT NULL AND cliente != '' ` +
-        'GROUP BY cliente ORDER BY ventas_valor DESC LIMIT 10',
-        params
-      ),
-    ])
+          modo === 'mes'
+            ? pool.query(
+                'SELECT dia, ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
+                'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
+                `FROM v_ventas WHERE ${where} AND dia > 0 GROUP BY dia ORDER BY dia`,
+                params
+              )
+            : pool.query(
+                'SELECT ano, mes, ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
+                'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
+                `FROM v_ventas WHERE ${where} GROUP BY ano, mes ORDER BY ano, mes`,
+                params
+              ),
+          pool.query(
+            'SELECT EXTRACT(WEEK FROM make_date(ano::int, mes::int, GREATEST(dia::int,1)))::int AS semana, ' +
+            'ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
+            'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
+            `FROM v_ventas WHERE ${where} AND dia > 0 GROUP BY semana ORDER BY semana`,
+            params
+          ),
+          pool.query(
+            'SELECT categoria, ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
+            'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
+            `FROM v_ventas WHERE ${where} GROUP BY categoria ORDER BY ventas_valor DESC`,
+            params
+          ),
+          pool.query(
+            'SELECT pais, ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
+            'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
+            `FROM v_ventas WHERE ${where} GROUP BY pais ORDER BY ventas_valor DESC`,
+            params
+          ),
+          pool.query(
+            'SELECT sku, descripcion, MIN(categoria) AS categoria, ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor, ' +
+            'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
+            `FROM v_ventas WHERE ${where} GROUP BY sku, descripcion ORDER BY ventas_valor DESC LIMIT 10`,
+            params
+          ),
+          pool.query(
+            'SELECT subcategoria AS nombre, ' +
+            'ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
+            'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
+            `FROM v_ventas WHERE ${where} AND subcategoria IS NOT NULL AND subcategoria != '' ` +
+            'GROUP BY subcategoria ORDER BY ventas_unidades DESC LIMIT 10',
+            params
+          ),
+          pool.query(
+            'SELECT cliente AS nombre, ' +
+            'ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor, ' +
+            'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
+            `FROM v_ventas WHERE ${where} AND cliente IS NOT NULL AND cliente != '' ` +
+            'GROUP BY cliente ORDER BY ventas_valor DESC LIMIT 10',
+            params
+          ),
+        ])
+        return {
+          ano:           anoQ,
+          mes:           mesQ,
+          modo:          modo === 'multi' ? 'ano' : modo,
+          kpi:           kpiQ.rows[0],
+          dias:          modo === 'mes' ? timeQ.rows : [],
+          meses:         modo !== 'mes' ? timeQ.rows : [],
+          semanas:       semanasQ.rows,
+          categorias:    catQ.rows,
+          paises:        paisQ.rows,
+          top_skus:      skuQ.rows,
+          subcategorias: subcatQ.rows,
+          clientes:      clienteQ.rows,
+        }
+      },
+      5 * 60_000 // 5 min TTL
+    )
 
-    return NextResponse.json({
-      ano:          anoQ,
-      mes:          mesQ,
-      modo:         modo === 'multi' ? 'ano' : modo,
-      kpi:          kpiQ.rows[0],
-      dias:         modo === 'mes' ? timeQ.rows : [],
-      meses:        modo !== 'mes' ? timeQ.rows : [],
-      semanas:      semanasQ.rows,
-      categorias:   catQ.rows,
-      paises:       paisQ.rows,
-      top_skus:     skuQ.rows,
-      subcategorias: subcatQ.rows,
-      clientes:      clienteQ.rows,
-    })
+    return NextResponse.json(result, { headers: cacheHeaders(300) })
 
   } catch (err) {
     return handleApiError(err)

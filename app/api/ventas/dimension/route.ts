@@ -42,8 +42,6 @@ export async function GET(req: NextRequest) {
   const restrictions = await getUserRestrictions()
 
   try {
-    const client = await pool.connect()
-
     const anosArr = anoP ? anoP.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : []
     const mesesArr = mesP ? mesP.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : []
 
@@ -141,20 +139,24 @@ export async function GET(req: NextRequest) {
     const { data: rows } = await withCache(
       cacheKey,
       async () => {
-        const r = await client.query(
-          `SELECT ${selectExpr}, ` +
-          'ROUND(SUM(ventas_valor)::numeric,4)    AS ventas_valor, ' +
-          'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades, ' +
-          'COUNT(DISTINCT sku)                    AS num_skus ' +
-          'FROM v_ventas ' + where + ' ' +
-          `GROUP BY ${groupByExpr} ORDER BY ventas_valor DESC LIMIT 300`,
-          params
-        )
-        return r.rows
+        const client = await pool.connect()
+        try {
+          const r = await client.query(
+            `SELECT ${selectExpr}, ` +
+            'ROUND(SUM(ventas_valor)::numeric,4)    AS ventas_valor, ' +
+            'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades, ' +
+            'COUNT(DISTINCT sku)                    AS num_skus ' +
+            'FROM v_ventas ' + where + ' ' +
+            `GROUP BY ${groupByExpr} ORDER BY ventas_valor DESC LIMIT 300`,
+            params
+          )
+          return r.rows
+        } finally {
+          client.release()
+        }
       },
       5 * 60_000 // 5 min TTL — dimension options are stable within a session
     )
-    client.release()
 
     const modo = mesesArr.length ? 'mes' : anosArr.length ? 'ano' : 'todos'
     return NextResponse.json(
