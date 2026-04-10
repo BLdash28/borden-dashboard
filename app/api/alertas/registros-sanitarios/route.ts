@@ -8,15 +8,7 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
-
-// ── Destinatarios de alertas ──────────────────────────────────────────────────
-const ALERTAS_TO = (process.env.ALERTAS_EMAIL_TO || '')
-  .split(',')
-  .map(e => e.trim())
-  .filter(Boolean)
-
-const ALERTAS_FROM = process.env.ALERTAS_EMAIL_FROM || 'alertas@blfood.com'
+// Resend se inicializa dentro del handler para evitar errores en build sin env vars
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function diasRestantes(fecha: string): number {
@@ -149,6 +141,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
     }
   }
+
+  const resend = new Resend(process.env.RESEND_API_KEY!)
+  const ALERTAS_TO = (process.env.ALERTAS_EMAIL_TO || '').split(',').map(e => e.trim()).filter(Boolean)
+  const ALERTAS_FROM = process.env.ALERTAS_EMAIL_FROM || 'alertas@blfood.com'
 
   if (ALERTAS_TO.length === 0) {
     return NextResponse.json({ error: 'ALERTAS_EMAIL_TO no configurado' }, { status: 500 })
