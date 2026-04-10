@@ -1,0 +1,56 @@
+# ── Dependencias ──────────────────────────────────────
+node_modules/
+.pnp
+.pnp.js
+
+# ── Build / Next.js ───────────────────────────────────
+.next/
+out/
+dist/
+build/
+.vercel
+
+# ── Variables de entorno — NUNCA subir al repo ────────
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ── Datos sensibles / archivos grandes ────────────────
+*.csv
+*.xlsx
+*.xls
+*.xlsm
+~$*            # archivos temporales de Excel/Office
+
+# ── Scripts de carga de datos y mantenimiento ─────────
+*.py
+files/
+files.zip
+C6BFF300
+
+# ── SQL de raíz (los schemas van en /db/) ─────────────
+/bl_foods_schema.sql
+/inv_materiales_schema.sql
+/registros_sanitarios.sql
+
+# ── Dumps de migración / backups ───────────────────────
+*.sql
+neon_*.sql
+
+# ── Claude Code ───────────────────────────────────────
+.claude/
+
+# ── Sistema operativo ─────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+
+# ── Editor ────────────────────────────────────────────
+.vscode/settings.json
+*.swp
+*.swo
+
+.vercel

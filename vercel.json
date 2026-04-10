@@ -1,0 +1,11 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install",
+  "functions": {
+    "app/api/ventas/sellout/upload/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}
