@@ -315,12 +315,12 @@ export async function GET(req: NextRequest) {
     const showCatalogRows = efectivoPaises.length === 0 && !cadenaFilter
     const catalogRows = showCatalogRows
       ? dimProds
-          .filter(p => p.sku && !skuInInventory.has(p.sku))
-          .filter(p =>
+          .filter((p: any) => p.sku && !skuInInventory.has(p.sku))
+          .filter((p: any) =>
             !catFilter.length ||
-            catFilter.some(c => (p.categoria || '').toLowerCase() === c.toLowerCase())
+            catFilter.some((c: any) => (p.categoria || '').toLowerCase() === c.toLowerCase())
           )
-          .filter(p =>
+          .filter((p: any) =>
             !skuSearch ||
             (p.descripcion || '').toLowerCase().includes(skuSearch.toLowerCase()) ||
             (p.sku || '').toLowerCase().includes(skuSearch.toLowerCase()) ||
