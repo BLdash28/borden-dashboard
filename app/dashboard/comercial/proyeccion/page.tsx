@@ -338,7 +338,7 @@ export default function ProyeccionPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <p className="text-xs text-gray-500 font-medium mb-1">Total Proyectado</p>
           <p className="text-xl font-bold text-gray-900">{fmt(kpis.proy)}</p>

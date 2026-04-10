@@ -1,15 +1,25 @@
 import React from 'react'
 import { cn } from '@/utils/helpers'
 
-export function KpiCard({ label, value, sub, note, color = '#c8873a', icon }: {
-  label: string; value: string; sub?: string; note?: string; color?: string; icon?: string
+export function KpiCard({ label, value, sub, note, color = '#c8873a', icon, loading }: {
+  label: string; value: string; sub?: string; note?: string; color?: string; icon?: string; loading?: boolean
 }) {
+  if (loading) {
+    return (
+      <div className="card p-5 relative overflow-hidden">
+        <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ background: color }} />
+        <div className="h-2.5 w-20 rounded animate-pulse mb-3" style={{ background: 'var(--border)' }} />
+        <div className="h-7 w-28 rounded animate-pulse mb-3" style={{ background: 'var(--border)' }} />
+        <div className="h-4 w-16 rounded-full animate-pulse" style={{ background: 'var(--border)' }} />
+      </div>
+    )
+  }
   return (
     <div className="card p-5 relative overflow-hidden animate-fade-up">
       <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ background: color }} />
       {icon && <div className="absolute top-4 right-4 text-xl opacity-20">{icon}</div>}
       <div className="text-[9px] tracking-[2px] uppercase font-medium mb-2" style={{ color: 'var(--t3)' }}>{label}</div>
-      <div className="font-display text-[28px] font-bold leading-none tracking-tight" style={{ color: 'var(--t1)' }}>{value}</div>
+      <div className="font-display text-[24px] md:text-[28px] font-bold leading-none tracking-tight" style={{ color: 'var(--t1)' }}>{value}</div>
       <div className="flex items-center gap-2 mt-2">
         {sub && <span className="text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ background: color + '20', color }}>{sub}</span>}
         {note && <span className="text-[10.5px]" style={{ color: 'var(--t3)' }}>{note}</span>}

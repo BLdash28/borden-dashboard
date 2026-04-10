@@ -172,7 +172,7 @@ export default function UsuariosPage() {
     <div className="space-y-5 animate-fade-up">
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { l:'Total',     v:users.length,                                   c:'#2a7a58' },
           { l:'Activos',   v:users.filter(u=>u.is_active).length,            c:'#c8873a' },

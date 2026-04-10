@@ -310,7 +310,7 @@ export default function ResumenPage() {
       <GlobalFilterBar />
 
       {/* KPIs — 3 cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
 
         {/* Card 1: Ventas Totales — INTERACTIVA */}
         <div
@@ -675,7 +675,7 @@ export default function ResumenPage() {
               </div>
 
               {/* KPI mini-cards */}
-              <div className="grid grid-cols-3 gap-3 px-6 py-4 shrink-0">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 px-4 sm:px-6 py-4 shrink-0">
                 {[
                   { label: 'Total USD',    value: fmt(toNum(kpi.total_valor)),    color: '#c8873a' },
                   { label: 'Top País',     value: paises[0]?.pais ?? '—',         color: '#3a6fa8' },
@@ -781,7 +781,7 @@ export default function ResumenPage() {
               </div>
 
               {/* KPI mini-cards */}
-              <div className="grid grid-cols-3 gap-3 px-6 py-4 shrink-0">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 px-4 sm:px-6 py-4 shrink-0">
                 {[
                   { label: 'Total Unidades', value: toNum(kpi.total_unidades).toLocaleString(), color: '#3b82f6' },
                   { label: 'Top SKU Uds',    value: topSkus[0] ? toNum(topSkus[0].ventas_unidades).toLocaleString() : '—', color: '#6366f1' },
@@ -887,7 +887,7 @@ export default function ResumenPage() {
               </div>
 
               {/* KPI mini-cards */}
-              <div className="grid grid-cols-4 gap-3 px-6 py-4 shrink-0">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 sm:px-6 py-4 shrink-0">
                 {[
                   { label: 'Precio Actual',   value: fmtP(metrics.precioPromedio), color: AMBER },
                   { label: 'Mínimo',          value: fmtP(metrics.precioMin),      color: '#6366f1' },
@@ -989,7 +989,7 @@ export default function ResumenPage() {
               </div>
 
               {/* KPI mini-cards */}
-              <div className="grid grid-cols-4 gap-3 px-6 py-4 shrink-0">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-4 sm:px-6 py-4 shrink-0">
                 {[
                   { label: `Con venta`,   value: String(metrics.conVenta),              color: '#10b981' },
                   { label: `Sin venta`,   value: String(metrics.total - metrics.conVenta), color: '#ef4444' },

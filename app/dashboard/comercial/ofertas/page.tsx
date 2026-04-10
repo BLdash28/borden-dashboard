@@ -411,7 +411,7 @@ export default function OfertasPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         {[
           { label: 'Total Ofertas',       val: loading ? '…' : total },
           { label: 'Inversión Total',      val: loading ? '…' : fmtUSD(ofertas.reduce((s, o) => s + (Number(o.inversion) || calcInversion(Number(o.dias_oferta), String(o.baseline_diario), String(o.precio_regular), String(o.precio_oferta)) || 0), 0)) },

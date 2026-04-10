@@ -110,15 +110,15 @@ export default function ResumenComercial() {
       <FiltrosGlobales filtros={filtros} onChange={handleFiltro} onSearch={loadData} />
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard label="Ventas Totales USD" value={loading ? '…' : `$${fmtK(kpis.total)}`}
-          sub="Período filtrado"      color="#2a7a58" icon="💰" />
-        <KpiCard label="Ventas Unidades"    value={loading ? '…' : fmtK(kpis.unidades)}
-          sub="unidades vendidas"     color="#c8873a" icon="📦" />
-        <KpiCard label="Precio Promedio"    value={loading ? '…' : `$${kpis.precio.toFixed(2)}`}
-          sub="por unidad"            color="#3a6fa8" icon="🏷️" />
-        <KpiCard label="Proyección Mes"     value={loading ? '…' : `$${fmtK(kpis.proyeccion)}`}
-          sub="+11.4% estimado"       color="#6b4fa8" icon="📈" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard loading={loading} label="Ventas Totales USD" value={`$${fmtK(kpis.total)}`}
+          sub="Período filtrado"  color="#2a7a58" icon="💰" />
+        <KpiCard loading={loading} label="Ventas Unidades"    value={fmtK(kpis.unidades)}
+          sub="unidades vendidas" color="#c8873a" icon="📦" />
+        <KpiCard loading={loading} label="Precio Promedio"    value={`$${kpis.precio.toFixed(2)}`}
+          sub="por unidad"        color="#3a6fa8" icon="🏷️" />
+        <KpiCard loading={loading} label="Proyección Mes"     value={`$${fmtK(kpis.proyeccion)}`}
+          sub="+11.4% estimado"   color="#6b4fa8" icon="📈" />
       </div>
 
       {/* Charts row 1 */}

@@ -642,7 +642,7 @@ export default function DOHPage() {
       </div>
 
       {/* KPIs inventario */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: 'Unidades en Stock',  value: loading ? '...' : fmtN(kpi?.totalQty   || 0), sub: 'total inventario',   icon: <Package size={14} />, color: '#c8873a' },
           { label: 'Puntos de Venta',    value: loading ? '...' : fmtN(kpi?.totalPdvs  || 0), sub: 'tiendas con stock',  icon: <Store size={14} />,   color: '#34d399' },
@@ -663,7 +663,7 @@ export default function DOHPage() {
 
       {/* DOH KPIs — colores corregidos */}
       {!loading && skus.length > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="card p-4 relative overflow-hidden">
             <div className="absolute top-0 left-0 bottom-0 w-0.5" style={{ background: '#c8873a' }} />
             <p className="text-[9px] tracking-[2px] uppercase font-semibold mb-2" style={{ color: 'var(--t3)' }}>DOH Promedio</p>

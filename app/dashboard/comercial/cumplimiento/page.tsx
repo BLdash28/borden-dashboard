@@ -474,7 +474,7 @@ export default function CumplimientoPage() {
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
           <MultiSelect label="País" options={paisOpts.map(p => ({ value: p, label: p }))} value={fPaises}
             onChange={v => { setFPaises(v); triggerCargar(fAno, fMes, v) }} placeholder="Todos los países" />
           <MultiSelect label="Categoría" options={catOpts.map(c => ({ value: c, label: c }))} value={fCats}
@@ -487,7 +487,7 @@ export default function CumplimientoPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-amber-500">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Promedio Cumplimiento</p>
           <p className="text-2xl font-bold" style={{ color: loading ? 'var(--t3)' : kpi.promedio >= 100 ? '#10b981' : '#f59e0b' }}>

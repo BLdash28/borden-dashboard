@@ -15,7 +15,6 @@ interface Props {
   onChange: (v: string[]) => void
   placeholder?: string
   disabledOpts?: string[]
-  /** When provided, adds a "Todos/Todas" row that clears the selection */
   selectAllLabel?: string
 }
 
@@ -44,11 +43,8 @@ export default function MultiSelect({
   }
 
   const selectAll = () => {
-    if (value.length > 0) {
-      onChange([])
-    } else {
-      onChange(options.filter(o => !o.disabled && !isDisabled(o.value)).map(o => o.value))
-    }
+    if (value.length > 0) onChange([])
+    else onChange(options.filter(o => !o.disabled && !isDisabled(o.value)).map(o => o.value))
   }
 
   const displayLabel =
@@ -58,21 +54,36 @@ export default function MultiSelect({
 
   const allSelected = value.length === options.filter(o => !o.disabled && !isDisabled(o.value)).length
 
+  // Smart dropdown direction: flip up if near bottom of viewport
+  const [dropUp, setDropUp] = useState(false)
+  const btnRef = useRef<HTMLButtonElement>(null)
+
+  const handleOpen = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - rect.bottom
+      setDropUp(spaceBelow < 300)
+    }
+    setOpen(v => !v)
+  }
+
   return (
     <div className="relative" ref={ref}>
       <div className="text-[10px] uppercase tracking-widest font-medium mb-1.5" style={{ color: 'var(--t3)' }}>
         {label}
       </div>
       <button
-        onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[12px] border transition-all"
+        ref={btnRef}
+        onClick={handleOpen}
+        className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-[12px] border transition-all active:scale-[.98]"
         style={{
           background: 'var(--bg)',
           borderColor: open ? 'var(--acc)' : 'var(--border)',
           color: value.length > 0 ? 'var(--t1)' : 'var(--t3)',
+          minHeight: 40,
         }}
       >
-        <span className="truncate">{displayLabel}</span>
+        <span className="truncate text-left">{displayLabel}</span>
         <ChevronDown
           size={12}
           className={`flex-shrink-0 ml-1 transition-transform ${open ? 'rotate-180' : ''}`}
@@ -82,14 +93,23 @@ export default function MultiSelect({
 
       {open && (
         <div
-          className="absolute z-50 top-full left-0 mt-1 w-full rounded-xl border shadow-2xl overflow-hidden"
-          style={{ background: 'var(--surface)', borderColor: 'var(--border)', minWidth: 160, maxHeight: 280, overflowY: 'auto' }}
+          className="absolute z-50 left-0 w-full rounded-xl border shadow-2xl overflow-hidden"
+          style={{
+            background: 'var(--surface)',
+            borderColor: 'var(--border)',
+            minWidth: 160,
+            maxHeight: 280,
+            overflowY: 'auto',
+            // Flip up if near bottom of viewport
+            ...(dropUp
+              ? { bottom: '100%', top: 'auto', marginBottom: 4 }
+              : { top: '100%', marginTop: 4 }),
+          }}
         >
-          {/* Todos / select-all row */}
           {selectAllLabel && (
             <div
               onClick={selectAll}
-              className="flex items-center gap-2.5 px-3 py-2 text-[12px] cursor-pointer hover:bg-white/5 border-b"
+              className="flex items-center gap-2.5 px-3 py-2.5 text-[13px] cursor-pointer hover:bg-white/5 active:bg-white/10 border-b"
               style={{ borderColor: 'var(--border)' }}
             >
               <div
@@ -112,7 +132,7 @@ export default function MultiSelect({
               <div
                 key={opt.value}
                 onClick={() => !disabled && toggle(opt.value)}
-                className={`flex items-center gap-2.5 px-3 py-2 text-[12px] transition-colors ${disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-white/5'}`}
+                className={`flex items-center gap-2.5 px-3 py-2.5 text-[13px] transition-colors ${disabled ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-white/5 active:bg-white/10'}`}
                 style={{ opacity: disabled ? 0.35 : 1 }}
               >
                 <div
@@ -125,9 +145,7 @@ export default function MultiSelect({
                   {selected && <Check size={9} color="#fff" />}
                 </div>
                 <span style={{ color: disabled ? 'var(--t3)' : 'var(--t2)' }}>{opt.label}</span>
-                {disabled && (
-                  <span className="text-[10px] ml-auto" style={{ color: 'var(--t3)' }}>actual</span>
-                )}
+                {disabled && <span className="text-[10px] ml-auto" style={{ color: 'var(--t3)' }}>actual</span>}
               </div>
             )
           })}
@@ -135,7 +153,7 @@ export default function MultiSelect({
           {value.length > 0 && (
             <div
               onClick={() => onChange([])}
-              className="flex items-center gap-2 px-3 py-2 text-[11px] cursor-pointer hover:bg-white/5 border-t"
+              className="flex items-center gap-2 px-3 py-2.5 text-[12px] cursor-pointer hover:bg-white/5 active:bg-white/10 border-t"
               style={{ borderColor: 'var(--border)', color: 'var(--t3)' }}
             >
               <X size={10} /> Limpiar selección

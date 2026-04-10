@@ -104,7 +104,7 @@ export default function ProductosPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Total Productos</p>
           <p className="text-2xl font-bold text-gray-800">{loading ? '…' : productos.length}</p>
