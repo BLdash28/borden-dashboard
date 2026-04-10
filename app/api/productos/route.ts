@@ -38,9 +38,7 @@ export async function GET(req: NextRequest) {
          categoria,
          subcategoria,
          codigo_barras,
-         is_active,
-         created_at,
-         updated_at
+         is_active
        FROM dim_producto
        ${where}
        ORDER BY categoria, subcategoria, descripcion`,
