@@ -5,24 +5,33 @@ import { handleApiError } from '@/lib/api/errors'
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const anoP          = searchParams.get('ano')
-    const mesP          = searchParams.get('mes')
-    const paisesP       = searchParams.get('paises')
-    const categoriasP   = searchParams.get('categorias')
+    const anosStr        = searchParams.get('anos') || searchParams.get('ano') || ''
+    const mesesStr       = searchParams.get('meses') || searchParams.get('mes') || ''
+    const paisesP        = searchParams.get('paises')
+    const categoriasP    = searchParams.get('categorias')
     const subcategoriasP = searchParams.get('subcategorias')
-    const clientesP     = searchParams.get('clientes')
-    const skusP         = searchParams.get('skus')
-    const barcodesP     = searchParams.get('barcodes')
-    const page          = parseInt(searchParams.get('page') || '1')
-    const pageSize      = parseInt(searchParams.get('pageSize') || '500')
-    const offset        = (page - 1) * pageSize
+    const clientesP      = searchParams.get('clientes')
+    const skusP          = searchParams.get('skus')
+    const barcodesP      = searchParams.get('barcodes')
+    const page           = parseInt(searchParams.get('page') || '1')
+    const pageSize       = parseInt(searchParams.get('pageSize') || '500')
+    const offset         = (page - 1) * pageSize
 
     const conds: string[] = ['dia > 0']
     const params: unknown[] = []
     let idx = 1
 
-    if (anoP) { conds.push(`ano = $${idx++}`); params.push(parseInt(anoP)) }
-    if (mesP) { conds.push(`mes = $${idx++}`); params.push(parseInt(mesP)) }
+    const anosArr = anosStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+    if (anosArr.length > 0) {
+      conds.push(`ano IN (${anosArr.map(() => `$${idx++}`).join(', ')})`)
+      params.push(...anosArr)
+    }
+
+    const mesesArr = mesesStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
+    if (mesesArr.length > 0) {
+      conds.push(`mes IN (${mesesArr.map(() => `$${idx++}`).join(', ')})`)
+      params.push(...mesesArr)
+    }
 
     const paisesArr = paisesP ? paisesP.split(',').map(s => s.trim()).filter(Boolean) : []
     if (paisesArr.length > 0) {

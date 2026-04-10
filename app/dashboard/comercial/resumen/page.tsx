@@ -9,7 +9,6 @@ import LineChartPro from '@/components/dashboard/LineChartPro'
 import DonutChartPro from '@/components/dashboard/DonutChartPro'
 import { useDashboardFilters, MESES_LABEL } from '@/lib/context/DashboardFilters'
 import GlobalFilterBar from '@/components/dashboard/GlobalFilterBar'
-import MultiSelect from '@/components/dashboard/MultiSelect'
 import {
   LineChart, Line, BarChart, Bar, Cell,
   ComposedChart, Area, ReferenceLine,
@@ -84,15 +83,7 @@ function ChartEmpty() {
 //  PÁGINA PRINCIPAL
 // ══════════════════════════════════════════════════════════
 export default function ResumenPage() {
-  const { fPaises, fCats, fAnos, fMeses, buildParams } = useDashboardFilters()
-
-  // Local filters (cascading)
-  const [fSubcats,    setFSubcats]    = useState<string[]>([])
-  const [fClientes,   setFClientes]   = useState<string[]>([])
-  const [fFormatos,   setFFormatos]   = useState<string[]>([])
-  const [subcatOpts,  setSubcatOpts]  = useState<string[]>([])
-  const [clienteOpts, setClienteOpts] = useState<string[]>([])
-  const [formatoOpts, setFormatoOpts] = useState<string[]>([])
+  const { fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses, buildParams } = useDashboardFilters()
 
   const [kpi,           setKpi]          = useState<any>(null)
   const [dias,          setDias]         = useState<any[]>([])
@@ -125,11 +116,8 @@ export default function ResumenPage() {
     return () => document.removeEventListener('keydown', h)
   }, [])
 
-  const cargar = useCallback((subcats: string[], clientes: string[], formatos: string[], p: URLSearchParams) => {
+  const cargar = useCallback((p: URLSearchParams) => {
     setLoading(true)
-    if (subcats.length)  p.set('subcategorias', subcats.join(','))
-    if (clientes.length) p.set('clientes',      clientes.join(','))
-    if (formatos.length) p.set('formatos',      formatos.join(','))
 
     fetch('/api/ventas/resumen?' + p.toString())
       .then(r => r.json())
@@ -168,60 +156,11 @@ export default function ResumenPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Re-fetch when global filters change
+  // Re-fetch when any filter changes
   useEffect(() => {
     if (debounceT.current) clearTimeout(debounceT.current)
-    debounceT.current = setTimeout(() => cargar(fSubcats, fClientes, fFormatos, buildParams()), 300)
-  }, [fPaises, fCats, fAnos, fMeses, cargar, buildParams]) // eslint-disable-line
-
-  // Re-fetch when local filters change
-  useEffect(() => {
-    if (debounceT.current) clearTimeout(debounceT.current)
-    debounceT.current = setTimeout(() => cargar(fSubcats, fClientes, fFormatos, buildParams()), 400)
-  }, [fSubcats, fClientes, fFormatos]) // eslint-disable-line
-
-  // Cascading: reload subcategory options when categories change
-  useEffect(() => {
-    const cats = fCats.join(',')
-    const url  = '/api/ventas/dimension?dim=subcategoria' + (cats ? '&categorias=' + encodeURIComponent(cats) : '')
-    fetch(url).then(r => r.json()).then(j => {
-      const opts = (j.rows || []).map((r: any) => r.nombre).filter(Boolean)
-      setSubcatOpts(opts)
-      // Clear invalid selections
-      if (fSubcats.length > 0) {
-        setFSubcats(prev => prev.filter(s => opts.includes(s)))
-      }
-    }).catch(console.error)
-  }, [fCats]) // eslint-disable-line
-
-  // Cascading: reload cliente options when countries change
-  useEffect(() => {
-    const ps  = fPaises.join(',')
-    const url = '/api/ventas/dimension?dim=cliente' + (ps ? '&paises=' + encodeURIComponent(ps) : '')
-    fetch(url).then(r => r.json()).then(j => {
-      const opts = (j.rows || []).map((r: any) => r.nombre).filter(Boolean)
-      setClienteOpts(opts)
-      // Clear invalid selections
-      if (fClientes.length > 0) {
-        setFClientes(prev => prev.filter(c => opts.includes(c)))
-      }
-    }).catch(console.error)
-  }, [fPaises]) // eslint-disable-line
-
-  // Load formato options — cascades on País + Cliente
-  useEffect(() => {
-    const p = new URLSearchParams({ dim: 'formato' })
-    if (fPaises.length)   p.set('paises',   fPaises.join(','))
-    if (fClientes.length) p.set('clientes', fClientes.join(','))
-    fetch('/api/ventas/dimension?' + p.toString())
-      .then(r => r.json())
-      .then(j => {
-        const opts = (j.rows || []).map((r: any) => r.nombre).filter(Boolean)
-        setFormatoOpts(opts)
-        setFFormatos(prev => prev.filter(f => opts.includes(f)))
-      })
-      .catch(console.error)
-  }, [fPaises, fClientes]) // eslint-disable-line
+    debounceT.current = setTimeout(() => cargar(buildParams()), 300)
+  }, [fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses, cargar, buildParams]) // eslint-disable-line
 
 
   // ── Métricas para drill-down ─────────────────────────
@@ -358,7 +297,7 @@ export default function ResumenPage() {
           <h1 className="text-xl font-bold" style={{ color: 'var(--t1)' }}>Resumen Ejecutivo</h1>
         </div>
         <button
-          onClick={() => cargar(fSubcats, fClientes, fFormatos, buildParams())}
+          onClick={() => cargar(buildParams())}
           className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] border transition-all hover:opacity-80"
           style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--t3)' }}
         >
@@ -368,39 +307,6 @@ export default function ResumenPage() {
 
       {/* Global filters */}
       <GlobalFilterBar />
-
-      {/* Cascading filters: Subcategoría + Cliente */}
-      <div className="card p-4">
-        <p className="text-[9px] tracking-[2px] uppercase font-semibold mb-3" style={{ color: 'var(--t3)' }}>
-          Filtros adicionales
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <MultiSelect
-            label={fCats.length > 0 ? 'Subcategoría · filtrado por categoría 🔗' : 'Subcategoría'}
-            options={(subcatOpts.length > 0 ? subcatOpts : []).map(s => ({ value: s, label: s }))}
-            value={fSubcats}
-            onChange={setFSubcats}
-            placeholder="Todas las subcategorías"
-            selectAllLabel="Todas las subcategorías"
-          />
-          <MultiSelect
-            label={fPaises.length > 0 ? 'Cliente · filtrado por país 🔗' : 'Cliente'}
-            options={(clienteOpts.length > 0 ? clienteOpts : []).map(c => ({ value: c, label: c }))}
-            value={fClientes}
-            onChange={setFClientes}
-            placeholder="Todos los clientes"
-            selectAllLabel="Todos los clientes"
-          />
-          <MultiSelect
-            label={(fPaises.length > 0 || fClientes.length > 0) ? 'Formato · filtrado por país/cliente 🔗' : 'Formato'}
-            options={formatoOpts.map(f => ({ value: f, label: f }))}
-            value={fFormatos}
-            onChange={setFFormatos}
-            placeholder="Todos los formatos"
-            selectAllLabel="Todos los formatos"
-          />
-        </div>
-      </div>
 
       {/* KPIs — 3 cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

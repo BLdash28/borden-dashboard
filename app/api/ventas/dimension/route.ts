@@ -24,8 +24,8 @@ const DIM_COLS: Record<string, string> = {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const dim           = searchParams.get('dim') || 'pais'
-  const anoP          = searchParams.get('ano')
-  const mesP          = searchParams.get('mes')
+  const anoP          = searchParams.get('anos') || searchParams.get('ano')
+  const mesP          = searchParams.get('meses') || searchParams.get('mes')
   const pais          = searchParams.get('pais')         // single
   const paisesP       = searchParams.get('paises')       // comma-separated (cascading)
   const categoria     = searchParams.get('categoria')    // single
@@ -43,15 +43,21 @@ export async function GET(req: NextRequest) {
   try {
     const client = await pool.connect()
 
-    const anoQ = anoP ? parseInt(anoP) : null
-    const mesQ = mesP ? parseInt(mesP) : null
+    const anosArr = anoP ? anoP.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : []
+    const mesesArr = mesP ? mesP.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n)) : []
 
     const conds: string[] = []
     const params: any[]   = []
     let idx = 1
 
-    if (anoQ) { conds.push('ano = $' + idx++); params.push(anoQ) }
-    if (mesQ) { conds.push('mes = $' + idx++); params.push(mesQ) }
+    if (anosArr.length === 1) { conds.push('ano = $' + idx++); params.push(anosArr[0]) }
+    else if (anosArr.length > 1) {
+      conds.push(`ano IN (${anosArr.map(() => '$' + idx++).join(', ')})`); params.push(...anosArr)
+    }
+    if (mesesArr.length === 1) { conds.push('mes = $' + idx++); params.push(mesesArr[0]) }
+    else if (mesesArr.length > 1) {
+      conds.push(`mes IN (${mesesArr.map(() => '$' + idx++).join(', ')})`); params.push(...mesesArr)
+    }
 
     // Country: handle multi-select (paisesP) + single pais + user restrictions
     const paisesArr = paisesP ? paisesP.split(',').map(s => s.trim()).filter(Boolean) : []
@@ -139,8 +145,8 @@ export async function GET(req: NextRequest) {
     )
     client.release()
 
-    const modo = mesQ ? 'mes' : anoQ ? 'ano' : 'todos'
-    return NextResponse.json({ rows: r.rows, ano: anoQ, mes: mesQ, modo, dim })
+    const modo = mesesArr.length ? 'mes' : anosArr.length ? 'ano' : 'todos'
+    return NextResponse.json({ rows: r.rows, anos: anosArr, meses: mesesArr, modo, dim })
   } catch (err: any) {
     console.error('dimension route error:', err)
     return NextResponse.json({ error: err.message }, { status: 500 })

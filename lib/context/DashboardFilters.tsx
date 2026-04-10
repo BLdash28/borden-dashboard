@@ -15,39 +15,43 @@ export interface MesOpt {
 
 interface FiltersCtx {
   // Active filter state
-  fPaises:   string[]
-  fCats:     string[]
-  fSubcats:  string[]
-  fClientes: string[]
-  fAnos:     string[]
-  fMeses:    string[]
+  fPaises:    string[]
+  fCats:      string[]
+  fSubcats:   string[]
+  fClientes:  string[]
+  fFormatos:  string[]
+  fAnos:      string[]
+  fMeses:     string[]
 
   // Available options (cascaded)
-  anosOpts:     number[]
-  paisesOpts:   string[]
-  catsOpts:     string[]
-  subcatsOpts:  string[]
-  clientesOpts: string[]
-  mesOpts:      MesOpt[]
-  periodos:     { ano: number; mes: number }[]
+  anosOpts:      number[]
+  paisesOpts:    string[]
+  catsOpts:      string[]
+  subcatsOpts:   string[]
+  clientesOpts:  string[]
+  formatosOpts:  string[]
+  mesOpts:       MesOpt[]
+  periodos:      { ano: number; mes: number }[]
 
   // Loading states
-  loadingCats:     boolean
-  loadingSubcats:  boolean
-  loadingClientes: boolean
+  loadingCats:      boolean
+  loadingSubcats:   boolean
+  loadingClientes:  boolean
+  loadingFormatos:  boolean
 
   // Current date
   curAno: number
   curMes: number
 
   // Setters
-  setPaises:   (v: string[]) => void
-  setCats:     (v: string[]) => void
-  setSubcats:  (v: string[]) => void
-  setClientes: (v: string[]) => void
-  setAnos:     (v: string[]) => void
-  setMeses:    (v: string[]) => void
-  limpiar:     () => void
+  setPaises:    (v: string[]) => void
+  setCats:      (v: string[]) => void
+  setSubcats:   (v: string[]) => void
+  setClientes:  (v: string[]) => void
+  setFormatos:  (v: string[]) => void
+  setAnos:      (v: string[]) => void
+  setMeses:     (v: string[]) => void
+  limpiar:      () => void
 
   // Derived
   hayFiltros: boolean
@@ -63,22 +67,25 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
   const curAno = now.getFullYear()
   const curMes = now.getMonth() + 1
 
-  const [fPaises,   setFPaises]   = useState<string[]>([])
-  const [fCats,     setFCats]     = useState<string[]>([])
-  const [fSubcats,  setFSubcats]  = useState<string[]>([])
-  const [fClientes, setFClientes] = useState<string[]>([])
-  const [fAnos,     setFAnos]     = useState<string[]>([])
-  const [fMeses,    setFMeses]    = useState<string[]>([])
+  const [fPaises,    setFPaises]    = useState<string[]>([])
+  const [fCats,      setFCats]      = useState<string[]>([])
+  const [fSubcats,   setFSubcats]   = useState<string[]>([])
+  const [fClientes,  setFClientes]  = useState<string[]>([])
+  const [fFormatos,  setFFormatos]  = useState<string[]>([])
+  const [fAnos,      setFAnos]      = useState<string[]>([])
+  const [fMeses,     setFMeses]     = useState<string[]>([])
 
-  const [anosOpts,     setAnosOpts]     = useState<number[]>([])
-  const [catsOpts,     setCatsOpts]     = useState<string[]>(BASE_CATS)
-  const [subcatsOpts,  setSubcatsOpts]  = useState<string[]>([])
-  const [clientesOpts, setClientesOpts] = useState<string[]>([])
-  const [periodos,     setPeriodos]     = useState<{ ano: number; mes: number }[]>([])
+  const [anosOpts,      setAnosOpts]      = useState<number[]>([])
+  const [catsOpts,      setCatsOpts]      = useState<string[]>(BASE_CATS)
+  const [subcatsOpts,   setSubcatsOpts]   = useState<string[]>([])
+  const [clientesOpts,  setClientesOpts]  = useState<string[]>([])
+  const [formatosOpts,  setFormatosOpts]  = useState<string[]>([])
+  const [periodos,      setPeriodos]      = useState<{ ano: number; mes: number }[]>([])
 
-  const [loadingCats,     setLoadingCats]     = useState(false)
-  const [loadingSubcats,  setLoadingSubcats]  = useState(false)
-  const [loadingClientes, setLoadingClientes] = useState(false)
+  const [loadingCats,      setLoadingCats]      = useState(false)
+  const [loadingSubcats,   setLoadingSubcats]   = useState(false)
+  const [loadingClientes,  setLoadingClientes]  = useState(false)
+  const [loadingFormatos,  setLoadingFormatos]  = useState(false)
 
   const initDone = useRef(false)
 
@@ -162,6 +169,26 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
 
   useEffect(() => { fetchClientes(fPaises, fCats, fSubcats) }, [fPaises, fCats, fSubcats, fetchClientes])
 
+  // ── Cascade: países + clientes → formatos ─────────────────────────────────
+  const fetchFormatos = useCallback((paises: string[], clientes: string[]) => {
+    if (!paises.length && !clientes.length) { setFormatosOpts([]); setFFormatos([]); return }
+    setLoadingFormatos(true)
+    const q = new URLSearchParams({ dim: 'formato' })
+    if (paises.length)   q.set('paises',   paises.join(','))
+    if (clientes.length) q.set('clientes', clientes.join(','))
+    fetch(`/api/ventas/dimension?${q}`)
+      .then(r => r.json())
+      .then(d => {
+        const opts = (d.rows || []).map((r: any) => r.nombre).filter(Boolean).sort()
+        setFormatosOpts(opts)
+        setFFormatos(prev => prev.filter(f => opts.includes(f)))
+      })
+      .catch(console.error)
+      .finally(() => setLoadingFormatos(false))
+  }, [])
+
+  useEffect(() => { fetchFormatos(fPaises, fClientes) }, [fPaises, fClientes, fetchFormatos])
+
   // ── Cascade: años → meses disponibles ────────────────────────────────────
   const mesOpts = useMemo((): MesOpt[] => {
     const activePers = fAnos.length > 0
@@ -181,39 +208,42 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
     setFCats([])
     setFSubcats([])
     setFClientes([])
+    setFFormatos([])
     setFAnos([])
     setFMeses([])
   }
 
   const hayFiltros =
     fPaises.length > 0 || fCats.length > 0 || fSubcats.length > 0 ||
-    fClientes.length > 0 || fAnos.length > 0 || fMeses.length > 0
+    fClientes.length > 0 || fFormatos.length > 0 || fAnos.length > 0 || fMeses.length > 0
 
   const buildParams = useCallback((extra: Record<string, string> = {}): URLSearchParams => {
     const p = new URLSearchParams(extra)
-    if (fPaises.length)   p.set('paises',        fPaises.join(','))
-    if (fCats.length)     p.set('categorias',     fCats.join(','))
-    if (fSubcats.length)  p.set('subcategorias',  fSubcats.join(','))
-    if (fClientes.length) p.set('clientes',       fClientes.join(','))
-    if (fAnos.length)     p.set('anos',           fAnos.join(','))
-    if (fMeses.length)    p.set('meses',          fMeses.join(','))
+    if (fPaises.length)    p.set('paises',        fPaises.join(','))
+    if (fCats.length)      p.set('categorias',     fCats.join(','))
+    if (fSubcats.length)   p.set('subcategorias',  fSubcats.join(','))
+    if (fClientes.length)  p.set('clientes',       fClientes.join(','))
+    if (fFormatos.length)  p.set('formatos',       fFormatos.join(','))
+    if (fAnos.length)      p.set('anos',           fAnos.join(','))
+    if (fMeses.length)     p.set('meses',          fMeses.join(','))
     return p
-  }, [fPaises, fCats, fSubcats, fClientes, fAnos, fMeses])
+  }, [fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses])
 
   return (
     <Ctx.Provider value={{
-      fPaises, fCats, fSubcats, fClientes, fAnos, fMeses,
+      fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses,
       anosOpts, paisesOpts: PAISES_OPTS,
-      catsOpts, subcatsOpts, clientesOpts,
+      catsOpts, subcatsOpts, clientesOpts, formatosOpts,
       mesOpts, periodos,
-      loadingCats, loadingSubcats, loadingClientes,
+      loadingCats, loadingSubcats, loadingClientes, loadingFormatos,
       curAno, curMes,
-      setPaises: setFPaises,
-      setCats:   setFCats,
-      setSubcats: setFSubcats,
+      setPaises:   setFPaises,
+      setCats:     setFCats,
+      setSubcats:  setFSubcats,
       setClientes: setFClientes,
-      setAnos:   setFAnos,
-      setMeses:  setFMeses,
+      setFormatos: setFFormatos,
+      setAnos:     setFAnos,
+      setMeses:    setFMeses,
       limpiar,
       hayFiltros,
       buildParams,

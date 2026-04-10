@@ -5,10 +5,10 @@ import MultiSelect from './MultiSelect'
 
 export default function GlobalFilterBar() {
   const {
-    fPaises, fCats, fSubcats, fClientes, fAnos, fMeses,
-    anosOpts, catsOpts, subcatsOpts, clientesOpts, paisesOpts, mesOpts,
-    loadingCats, loadingSubcats, loadingClientes,
-    setPaises, setCats, setSubcats, setClientes, setAnos, setMeses,
+    fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses,
+    anosOpts, catsOpts, subcatsOpts, clientesOpts, formatosOpts, paisesOpts, mesOpts,
+    loadingCats, loadingSubcats, loadingClientes, loadingFormatos,
+    setPaises, setCats, setSubcats, setClientes, setFormatos, setAnos, setMeses,
     limpiar, hayFiltros,
   } = useDashboardFilters()
 
@@ -63,7 +63,7 @@ export default function GlobalFilterBar() {
         />
       </div>
 
-      {/* Fila 2: Producto / Cliente (cascade desde fila 1) */}
+      {/* Fila 2: Producto / Cliente / Formato (cascade desde fila 1) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <MultiSelect
           label={loadingSubcats ? 'Subcategoría…' : 'Subcategoría'}
@@ -80,6 +80,14 @@ export default function GlobalFilterBar() {
           onChange={setClientes}
           placeholder="Todos los clientes"
           selectAllLabel="Todos los clientes"
+        />
+        <MultiSelect
+          label={loadingFormatos ? 'Formato…' : 'Formato'}
+          options={formatosOpts.map(f => ({ value: f, label: f }))}
+          value={fFormatos}
+          onChange={setFormatos}
+          placeholder={(fPaises.length || fClientes.length) ? 'Todos los formatos' : 'Selecciona país/cliente'}
+          selectAllLabel="Todos los formatos"
         />
       </div>
 
@@ -110,6 +118,9 @@ export default function GlobalFilterBar() {
           ))}
           {fClientes.map(c => (
             <Chip key={'cl' + c} label={c} onRemove={() => setClientes(fClientes.filter(x => x !== c))} />
+          ))}
+          {fFormatos.map(f => (
+            <Chip key={'f' + f} label={f} onRemove={() => setFormatos(fFormatos.filter(x => x !== f))} />
           ))}
         </div>
       )}

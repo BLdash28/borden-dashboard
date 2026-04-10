@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { RefreshCw, Download, Upload, X, AlertTriangle, CheckCircle } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
 
@@ -40,8 +40,8 @@ export default function SelloutPage() {
   // Period state
   const [mesMap, setMesMap] = useState<Record<number, number[]>>({})
   const [anos, setAnos]     = useState<number[]>([])
-  const [fAno, setFAno]     = useState('')
-  const [fMes, setFMes]     = useState('')
+  const [fAnos, setFAnos]   = useState<string[]>([])
+  const [fMeses, setFMeses] = useState<string[]>([])
 
   // Hierarchical filter state
   const [fPaises,    setFPaises]    = useState<string[]>([])
@@ -100,30 +100,30 @@ export default function SelloutPage() {
   // ── Load pais options (no cascade) ───────────────────────────────────────
   useEffect(() => {
     const p = new URLSearchParams({ dim: 'pais' })
-    if (fAno) p.set('ano', fAno)
-    if (fMes) p.set('mes', fMes)
+    if (fAnos.length)  p.set('anos', fAnos.join(','))
+    if (fMeses.length) p.set('meses', fMeses.join(','))
     fetch('/api/ventas/dimension?' + p).then(r => r.json()).then(j => {
       setPaisOpts((j.rows || []).map((r: { nombre: string }) => r.nombre).filter(Boolean))
     })
-  }, [fAno, fMes])
+  }, [fAnos, fMeses])
 
   // ── Load category options (no cascade — always full list) ─────────────────
   useEffect(() => {
     const p = new URLSearchParams({ dim: 'categoria' })
-    if (fAno) p.set('ano', fAno)
-    if (fMes) p.set('mes', fMes)
+    if (fAnos.length)  p.set('anos', fAnos.join(','))
+    if (fMeses.length) p.set('meses', fMeses.join(','))
     fetch('/api/ventas/dimension?' + p).then(r => r.json()).then(j => {
       const opts = (j.rows || []).map((r: { nombre: string }) => r.nombre).filter(Boolean)
       setCatOpts(opts)
     })
-  }, [fAno, fMes])
+  }, [fAnos, fMeses])
 
   // ── Cascade: fCats → subcatOpts (lazy) ───────────────────────────────────
   useEffect(() => {
     if (!fCats.length && !fPaises.length) { setSubcatOpts([]); setFSubcats([]); return }
     const p = new URLSearchParams({ dim: 'subcategoria' })
-    if (fAno) p.set('ano', fAno)
-    if (fMes) p.set('mes', fMes)
+    if (fAnos.length)   p.set('anos',       fAnos.join(','))
+    if (fMeses.length)  p.set('meses',      fMeses.join(','))
     if (fCats.length)   p.set('categorias', fCats.join(','))
     if (fPaises.length) p.set('paises',     fPaises.join(','))
     fetch('/api/ventas/dimension?' + p).then(r => r.json()).then(j => {
@@ -131,51 +131,51 @@ export default function SelloutPage() {
       setSubcatOpts(opts)
       setFSubcats(prev => prev.filter(v => opts.includes(v)))
     })
-  }, [fAno, fMes, fCats, fPaises])
+  }, [fAnos, fMeses, fCats, fPaises])
 
   // ── Cascade: fPaises → clienteOpts (lazy) ────────────────────────────────
   useEffect(() => {
     if (!fPaises.length && !fCats.length) { setClienteOpts([]); setFClientes([]); return }
     const p = new URLSearchParams({ dim: 'cliente' })
-    if (fAno) p.set('ano', fAno)
-    if (fMes) p.set('mes', fMes)
-    if (fPaises.length) p.set('paises', fPaises.join(','))
+    if (fAnos.length)   p.set('anos',       fAnos.join(','))
+    if (fMeses.length)  p.set('meses',      fMeses.join(','))
+    if (fPaises.length) p.set('paises',     fPaises.join(','))
     if (fCats.length)   p.set('categorias', fCats.join(','))
     fetch('/api/ventas/dimension?' + p).then(r => r.json()).then(j => {
       const opts = (j.rows || []).map((r: { nombre: string }) => r.nombre).filter(Boolean)
       setClienteOpts(opts)
       setFClientes(prev => prev.filter(v => opts.includes(v)))
     })
-  }, [fAno, fMes, fPaises, fCats])
+  }, [fAnos, fMeses, fPaises, fCats])
 
   // ── Cascade: fCats + fSubcats + fClientes → skuOpts (lazy) ───────────────
   useEffect(() => {
     if (!fPaises.length && !fCats.length && !fClientes.length) { setSkuOpts([]); setFSkus([]); return }
     const p = new URLSearchParams({ dim: 'sku' })
-    if (fAno) p.set('ano', fAno)
-    if (fMes) p.set('mes', fMes)
-    if (fPaises.length)   p.set('paises',       fPaises.join(','))
-    if (fCats.length)     p.set('categorias',    fCats.join(','))
-    if (fSubcats.length)  p.set('subcategorias', fSubcats.join(','))
-    if (fClientes.length) p.set('clientes',      fClientes.join(','))
+    if (fAnos.length)    p.set('anos',          fAnos.join(','))
+    if (fMeses.length)   p.set('meses',         fMeses.join(','))
+    if (fPaises.length)  p.set('paises',        fPaises.join(','))
+    if (fCats.length)    p.set('categorias',    fCats.join(','))
+    if (fSubcats.length) p.set('subcategorias', fSubcats.join(','))
+    if (fClientes.length) p.set('clientes',     fClientes.join(','))
     fetch('/api/ventas/dimension?' + p).then(r => r.json()).then(j => {
       const opts = (j.rows || []).map((r: { nombre: string }) => r.nombre).filter(Boolean)
       setSkuOpts(opts)
       setFSkus(prev => prev.filter(v => opts.includes(v)))
     })
-  }, [fAno, fMes, fPaises, fCats, fSubcats, fClientes])
+  }, [fAnos, fMeses, fPaises, fCats, fSubcats, fClientes])
 
   // ── Cascade: fSkus → barcodeOpts (lazy) ──────────────────────────────────
   useEffect(() => {
     if (!fSkus.length) { setBarcodeOpts([]); setFBarcodes([]); return }
     const p = new URLSearchParams({ dim: 'codigo_barras' })
-    if (fAno) p.set('ano', fAno)
-    if (fMes) p.set('mes', fMes)
-    if (fPaises.length)   p.set('paises',       fPaises.join(','))
-    if (fCats.length)     p.set('categorias',    fCats.join(','))
-    if (fSubcats.length)  p.set('subcategorias', fSubcats.join(','))
-    if (fClientes.length) p.set('clientes',      fClientes.join(','))
-    if (fSkus.length)     p.set('skus',          fSkus.join(','))
+    if (fAnos.length)    p.set('anos',          fAnos.join(','))
+    if (fMeses.length)   p.set('meses',         fMeses.join(','))
+    if (fPaises.length)  p.set('paises',        fPaises.join(','))
+    if (fCats.length)    p.set('categorias',    fCats.join(','))
+    if (fSubcats.length) p.set('subcategorias', fSubcats.join(','))
+    if (fClientes.length) p.set('clientes',     fClientes.join(','))
+    if (fSkus.length)    p.set('skus',          fSkus.join(','))
     fetch('/api/ventas/dimension?' + p).then(r => r.json()).then(j => {
       const opts: { value: string; label: string }[] = (j.rows || []).map((r: { nombre: string }) => ({
         value: r.nombre.split(' — ')[0] ?? r.nombre,
@@ -184,19 +184,19 @@ export default function SelloutPage() {
       setBarcodeOpts(opts)
       setFBarcodes(prev => prev.filter(v => opts.some(o => o.value === v)))
     })
-  }, [fAno, fMes, fPaises, fCats, fSubcats, fClientes, fSkus])
+  }, [fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus])
 
   // ── Fetch data ────────────────────────────────────────────────────────────
   const cargar = useCallback((
-    ano: string, mes: string,
+    anos: string[], meses: string[],
     paises: string[], cats: string[], subcats: string[],
     clientes: string[], skus: string[], barcodes: string[],
     pg: number
   ) => {
     setLoading(true)
     const p = new URLSearchParams()
-    if (ano)              p.set('ano', ano)
-    if (mes)              p.set('mes', mes)
+    if (anos.length)      p.set('anos', anos.join(','))
+    if (meses.length)     p.set('meses', meses.join(','))
     if (paises.length)    p.set('paises', paises.join(','))
     if (cats.length)      p.set('categorias', cats.join(','))
     if (subcats.length)   p.set('subcategorias', subcats.join(','))
@@ -231,25 +231,25 @@ export default function SelloutPage() {
   }, [])
 
   useEffect(() => {
-    cargar('', '', [], [], [], [], [], [], 1)
+    cargar([], [], [], [], [], [], [], [], 1)
   }, [cargar])
 
   const triggerCargar = (
-    ano = fAno, mes = fMes,
+    anos = fAnos, meses = fMeses,
     paises = fPaises, cats = fCats, subcats = fSubcats,
     clientes = fClientes, skus = fSkus, barcodes = fBarcodes,
     pg = 1
   ) => {
     setPage(pg)
-    cargar(ano, mes, paises, cats, subcats, clientes, skus, barcodes, pg)
+    cargar(anos, meses, paises, cats, subcats, clientes, skus, barcodes, pg)
   }
 
   const limpiar = () => {
-    setFAno(''); setFMes('')
+    setFAnos([]); setFMeses([])
     setFPaises([]); setFCats([]); setFSubcats([])
     setFClientes([]); setFSkus([]); setFBarcodes([])
     setPage(1)
-    cargar('', '', [], [], [], [], [], [], 1)
+    cargar([], [], [], [], [], [], [], [], 1)
   }
 
   // ── Sort logic ────────────────────────────────────────────────────────────
@@ -322,12 +322,22 @@ export default function SelloutPage() {
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
     a.href = url
-    a.download = `sellout_${fAno || 'todos'}_${fMes ? MESES[parseInt(fMes)] : 'todos'}.csv`
+    a.download = `sellout_${fAnos.join('-') || 'todos'}_${fMeses.map(m => MESES[parseInt(m)]).join('-') || 'todos'}.csv`
     a.click()
     URL.revokeObjectURL(url)
   }
 
-  const mesesDisp  = fAno ? (mesMap[Number(fAno)] || []) : []
+  const mesesDisp = useMemo((): { value: string; label: string }[] => {
+    const available = fAnos.length > 0
+      ? fAnos.flatMap(a => mesMap[Number(a)] || [])
+      : Object.values(mesMap).flat()
+    return [...new Set(available)].sort((a, b) => a - b).map(m => ({ value: String(m), label: MESES[m] }))
+  }, [fAnos, mesMap])
+
+  const fmtFull = (n: number) =>
+    isNaN(n) || !isFinite(n) ? '$0' :
+    '$' + Math.round(n).toLocaleString('en-US')
+
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -432,31 +442,20 @@ export default function SelloutPage() {
 
         {/* Row 1: Period */}
         <div className="grid grid-cols-2 gap-3 mb-3">
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">
-              Año {anos.length === 0 && <span className="text-amber-400 ml-1 animate-pulse">●</span>}
-            </label>
-            <select
-              value={fAno}
-              onChange={e => { setFAno(e.target.value); setFMes(''); triggerCargar(e.target.value, '') }}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400"
-            >
-              <option value="">Todos</option>
-              {anos.map(a => <option key={a} value={String(a)}>{a}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 mb-1 block">Mes</label>
-            <select
-              value={fMes}
-              onChange={e => { setFMes(e.target.value); triggerCargar(fAno, e.target.value) }}
-              disabled={!fAno}
-              className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-400 disabled:opacity-40"
-            >
-              <option value="">Todos los meses</option>
-              {mesesDisp.map(m => <option key={m} value={String(m)}>{MESES[m]}</option>)}
-            </select>
-          </div>
+          <MultiSelect
+            label={anos.length === 0 ? 'Año ●' : 'Año'}
+            options={anos.map(a => ({ value: String(a), label: String(a) }))}
+            value={fAnos}
+            onChange={v => { setFAnos(v); setFMeses([]); triggerCargar(v, []) }}
+            placeholder="Todos los años"
+          />
+          <MultiSelect
+            label="Mes"
+            options={mesesDisp}
+            value={fMeses}
+            onChange={v => { setFMeses(v); triggerCargar(fAnos, v) }}
+            placeholder="Todos los meses"
+          />
         </div>
 
         {/* Row 2: Hierarchical filters */}
@@ -465,42 +464,42 @@ export default function SelloutPage() {
             label="País"
             options={paisOpts.map(p => ({ value: p, label: p }))}
             value={fPaises}
-            onChange={v => { setFPaises(v); triggerCargar(fAno, fMes, v) }}
+            onChange={v => { setFPaises(v); triggerCargar(fAnos, fMeses, v) }}
             placeholder="Todos los países"
           />
           <MultiSelect
             label="Categoría"
             options={catOpts.map(c => ({ value: c, label: c }))}
             value={fCats}
-            onChange={v => { setFCats(v); triggerCargar(fAno, fMes, fPaises, v) }}
+            onChange={v => { setFCats(v); triggerCargar(fAnos, fMeses, fPaises, v) }}
             placeholder="Todas"
           />
           <MultiSelect
             label="Subcategoría"
             options={subcatOpts.map(s => ({ value: s, label: s }))}
             value={fSubcats}
-            onChange={v => { setFSubcats(v); triggerCargar(fAno, fMes, fPaises, fCats, v) }}
+            onChange={v => { setFSubcats(v); triggerCargar(fAnos, fMeses, fPaises, fCats, v) }}
             placeholder="Todas"
           />
           <MultiSelect
             label="Cliente"
             options={clienteOpts.map(c => ({ value: c, label: c }))}
             value={fClientes}
-            onChange={v => { setFClientes(v); triggerCargar(fAno, fMes, fPaises, fCats, fSubcats, v) }}
+            onChange={v => { setFClientes(v); triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, v) }}
             placeholder="Todos"
           />
           <MultiSelect
             label="SKU"
             options={skuOpts.map(s => ({ value: s, label: s }))}
             value={fSkus}
-            onChange={v => { setFSkus(v); triggerCargar(fAno, fMes, fPaises, fCats, fSubcats, fClientes, v) }}
+            onChange={v => { setFSkus(v); triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, v) }}
             placeholder="Todos"
           />
           <MultiSelect
             label="Código de Barras"
             options={barcodeOpts}
             value={fBarcodes}
-            onChange={v => { setFBarcodes(v); triggerCargar(fAno, fMes, fPaises, fCats, fSubcats, fClientes, fSkus, v) }}
+            onChange={v => { setFBarcodes(v); triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus, v) }}
             placeholder="Todos"
           />
         </div>
@@ -510,11 +509,11 @@ export default function SelloutPage() {
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-amber-500">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Ventas Totales USD</p>
-          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : fmt(kpi?.total_valor ?? 0)}</p>
+          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : fmtFull(kpi?.total_valor ?? 0)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-blue-500">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Unidades Totales</p>
-          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : (kpi?.total_unidades ?? 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : Math.round(kpi?.total_unidades ?? 0).toLocaleString('en-US')}</p>
         </div>
       </div>
 
@@ -595,7 +594,7 @@ export default function SelloutPage() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                     <button
-                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAno, fMes, fPaises, fCats, fSubcats, fClientes, fSkus, fBarcodes, pg) }}
+                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus, fBarcodes, pg) }}
                       disabled={page === 1}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >
@@ -603,7 +602,7 @@ export default function SelloutPage() {
                     </button>
                     <span className="text-sm text-gray-500">Página {page} de {totalPages}</span>
                     <button
-                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAno, fMes, fPaises, fCats, fSubcats, fClientes, fSkus, fBarcodes, pg) }}
+                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus, fBarcodes, pg) }}
                       disabled={page === totalPages}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >
