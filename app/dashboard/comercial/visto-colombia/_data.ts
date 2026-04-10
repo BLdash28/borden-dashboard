@@ -155,13 +155,13 @@ export function fmtCOP(n: number, moneda: 'COP' | 'USD', tasa: number): string {
     if (v >= 1e3) return 'USD ' + (v / 1e3).toFixed(1) + 'K'
     return 'USD ' + v.toFixed(0)
   }
-  return 'COP ' + Math.round(v).toLocaleString('es-CO')
+  return 'COP ' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 /** Formato para precios unitarios — muestra dígitos completos con separador de miles */
 export function fmtPrice(n: number, moneda: 'COP' | 'USD', tasa: number): string {
   if (moneda === 'USD') return '$' + (n / tasa).toFixed(2)
-  return 'COP ' + Math.round(n).toLocaleString('es-CO')
+  return 'COP ' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 export function fmtN(n: number): string {
