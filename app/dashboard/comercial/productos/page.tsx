@@ -94,7 +94,7 @@ export default function ProductosPage() {
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Dimensiones</p>
           <h1 className="text-2xl font-bold text-gray-800">Productos</h1>
-          <p className="text-sm text-gray-400 mt-1">Base maestra de productos activos</p>
+          <p className="text-sm text-gray-400 mt-1">Base maestra de productos</p>
         </div>
         <button onClick={limpiar}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
@@ -108,6 +108,9 @@ export default function ProductosPage() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Total Productos</p>
           <p className="text-2xl font-bold text-gray-800">{loading ? '…' : productos.length}</p>
+          {!loading && productos.some(p => !p.is_active) && (
+            <p className="text-xs text-gray-400 mt-1">{productos.filter(p => !p.is_active).length} descontinuado{productos.filter(p => !p.is_active).length !== 1 ? 's' : ''}</p>
+          )}
         </div>
         {Object.entries(porcategoria).map(([cat, count]) => (
           <div key={cat} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
@@ -199,14 +202,21 @@ export default function ProductosPage() {
               </thead>
               <tbody>
                 {productos.map((p, i) => (
-                  <tr key={p.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                  <tr key={p.id} className={`border-b border-gray-50 hover:bg-gray-50 transition-colors ${!p.is_active ? 'opacity-50' : ''}`}>
                     <td className="py-2.5 pr-4 text-gray-400 text-xs">{i + 1}</td>
                     <td className="py-2.5 pr-4">
                       <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
                         {p.sku || '—'}
                       </span>
                     </td>
-                    <td className="py-2.5 pr-4 font-medium text-gray-800 max-w-xs">{p.descripcion}</td>
+                    <td className="py-2.5 pr-4 font-medium text-gray-800 max-w-xs">
+                      <div className="flex items-center gap-2">
+                        {p.descripcion}
+                        {!p.is_active && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 whitespace-nowrap">Descontinuado</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="py-2.5 pr-4">
                       {p.categoria ? (
                         <span className={`text-xs px-2 py-0.5 rounded-full border font-medium ${BADGE[p.categoria] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>

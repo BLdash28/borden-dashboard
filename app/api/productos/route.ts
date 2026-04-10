@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const subcategoria = searchParams.get('subcategoria') || ''
     const buscar       = searchParams.get('buscar')       || ''
 
-    const conds: string[] = ['is_active = TRUE']
+    const conds: string[] = []
     const vals: any[] = []
 
     if (categoria) {
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     const { rows: cats } = await pool.query(
       `SELECT DISTINCT categoria, subcategoria
        FROM dim_producto
-       WHERE is_active = TRUE AND categoria IS NOT NULL
+       WHERE categoria IS NOT NULL
        ORDER BY categoria, subcategoria`
     )
 
