@@ -14,34 +14,37 @@ function fmt(n: number) {
 
 function Sparkline({ data }: { data: number[] }) {
   if (data.length < 2) return <span style={{ color: 'var(--t3)', fontSize: 10 }}>—</span>
-  const points = data.map((v, i) => ({ v }))
-  const min = Math.min(...data)
-  const max = Math.max(...data)
+  const points = data.map((v) => ({ v }))
   const trend = data[data.length - 1] - data[0]
   const color = trend >= 0 ? '#10b981' : '#ef4444'
-
   return (
-    <div style={{ width: 80, height: 28, display: 'inline-block' }}>
+    <div style={{ width: 64, height: 24, display: 'inline-block' }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={points} margin={{ top: 2, bottom: 2, left: 0, right: 0 }}>
-          <Line
-            type="monotone"
-            dataKey="v"
-            stroke={color}
-            strokeWidth={1.5}
-            dot={false}
-            isAnimationActive={false}
-          />
+          <Line type="monotone" dataKey="v" stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
         </LineChart>
       </ResponsiveContainer>
     </div>
   )
 }
 
+function SortIcon({ col, active, dir }: { col: string; active: string; dir: 'asc' | 'desc' }) {
+  if (col !== active) return <ArrowUpDown size={11} style={{ color: 'var(--t3)', opacity: 0.4 }} />
+  return dir === 'desc'
+    ? <ArrowDown size={11} style={{ color: 'var(--acc)' }} />
+    : <ArrowUp   size={11} style={{ color: 'var(--acc)' }} />
+}
+
+const BADGE: Record<string, string> = {
+  QUESOS:          'bg-amber-500/10 text-amber-400',
+  HELADOS:         'bg-blue-500/10 text-blue-400',
+  'LECHE & CREMA': 'bg-emerald-500/10 text-emerald-400',
+}
+
 function SkeletonRow() {
   return (
     <tr>
-      {[20,40,120,80,70,70,60,80].map((w, i) => (
+      {[20, 40, 120, 80, 70, 70, 60, 80].map((w, i) => (
         <td key={i} className="py-3 pr-4">
           <div className="h-3 rounded animate-pulse" style={{ width: w, background: 'var(--border)' }} />
         </td>
@@ -50,27 +53,29 @@ function SkeletonRow() {
   )
 }
 
+function SkeletonCard() {
+  return (
+    <div className="p-4 rounded-xl border animate-pulse" style={{ borderColor: 'var(--border)' }}>
+      <div className="flex justify-between mb-3">
+        <div className="h-3 w-32 rounded" style={{ background: 'var(--border)' }} />
+        <div className="h-4 w-16 rounded-full" style={{ background: 'var(--border)' }} />
+      </div>
+      <div className="flex justify-between">
+        <div className="h-5 w-20 rounded" style={{ background: 'var(--border)' }} />
+        <div className="h-4 w-16 rounded" style={{ background: 'var(--border)' }} />
+      </div>
+    </div>
+  )
+}
+
 interface Props {
   products: ProductRow[]
-  loading:  boolean
-}
-
-function SortIcon({ col, active, dir }: { col: string; active: string; dir: 'asc'|'desc' }) {
-  if (col !== active) return <ArrowUpDown size={11} style={{ color: 'var(--t3)', opacity: 0.4 }} />
-  return dir === 'desc'
-    ? <ArrowDown size={11} style={{ color: 'var(--acc)' }} />
-    : <ArrowUp   size={11} style={{ color: 'var(--acc)' }} />
-}
-
-const BADGE: Record<string, string> = {
-  QUESOS:         'bg-amber-500/10 text-amber-400',
-  HELADOS:        'bg-blue-500/10 text-blue-400',
-  'LECHE & CREMA':'bg-emerald-500/10 text-emerald-400',
+  loading: boolean
 }
 
 export default memo(function ProductsTable({ products, loading }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>('valor')
-  const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
 
   const toggleSort = (k: SortKey) => {
     if (k === sortKey) setSortDir(d => d === 'desc' ? 'asc' : 'desc')
@@ -84,16 +89,89 @@ export default memo(function ProductsTable({ products, loading }: Props) {
 
   const thClass = "text-left py-2.5 pr-4 text-[10px] font-bold uppercase tracking-[1.2px] select-none cursor-pointer whitespace-nowrap"
 
-  return (
-    <div className="rounded-2xl p-5"
-      style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+  const emptyState = (
+    <div className="py-12 text-center">
+      <div className="text-[12px]" style={{ color: 'var(--t3)' }}>
+        Sin datos para los filtros seleccionados
+      </div>
+    </div>
+  )
 
-      <p className="text-[11px] font-semibold uppercase tracking-[1.4px] mb-4"
-        style={{ color: 'var(--t3)' }}>
+  return (
+    <div className="rounded-2xl p-4 md:p-5" style={{ background: 'var(--card)', border: '1px solid var(--border)' }}>
+      <p className="text-[11px] font-semibold uppercase tracking-[1.4px] mb-4" style={{ color: 'var(--t3)' }}>
         Top 10 Productos
       </p>
 
-      <div className="overflow-x-auto">
+      {/* ── Mobile cards (< md) ──────────────────────────────────── */}
+      <div className="md:hidden space-y-2">
+        {loading
+          ? Array.from({ length: 4 }, (_, i) => <SkeletonCard key={i} />)
+          : sorted.length === 0
+            ? emptyState
+            : sorted.map((p, i) => (
+              <div
+                key={p.sku}
+                className="p-4 rounded-xl border"
+                style={{ borderColor: 'var(--border)', background: 'var(--surface)' }}
+              >
+                {/* Row 1: rank + descripción + badge */}
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[11px] font-bold flex-shrink-0" style={{ color: 'var(--t3)' }}>
+                      #{i + 1}
+                    </span>
+                    <span className="text-[13px] font-semibold truncate" style={{ color: 'var(--t1)' }}>
+                      {p.descripcion}
+                    </span>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide flex-shrink-0 ${BADGE[p.categoria] ?? 'bg-white/5 text-white/40'}`}>
+                    {p.categoria}
+                  </span>
+                </div>
+
+                {/* Row 2: SKU */}
+                <div className="mb-3">
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono" style={{ background: 'var(--border)', color: 'var(--t2)' }}>
+                    {p.sku}
+                  </span>
+                </div>
+
+                {/* Row 3: metrics */}
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wide mb-0.5" style={{ color: 'var(--t3)' }}>Ventas</div>
+                    <div className="text-[15px] font-bold tabular-nums" style={{ color: 'var(--t1)', fontFamily: "'JetBrains Mono', monospace" }}>
+                      {fmt(p.valor)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wide mb-0.5" style={{ color: 'var(--t3)' }}>Unidades</div>
+                    <div className="text-[13px] font-semibold tabular-nums" style={{ color: 'var(--t2)' }}>
+                      {p.unidades.toLocaleString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wide mb-0.5" style={{ color: 'var(--t3)' }}>% Total</div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="rounded-full overflow-hidden" style={{ width: 32, height: 4, background: 'var(--border)' }}>
+                        <div className="h-full rounded-full" style={{ width: `${Math.min(p.pct_total, 100)}%`, background: 'var(--acc)' }} />
+                      </div>
+                      <span className="text-[11px] tabular-nums" style={{ color: 'var(--t3)' }}>{p.pct_total.toFixed(1)}%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] uppercase tracking-wide mb-0.5" style={{ color: 'var(--t3)' }}>Tendencia</div>
+                    <Sparkline data={p.sparkline} />
+                  </div>
+                </div>
+              </div>
+            ))
+        }
+      </div>
+
+      {/* ── Desktop table (≥ md) ─────────────────────────────────── */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr style={{ borderBottom: '1px solid var(--border)' }}>
@@ -101,35 +179,21 @@ export default memo(function ProductsTable({ products, loading }: Props) {
               <th className={thClass} style={{ color: 'var(--t3)' }}>SKU</th>
               <th className={thClass} style={{ color: 'var(--t3)' }}>Descripción</th>
               <th className={thClass} style={{ color: 'var(--t3)' }}>Categoría</th>
-              <th className={thClass} style={{ color: 'var(--t3)' }}
-                onClick={() => toggleSort('valor')}>
-                <span className="flex items-center gap-1">
-                  USD <SortIcon col="valor" active={sortKey} dir={sortDir} />
-                </span>
+              <th className={thClass} style={{ color: 'var(--t3)' }} onClick={() => toggleSort('valor')}>
+                <span className="flex items-center gap-1">USD <SortIcon col="valor" active={sortKey} dir={sortDir} /></span>
               </th>
-              <th className={thClass} style={{ color: 'var(--t3)' }}
-                onClick={() => toggleSort('unidades')}>
-                <span className="flex items-center gap-1">
-                  Unidades <SortIcon col="unidades" active={sortKey} dir={sortDir} />
-                </span>
+              <th className={thClass} style={{ color: 'var(--t3)' }} onClick={() => toggleSort('unidades')}>
+                <span className="flex items-center gap-1">Unidades <SortIcon col="unidades" active={sortKey} dir={sortDir} /></span>
               </th>
               <th className={thClass} style={{ color: 'var(--t3)' }}>% Total</th>
               <th className={thClass} style={{ color: 'var(--t3)' }}>Tendencia</th>
             </tr>
           </thead>
-
           <tbody>
             {loading
               ? Array.from({ length: 5 }, (_, i) => <SkeletonRow key={i} />)
               : sorted.length === 0
-                ? (
-                  <tr>
-                    <td colSpan={8} className="py-12 text-center text-[12px]"
-                      style={{ color: 'var(--t3)' }}>
-                      Sin datos para los filtros seleccionados
-                    </td>
-                  </tr>
-                )
+                ? <tr><td colSpan={8} className="py-12 text-center text-[12px]" style={{ color: 'var(--t3)' }}>Sin datos para los filtros seleccionados</td></tr>
                 : sorted.map((p, i) => (
                   <tr key={p.sku}
                     className="transition-colors"
@@ -138,50 +202,33 @@ export default memo(function ProductsTable({ products, loading }: Props) {
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
                     <td className="py-3 pr-4 text-[12px]" style={{ color: 'var(--t3)' }}>{i + 1}</td>
-
                     <td className="py-3 pr-4">
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono"
-                        style={{ background: 'var(--border)', color: 'var(--t2)' }}>
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono" style={{ background: 'var(--border)', color: 'var(--t2)' }}>
                         {p.sku}
                       </span>
                     </td>
-
                     <td className="py-3 pr-4 max-w-[200px]">
-                      <span className="text-[12px] font-medium truncate block"
-                        style={{ color: 'var(--t1)' }}>
-                        {p.descripcion}
-                      </span>
+                      <span className="text-[12px] font-medium truncate block" style={{ color: 'var(--t1)' }}>{p.descripcion}</span>
                     </td>
-
                     <td className="py-3 pr-4">
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${BADGE[p.categoria] ?? 'bg-white/5 text-white/40'}`}>
                         {p.categoria}
                       </span>
                     </td>
-
-                    <td className="py-3 pr-4 text-[13px] font-bold tabular-nums"
-                      style={{ color: 'var(--t1)', fontFamily: "'JetBrains Mono', monospace" }}>
+                    <td className="py-3 pr-4 text-[13px] font-bold tabular-nums" style={{ color: 'var(--t1)', fontFamily: "'JetBrains Mono', monospace" }}>
                       {fmt(p.valor)}
                     </td>
-
-                    <td className="py-3 pr-4 text-[12px] tabular-nums"
-                      style={{ color: 'var(--t2)' }}>
+                    <td className="py-3 pr-4 text-[12px] tabular-nums" style={{ color: 'var(--t2)' }}>
                       {p.unidades.toLocaleString()}
                     </td>
-
                     <td className="py-3 pr-4">
                       <div className="flex items-center gap-2">
-                        <div className="rounded-full overflow-hidden flex-shrink-0"
-                          style={{ width: 40, height: 4, background: 'var(--border)' }}>
-                          <div className="h-full rounded-full"
-                            style={{ width: `${Math.min(p.pct_total, 100)}%`, background: 'var(--acc)' }} />
+                        <div className="rounded-full overflow-hidden flex-shrink-0" style={{ width: 40, height: 4, background: 'var(--border)' }}>
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(p.pct_total, 100)}%`, background: 'var(--acc)' }} />
                         </div>
-                        <span className="text-[11px] tabular-nums" style={{ color: 'var(--t3)' }}>
-                          {p.pct_total.toFixed(1)}%
-                        </span>
+                        <span className="text-[11px] tabular-nums" style={{ color: 'var(--t3)' }}>{p.pct_total.toFixed(1)}%</span>
                       </div>
                     </td>
-
                     <td className="py-3">
                       <Sparkline data={p.sparkline} />
                     </td>
