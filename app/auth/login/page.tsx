@@ -1,8 +1,13 @@
 'use client'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Eye, EyeOff } from 'lucide-react'
+
+const URL_ERRORS: Record<string, string> = {
+  link_expired:  'El enlace expiró o ya fue utilizado. Solicita uno nuevo.',
+  auth_error:    'Error de autenticación. Intenta de nuevo.',
+}
 
 export default function LoginPage() {
   const [email, setEmail]       = useState('')
@@ -10,8 +15,14 @@ export default function LoginPage() {
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
-  const router = useRouter()
-  const supabase = createClient()
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+  const supabase     = createClient()
+
+  useEffect(() => {
+    const err = searchParams.get('error')
+    if (err && URL_ERRORS[err]) setError(URL_ERRORS[err])
+  }, [searchParams])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()

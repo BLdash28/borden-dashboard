@@ -56,8 +56,8 @@ export async function middleware(request: NextRequest) {
         }
         return supabaseResponse
       }
-      // Permitir reset-password aunque haya sesión activa (sesión de recovery)
-      if (pathname === '/auth/reset-password') {
+      // Permitir reset-password y callback aunque haya sesión activa
+      if (pathname === '/auth/reset-password' || pathname === '/auth/callback') {
         return supabaseResponse
       }
       // Resto de /auth/* → dashboard
