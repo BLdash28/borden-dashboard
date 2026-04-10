@@ -48,13 +48,16 @@ export async function middleware(request: NextRequest) {
     const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
     const needsMfa = aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2'
 
-    // Rutas de auth: permitir mfa-challenge si es necesario, redirigir al dashboard si no
+    // Rutas de auth: permitir mfa-challenge y reset-password, redirigir al dashboard si no
     if (pathname === '/' || pathname.startsWith('/auth')) {
       if (pathname === '/auth/mfa-challenge') {
-        // Si ya verificó MFA → salir del challenge al dashboard
         if (!needsMfa) {
           return NextResponse.redirect(new URL('/dashboard', request.url))
         }
+        return supabaseResponse
+      }
+      // Permitir reset-password aunque haya sesión activa (sesión de recovery)
+      if (pathname === '/auth/reset-password') {
         return supabaseResponse
       }
       // Resto de /auth/* → dashboard
