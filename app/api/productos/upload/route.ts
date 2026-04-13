@@ -133,10 +133,12 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      ok:          true,
+      ok:            true,
       insertados,
-      total_filas: deduped.length,
-      errores:     errores.slice(0, 10),
+      total_filas:   deduped.length,
+      antes_dedup:   toInsert.length,
+      filas_raw:     rawRows.length,
+      errores:       errores,
       columnas_detectadas: { colCat, colSubcat, colBarras, colInterno, colDesc },
     })
   } catch (err) {
