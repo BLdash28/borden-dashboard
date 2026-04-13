@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       }
 
       const row: Record<string, any> = {
-        sku:           interno || barras,   // cod_interno preferido; barras como fallback
+        sku:           codigoBarras,        // codigo_barras es la llave maestra → garantiza unicidad
         descripcion:   desc    || interno || barras,
         categoria:     norm(colCat    ? r[colCat]    : '') || null,
         subcategoria:  norm(colSubcat ? r[colSubcat] : '') || null,
@@ -110,17 +110,12 @@ export async function POST(req: NextRequest) {
     if (toInsert.length === 0)
       return NextResponse.json({ error: 'No se encontraron filas válidas', errores }, { status: 400 })
 
-    // Deduplicar por codigo_barras (el que manda)
-    const dedupCB: Record<string, Record<string, any>> = {}
+    // Deduplicar por codigo_barras (el que manda; sku === codigo_barras → no hay conflictos)
+    const dedupMap: Record<string, Record<string, any>> = {}
     for (const row of toInsert) {
-      dedupCB[row.codigo_barras || row.sku] = row
+      dedupMap[row.codigo_barras] = row
     }
-    // Deduplicar también por sku para evitar conflictos en INSERT
-    const dedupSku: Record<string, Record<string, any>> = {}
-    for (const row of Object.values(dedupCB)) {
-      dedupSku[row.sku || row.codigo_barras] = row
-    }
-    const deduped = Object.values(dedupSku)
+    const deduped = Object.values(dedupMap)
 
     const BATCH     = 200
     let insertados  = 0
