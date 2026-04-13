@@ -612,13 +612,14 @@ function ModInventario({ data, invSkus, fil, overrides, onEdit }: {
       })
       const SEMANAS = 13
       return invSkus
-        .filter(s => s.qty > 0)
+        .filter(s => Number(s.qty) > 0)
         .map(s => {
           const key      = s.sku || s.ean
-          const inv      = overrides[key]?.['inventario_unidades'] ?? s.qty
+          const qty      = Number(s.qty) || 0
+          const inv      = overrides[key]?.['inventario_unidades'] ?? qty
           const soutDay  = (soutMap[key] || 0) / (SEMANAS * 7)
           const doi      = soutDay > 0 ? Math.round(inv / soutDay) : null
-          const valorCop = s.valor_cop || 0
+          const valorCop = Number(s.precio_valor) || 0
           return {
             sku: s.sku || '', ean: s.ean || '', desc: s.descripcion || '',
             cat: s.categoria || '', subcat: s.subcategoria || '',
