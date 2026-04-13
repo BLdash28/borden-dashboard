@@ -99,8 +99,8 @@ export async function GET(req: NextRequest) {
         pdvs:         new Set(),
       }
 
-      invMap[en].qty          += Number(r.qty)          || 0
-      invMap[en].precio_valor += Number(r.precio_valor) || 0
+      invMap[en].qty          += parseFloat(String(r.qty))          || 0
+      invMap[en].precio_valor += parseFloat(String(r.precio_valor)) || 0
       if (r.punto_venta) invMap[en].pdvs.add(r.punto_venta)
     }
 
