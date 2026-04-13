@@ -72,9 +72,6 @@ const MENUS: Record<string, { section: string; items: { href: string; icon: any;
     {
       section: 'Logística',
       items: [
-        { href: '/logistica/corrugados',          icon: Box,     label: 'Inv. Materiales Corrugados'  },
-        { href: '/logistica/inv-materiales',      icon: Package, label: 'Inv. Materiales de Empaques' },
-        { href: '/logistica/inv-prod-terminados', icon: Truck,   label: 'Inv. Productos Terminados'   },
         { href: '/logistica/inventario-pt',       icon: Package, label: 'Inventario PT Borden'        },
       ],
     },
