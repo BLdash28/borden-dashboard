@@ -627,6 +627,7 @@ export default function ResumenPage() {
                   <thead>
                     <tr className="border-b text-[10px] uppercase tracking-widest" style={{ borderColor: 'var(--border)', color: 'var(--t3)' }}>
                       <th className="text-left py-2 pr-4 w-8">#</th>
+                      <th className="text-left py-2 pr-4">Cód. Barras</th>
                       <th className="text-left py-2 pr-4">SKU</th>
                       <th className="text-left py-2 pr-4">Descripción</th>
                       <th className="text-right py-2 pr-4 cursor-pointer select-none whitespace-nowrap"
@@ -652,6 +653,7 @@ export default function ResumenPage() {
                       .map((s: any, i: number) => (
                       <tr key={i} className="border-b transition-colors" style={{ borderColor: 'var(--border)' }}>
                         <td className="py-2 pr-4" style={{ color: 'var(--t3)' }}>{i + 1}</td>
+                        <td className="py-2 pr-4 font-mono text-[11px]" style={{ color: 'var(--t3)' }}>{s.codigo_barras ?? '—'}</td>
                         <td className="py-2 pr-4 font-mono text-[11px]" style={{ color: 'var(--acc)' }}>{s.sku}</td>
                         <td className="py-2 pr-4 max-w-xs truncate" style={{ color: 'var(--t2)' }}>{s.descripcion}</td>
                         <td className="py-2 pr-4 text-right font-semibold" style={{ color: skuSort.key === 'valor' ? 'var(--t1)' : 'var(--t2)' }}>{fmt(toNum(s.ventas_valor))}</td>

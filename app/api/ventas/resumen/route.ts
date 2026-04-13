@@ -193,9 +193,11 @@ export async function GET(req: NextRequest) {
             params
           ),
           pool.query(
-            'SELECT sku, descripcion, MIN(categoria) AS categoria, ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor, ' +
-            'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades ' +
-            `FROM v_ventas WHERE ${where} GROUP BY sku, descripcion ORDER BY ventas_valor DESC LIMIT 10`,
+            'SELECT v.sku, v.descripcion, MIN(v.categoria) AS categoria, ' +
+            'MIN(p.codigo_barras) AS codigo_barras, ' +
+            'ROUND(SUM(v.ventas_valor)::numeric,2) AS ventas_valor, ' +
+            'ROUND(SUM(v.ventas_unidades)::numeric,0) AS ventas_unidades ' +
+            `FROM v_ventas v LEFT JOIN dim_producto p ON p.sku = v.sku WHERE ${where} GROUP BY v.sku, v.descripcion ORDER BY ventas_valor DESC LIMIT 10`,
             params
           ),
           pool.query(
