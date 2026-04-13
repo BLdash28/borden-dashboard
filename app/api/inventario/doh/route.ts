@@ -33,24 +33,23 @@ export async function GET(req: NextRequest) {
     const incluirCO = efectivoPaises.length === 0 || efectivoPaises.includes('CO')
     const incluirRL = efectivoPaises.length === 0 || efectivoPaises.some((p: string) => p !== 'CO')
 
-    // ── 1. Retail Link (Neon) — semana más reciente por pais+item ─────────────
+    // ── 1. Retail Link (Supabase) — semana más reciente por pais+item ───────────
     const rlRows: any[] = []
     if (incluirRL) {
       const paisCondRL = efectivoPaises.filter((p: string) => p !== 'CO')
-      const paisWhereRL = paisCondRL.length > 0
-        ? `AND pais IN (${paisCondRL.map((_: string, i: number) => '$' + (i + 1)).join(',')})`
-        : ''
-      const { rows } = await poolNeon.query(
-        `SELECT DISTINCT ON (pais, item_nbr)
-           pais, item_nbr, item, item_type, item_status,
-           inventario, ordenes, transito, wharehouse,
-           inv_cedi_cajas, inv_cedi_unds, semana
-         FROM inventario_doh_retail
-         WHERE 1=1 ${paisWhereRL}
-         ORDER BY pais, item_nbr, semana DESC`,
-        paisCondRL
-      )
-      rlRows.push(...rows)
+      let q = supabase
+        .from('inventario_doh_retail')
+        .select('pais, item_nbr, item, item_type, item_status, inventario, ordenes, transito, wharehouse, inv_cedi_cajas, inv_cedi_unds, semana')
+        .order('pais').order('item_nbr').order('semana', { ascending: false })
+      if (paisCondRL.length > 0) q = q.in('pais', paisCondRL)
+      const { data: rlData, error: rlErr } = await q.limit(5000)
+      if (rlErr) throw new Error(rlErr.message)
+      // DISTINCT ON (pais, item_nbr) — tomar solo la semana más reciente
+      const seen = new Set<string>()
+      for (const r of (rlData || [])) {
+        const k = `${r.pais}|${r.item_nbr}`
+        if (!seen.has(k)) { seen.add(k); rlRows.push(r) }
+      }
     }
 
     // ── 2. Colombia (Supabase) — período más reciente ─────────────────────────
