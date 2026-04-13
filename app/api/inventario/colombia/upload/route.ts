@@ -12,7 +12,29 @@ const supabase = createClient(
 
 function parseNum(v: string | undefined): number {
   if (!v) return 0
-  return parseFloat(v.replace(/,/g, '').replace(/\s/g, '').trim()) || 0
+  // Quitar símbolo de moneda, espacios, y manejar tanto "1.234,56" como "1,234.56"
+  let s = v.replace(/[^\d.,\-]/g, '').trim()
+  // Si tiene coma Y punto, el último es el decimal
+  if (s.includes(',') && s.includes('.')) {
+    const lastComma = s.lastIndexOf(',')
+    const lastDot   = s.lastIndexOf('.')
+    if (lastComma > lastDot) {
+      // formato europeo: 1.234,56
+      s = s.replace(/\./g, '').replace(',', '.')
+    } else {
+      // formato anglosajón: 1,234.56
+      s = s.replace(/,/g, '')
+    }
+  } else if (s.includes(',') && !s.includes('.')) {
+    // puede ser decimal europeo: "1234,56" → o separador de miles "1,234"
+    const parts = s.split(',')
+    if (parts.length === 2 && parts[1].length <= 2) {
+      s = s.replace(',', '.') // decimal
+    } else {
+      s = s.replace(/,/g, '') // miles
+    }
+  }
+  return parseFloat(s) || 0
 }
 
 export async function POST(req: NextRequest) {
