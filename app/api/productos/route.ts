@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { requireAuth } from '@/lib/api/auth'
 
@@ -37,47 +36,6 @@ export async function GET(req: NextRequest) {
     const { data: rows, error } = await q.limit(2000)
     if (error) throw new Error(error.message)
 
-    // ── SKUs en ventas (Neon) no registrados en catálogo ────────
-    let extraRows: any[] = []
-    const skusEnCatalogo = (rows || []).map((r: any) => r.sku).filter(Boolean)
-
-    if (!categoria && !subcategoria) {
-      try {
-        const notIn = skusEnCatalogo.length > 0
-          ? `AND sku NOT IN (${skusEnCatalogo.map((_: any, i: number) => '$' + (i + 1)).join(',')})`
-          : ''
-        const searchCond = buscar.trim()
-          ? ` AND (LOWER(descripcion) LIKE $${skusEnCatalogo.length + 1} OR LOWER(sku) LIKE $${skusEnCatalogo.length + 1})`
-          : ''
-        const params: any[] = [...skusEnCatalogo]
-        if (buscar.trim()) params.push('%' + buscar.trim().toLowerCase() + '%')
-
-        const { rows: ventaSkus } = await pool.query(
-          `SELECT DISTINCT sku,
-             MAX(descripcion)    AS descripcion,
-             MAX(categoria)      AS categoria,
-             MAX(subcategoria)   AS subcategoria,
-             MAX(codigo_barras)  AS codigo_barras
-           FROM fact_sales_sellout
-           WHERE sku IS NOT NULL ${notIn} ${searchCond}
-           GROUP BY sku
-           ORDER BY MAX(descripcion)
-           LIMIT 2000`,
-          params
-        )
-        extraRows = ventaSkus.map((r: any) => ({
-          id:           null,
-          sku:          r.sku,
-          descripcion:  r.descripcion || r.sku,
-          categoria:    r.categoria   || null,
-          subcategoria: r.subcategoria || null,
-          codigo_barras: r.codigo_barras || null,
-          is_active:    true,
-          _no_catalogo: true,
-        }))
-      } catch { /* fact_sales_sellout puede no estar disponible */ }
-    }
-
     // Categorías únicas para filtros
     const { data: cats } = await supabase
       .from('dim_producto')
@@ -90,7 +48,7 @@ export async function GET(req: NextRequest) {
     )
 
     return NextResponse.json({
-      productos:  [...(rows || []), ...extraRows],
+      productos:  rows || [],
       categorias: catsUniq,
     })
   } catch (err) {
