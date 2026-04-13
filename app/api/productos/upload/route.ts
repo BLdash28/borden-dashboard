@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     const workbook  = XLSX.read(buffer, { type: 'buffer' })
     const sheetName = workbook.SheetNames[0]
     const sheet     = workbook.Sheets[sheetName]
-    const rawRows   = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, any>[]
+    const rawRows   = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false }) as Record<string, any>[]
 
     if (rawRows.length === 0)
       return NextResponse.json({ error: 'Archivo vacío o sin datos' }, { status: 400 })
@@ -140,6 +140,8 @@ export async function POST(req: NextRequest) {
       filas_raw:     rawRows.length,
       errores:       errores,
       columnas_detectadas: { colCat, colSubcat, colBarras, colInterno, colDesc },
+      hojas: workbook.SheetNames,
+      sheet_ref: sheet['!ref'],
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
