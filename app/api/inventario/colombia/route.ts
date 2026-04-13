@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
           .select('codigo_barras, ventas_unidades, ano, mes')
           .eq('pais', 'CO')
           .or(`ano.gt.${cutoffAno},and(ano.eq.${cutoffAno},mes.gte.${cutoffMes})`)
-      ),
+      ).catch(() => []),  // fact_sales_sellout puede no estar en Supabase aún
     ])
 
     // Mapa ventas 90d por EAN
