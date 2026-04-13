@@ -3,13 +3,14 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { Search, RefreshCw, Package, Plus, Pencil, X } from 'lucide-react'
 
 interface Producto {
-  id: number
+  id: number | null
   sku: string
   descripcion: string
   categoria: string | null
   subcategoria: string | null
   codigo_barras: string | null
   is_active: boolean
+  _no_catalogo?: boolean
 }
 
 interface CatRow { categoria: string; subcategoria: string | null }
@@ -354,6 +355,11 @@ export default function ProductosPage() {
                             Descontinuado
                           </span>
                         )}
+                        {p._no_catalogo && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-orange-50 text-orange-500 border border-orange-200 whitespace-nowrap">
+                            Sin registrar
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="py-2.5 pr-4">
@@ -366,12 +372,21 @@ export default function ProductosPage() {
                     <td className="py-2.5 pr-4 text-gray-500 text-xs">{p.subcategoria || '—'}</td>
                     <td className="py-2.5 pr-4 font-mono text-xs text-gray-500">{p.codigo_barras || '—'}</td>
                     <td className="py-2.5">
-                      <button
-                        onClick={() => setModal(p)}
-                        className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-all"
-                        title="Editar producto">
-                        <Pencil size={13} />
-                      </button>
+                      {p._no_catalogo ? (
+                        <button
+                          onClick={() => setModal({ ...p, id: null } as any)}
+                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-orange-50 text-gray-400 hover:text-orange-500 transition-all"
+                          title="Registrar en catálogo">
+                          <Plus size={13} />
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => setModal(p)}
+                          className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-amber-50 text-gray-400 hover:text-amber-600 transition-all"
+                          title="Editar producto">
+                          <Pencil size={13} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

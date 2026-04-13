@@ -1,59 +1,98 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { requireAuth } from '@/lib/api/auth'
+
+export const dynamic = 'force-dynamic'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 export async function GET(req: NextRequest) {
   try {
     await requireAuth()
 
     const { searchParams } = new URL(req.url)
-    const categoria    = searchParams.get('categoria')   || ''
+    const categoria    = searchParams.get('categoria')    || ''
     const subcategoria = searchParams.get('subcategoria') || ''
     const buscar       = searchParams.get('buscar')       || ''
 
-    const conds: string[] = []
-    const vals: any[] = []
+    // ── Catálogo en Supabase ─────────────────────────────────────
+    let q = supabase
+      .from('dim_producto')
+      .select('id, sku, descripcion, categoria, subcategoria, codigo_barras, is_active')
+      .order('categoria').order('subcategoria').order('descripcion')
 
-    if (categoria) {
-      vals.push(categoria)
-      conds.push(`UPPER(categoria) = UPPER($${vals.length})`)
-    }
-    if (subcategoria) {
-      vals.push(subcategoria)
-      conds.push(`UPPER(subcategoria) = UPPER($${vals.length})`)
-    }
+    if (categoria)    q = q.eq('categoria', categoria)
+    if (subcategoria) q = q.eq('subcategoria', subcategoria)
     if (buscar.trim()) {
-      vals.push('%' + buscar.trim().toLowerCase() + '%')
-      conds.push(`(LOWER(descripcion) LIKE $${vals.length} OR LOWER(sku) LIKE $${vals.length} OR LOWER(COALESCE(codigo_barras,'')) LIKE $${vals.length})`)
+      q = q.or(
+        `descripcion.ilike.%${buscar.trim()}%,sku.ilike.%${buscar.trim()}%,codigo_barras.ilike.%${buscar.trim()}%`
+      )
     }
 
-    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : ''
+    const { data: rows, error } = await q.limit(2000)
+    if (error) throw new Error(error.message)
 
-    const { rows } = await pool.query(
-      `SELECT
-         id,
-         sku,
-         descripcion,
-         categoria,
-         subcategoria,
-         codigo_barras,
-         is_active
-       FROM dim_producto
-       ${where}
-       ORDER BY categoria, subcategoria, descripcion`,
-      vals
+    // ── SKUs en ventas (Neon) no registrados en catálogo ────────
+    let extraRows: any[] = []
+    const skusEnCatalogo = (rows || []).map((r: any) => r.sku).filter(Boolean)
+
+    if (!categoria && !subcategoria) {
+      try {
+        const notIn = skusEnCatalogo.length > 0
+          ? `AND sku NOT IN (${skusEnCatalogo.map((_: any, i: number) => '$' + (i + 1)).join(',')})`
+          : ''
+        const searchCond = buscar.trim()
+          ? ` AND (LOWER(descripcion) LIKE $${skusEnCatalogo.length + 1} OR LOWER(sku) LIKE $${skusEnCatalogo.length + 1})`
+          : ''
+        const params: any[] = [...skusEnCatalogo]
+        if (buscar.trim()) params.push('%' + buscar.trim().toLowerCase() + '%')
+
+        const { rows: ventaSkus } = await pool.query(
+          `SELECT DISTINCT sku,
+             MAX(descripcion)    AS descripcion,
+             MAX(categoria)      AS categoria,
+             MAX(subcategoria)   AS subcategoria,
+             MAX(codigo_barras)  AS codigo_barras
+           FROM fact_sales_sellout
+           WHERE sku IS NOT NULL ${notIn} ${searchCond}
+           GROUP BY sku
+           ORDER BY MAX(descripcion)
+           LIMIT 2000`,
+          params
+        )
+        extraRows = ventaSkus.map((r: any) => ({
+          id:           null,
+          sku:          r.sku,
+          descripcion:  r.descripcion || r.sku,
+          categoria:    r.categoria   || null,
+          subcategoria: r.subcategoria || null,
+          codigo_barras: r.codigo_barras || null,
+          is_active:    true,
+          _no_catalogo: true,
+        }))
+      } catch { /* fact_sales_sellout puede no estar disponible */ }
+    }
+
+    // Categorías únicas para filtros
+    const { data: cats } = await supabase
+      .from('dim_producto')
+      .select('categoria, subcategoria')
+      .not('categoria', 'is', null)
+      .order('categoria').order('subcategoria')
+
+    const catsUniq = Array.from(
+      new Map((cats || []).map((c: any) => [`${c.categoria}|${c.subcategoria}`, c])).values()
     )
 
-    // Categorías y subcategorías únicas para los filtros
-    const { rows: cats } = await pool.query(
-      `SELECT DISTINCT categoria, subcategoria
-       FROM dim_producto
-       WHERE categoria IS NOT NULL
-       ORDER BY categoria, subcategoria`
-    )
-
-    return NextResponse.json({ productos: rows, categorias: cats })
+    return NextResponse.json({
+      productos:  [...(rows || []), ...extraRows],
+      categorias: catsUniq,
+    })
   } catch (err) {
     return handleApiError(err)
   }
@@ -62,18 +101,25 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     await requireAuth()
-    const { sku, descripcion, categoria, subcategoria, codigo_barras, presentacion, is_active } = await req.json()
+    const { sku, descripcion, categoria, subcategoria, codigo_barras, is_active } = await req.json()
     if (!sku?.trim() || !descripcion?.trim())
       return NextResponse.json({ error: 'SKU y descripción son requeridos' }, { status: 400 })
 
-    const { rows } = await pool.query(
-      `INSERT INTO dim_producto (sku, descripcion, categoria, subcategoria, codigo_barras, presentacion, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, sku, descripcion, categoria, subcategoria, codigo_barras, is_active`,
-      [sku.trim(), descripcion.trim(), categoria || null, subcategoria || null,
-       codigo_barras || null, presentacion || null, is_active !== false]
-    )
-    return NextResponse.json({ producto: rows[0] }, { status: 201 })
+    const { data, error } = await supabase
+      .from('dim_producto')
+      .insert({
+        sku:           sku.trim(),
+        descripcion:   descripcion.trim(),
+        categoria:     categoria     || null,
+        subcategoria:  subcategoria  || null,
+        codigo_barras: codigo_barras || null,
+        is_active:     is_active !== false,
+      })
+      .select('id, sku, descripcion, categoria, subcategoria, codigo_barras, is_active')
+      .single()
+
+    if (error) throw new Error(error.message)
+    return NextResponse.json({ producto: data }, { status: 201 })
   } catch (err) {
     return handleApiError(err)
   }
@@ -82,35 +128,30 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     await requireAuth()
-    const { id, sku, descripcion, categoria, subcategoria, codigo_barras, presentacion, is_active } = await req.json()
+    const { id, sku, descripcion, categoria, subcategoria, codigo_barras, is_active } = await req.json()
     if (!id) return NextResponse.json({ error: 'id requerido' }, { status: 400 })
 
-    const sets: string[] = []
-    const vals: any[] = []
-    const add = (col: string, v: any) => { vals.push(v); sets.push(`${col} = $${vals.length}`) }
+    const updates: Record<string, any> = {}
+    if (sku         !== undefined) updates.sku           = sku?.trim()          || null
+    if (descripcion !== undefined) updates.descripcion   = descripcion?.trim()  || null
+    if (categoria   !== undefined) updates.categoria     = categoria            || null
+    if (subcategoria !== undefined) updates.subcategoria = subcategoria         || null
+    if (codigo_barras !== undefined) updates.codigo_barras = codigo_barras      || null
+    if (is_active   !== undefined) updates.is_active     = is_active
 
-    if (sku        !== undefined) add('sku',          sku?.trim() || null)
-    if (descripcion !== undefined) add('descripcion',  descripcion?.trim() || null)
-    if (categoria  !== undefined) add('categoria',    categoria || null)
-    if (subcategoria !== undefined) add('subcategoria', subcategoria || null)
-    if (codigo_barras !== undefined) add('codigo_barras', codigo_barras || null)
-    if (presentacion !== undefined) add('presentacion', presentacion || null)
-    if (is_active  !== undefined) add('is_active',    is_active)
-
-    if (sets.length === 0)
+    if (Object.keys(updates).length === 0)
       return NextResponse.json({ error: 'Sin campos a actualizar' }, { status: 400 })
 
-    vals.push(id)
-    const { rows } = await pool.query(
-      `UPDATE dim_producto SET ${sets.join(', ')}
-       WHERE id = $${vals.length}
-       RETURNING id, sku, descripcion, categoria, subcategoria, codigo_barras, is_active`,
-      vals
-    )
-    if (rows.length === 0)
-      return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
+    const { data, error } = await supabase
+      .from('dim_producto')
+      .update(updates)
+      .eq('id', id)
+      .select('id, sku, descripcion, categoria, subcategoria, codigo_barras, is_active')
+      .single()
 
-    return NextResponse.json({ producto: rows[0] })
+    if (error) throw new Error(error.message)
+    if (!data)  return NextResponse.json({ error: 'Producto no encontrado' }, { status: 404 })
+    return NextResponse.json({ producto: data })
   } catch (err) {
     return handleApiError(err)
   }
