@@ -1,22 +1,12 @@
 'use client'
-import { useEffect, useState, useCallback, useRef, useMemo, Fragment } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
-  Package, Store, Globe2, Tag, RefreshCw, AlertTriangle,
-  RotateCcw, X, ArrowUpDown, ArrowUp, ArrowDown,
-  TrendingUp, TrendingDown, ChevronDown, ChevronRight,
+  RefreshCw, AlertTriangle, TrendingUp, Package, ArrowUp, ArrowDown,
+  ArrowUpDown, Search, Download, X, Info,
 } from 'lucide-react'
-import MultiSelect from '@/components/dashboard/MultiSelect'
-import BarChartPro from '@/components/dashboard/BarChartPro'
-import DonutChartPro from '@/components/dashboard/DonutChartPro'
+import * as XLSX from 'xlsx'
 
-const COLORS = ['#c8873a','#2a7a58','#3a6fa8','#6b4fa8','#c0402f','#2a8a8a']
-
-const CAT_COLOR: Record<string, string> = {
-  Quesos:  '#c8873a',
-  Leches:  '#3b82f6',
-  Helados: '#a78bfa',
-}
-
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const COUNTRY_FLAGS: Record<string, string> = {
   CO: '🇨🇴', CR: '🇨🇷', GT: '🇬🇹', HN: '🇭🇳', NI: '🇳🇮', SV: '🇸🇻',
 }
@@ -27,146 +17,197 @@ function fmtN(n: number) {
   return String(Math.round(n))
 }
 
-// ── DOH colores: amarillo=sobrestock, verde=saludable, rojo=riesgo ────────────
-function dohColor(doh: number | null): string {
-  if (doh === null) return 'var(--t3)'
-  if (doh > 60)  return '#f59e0b'   // amarillo — Sobrestock
-  if (doh >= 30) return '#10b981'   // verde    — Saludable
-  return '#ef4444'                   // rojo     — Riesgo quiebre
-}
-function dohBg(doh: number | null): string {
-  if (doh === null) return 'transparent'
-  if (doh > 60)  return '#f59e0b18'
-  if (doh >= 30) return '#10b98118'
-  return '#ef444418'
-}
-function dohLabel(doh: number | null): string {
-  if (doh === null) return 'Sin datos'
-  if (doh > 60)  return 'Sobrestock'
-  if (doh >= 30) return 'Saludable'
-  return 'Riesgo quiebre'
+function fmtDoh(v: number | null): string {
+  if (v === null) return '—'
+  return String(v)
 }
 
-// ── Tooltip DOH ────────────────────────────────────────────────────────────────
-function DohTooltip({ doh, ventas90d, avgDaily, qty }: any) {
-  return (
-    <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 pointer-events-none"
-      style={{ minWidth: 200 }}>
-      <div style={{
-        background: 'var(--surface, rgba(15,15,18,0.97))',
-        border: `1px solid ${dohColor(doh)}50`,
-        borderRadius: 10, padding: '10px 14px',
-        boxShadow: `0 8px 24px rgba(0,0,0,0.5), 0 0 0 1px ${dohColor(doh)}20`,
-        backdropFilter: 'blur(10px)',
-      }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--t3)', letterSpacing: '0.08em', marginBottom: 8 }}>
-          DÍAS DE INVENTARIO
-        </div>
-        <div style={{ fontSize: 22, fontWeight: 800, color: dohColor(doh), marginBottom: 4 }}>
-          {doh !== null ? doh + ' días' : 'N/D'}
-        </div>
-        <div style={{ fontSize: 10, color: dohColor(doh), marginBottom: 10 }}>{dohLabel(doh)}</div>
-        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {[
-            ['Inventario actual', fmtN(qty) + ' uds'],
-            ['Ventas 90 días',    ventas90d !== null ? fmtN(ventas90d) + ' uds' : '—'],
-            ['Promedio / día',    avgDaily  !== null ? avgDaily.toFixed(1) + ' uds' : '—'],
-          ].map(([k, v]) => (
-            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
-              <span style={{ fontSize: 10, color: 'var(--t3)' }}>{k}</span>
-              <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--t2)' }}>{v}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div style={{
-        position: 'absolute', bottom: -5, left: '50%',
-        width: 10, height: 10, background: 'var(--surface, #0f0f12)',
-        border: `1px solid ${dohColor(doh)}50`, borderTop: 'none', borderLeft: 'none',
-        transform: 'translateX(-50%) rotate(45deg)',
-      }} />
-    </div>
-  )
+// ── Semáforo DOH ──────────────────────────────────────────────────────────────
+function dohColor(v: number | null): string {
+  if (v === null) return 'var(--t3)'
+  if (v <= 7)  return '#ef4444'  // 🔴 riesgo quiebre
+  if (v <= 21) return '#f59e0b'  // 🟡 precaución
+  if (v <= 60) return '#10b981'  // 🟢 saludable
+  return '#3b82f6'               // 🔵 sobrestock
+}
+function dohBg(v: number | null): string {
+  if (v === null) return 'transparent'
+  if (v <= 7)  return '#ef444415'
+  if (v <= 21) return '#f59e0b15'
+  if (v <= 60) return '#10b98115'
+  return '#3b82f615'
+}
+function dohLabel(v: number | null): string {
+  if (v === null) return 'Sin ventas 90 días'
+  if (v <= 7)  return 'Riesgo quiebre'
+  if (v <= 21) return 'Precaución'
+  if (v <= 60) return 'Saludable'
+  return 'Sobrestock'
 }
 
-// ── Ventas Promedio Diario (Retail Link) ───────────────────────────────────────
-interface RetailRow {
-  id: number; semana: number; pais: string; item_nbr: string; item: string
-  item_type: string; item_status: string
+// ── Tipos ─────────────────────────────────────────────────────────────────────
+interface DohRow {
+  pais: string; cadena: string
+  item_nbr: string; item: string; item_type: string; item_status: string
   inventario: number; ordenes: number; transito: number; wharehouse: number
   inv_cedi_cajas: number; inv_cedi_unds: number
-  ventas_periodo: number; dias_periodo: number
+  prom_diario: number
+  doh_tiendas: number | null
+  doh_tiendas_t: number | null
+  doh_cedi: number | null
+  doh_cedi_t: number | null
+  semana: number | null
 }
-interface RetailComputed extends RetailRow {
-  prom_diario: number; doh_tiendas: number|null
-  doh_tiendas_t: number|null; doh_cedi: number|null; doh_total: number|null
+
+interface Kpi {
+  riesgo: number; sobrestock: number; vpd_total: number; doh_prom: number | null
 }
-function computeRetail(r: RetailRow, dias: number): RetailComputed {
-  const pd = dias > 0 && r.ventas_periodo > 0 ? r.ventas_periodo / dias : 0
-  const doh = (n: number) => pd > 0 ? n / pd : null
-  return { ...r, prom_diario: pd,
-    doh_tiendas: doh(r.inventario), doh_tiendas_t: doh(r.inventario + r.transito),
-    doh_cedi: doh(r.inv_cedi_unds),
-    doh_total: doh(r.inventario + r.transito + r.wharehouse + r.inv_cedi_unds) }
-}
-function RDohCell({ v }: { v: number|null }) {
-  const c = dohColor(v), bg = dohBg(v)
+
+// ── Celda DOH con semáforo ─────────────────────────────────────────────────────
+function DohCell({ v, tooltip }: { v: number | null; tooltip?: string }) {
+  const [show, setShow] = useState(false)
   return (
-    <td className="px-2 py-1.5 text-right text-xs font-bold tabular-nums"
-        style={{ color: c, background: bg }} title={dohLabel(v)}>
-      {v === null || !isFinite(v) ? '—' : String(Math.round(v))}
+    <td
+      className="px-2 py-1.5 text-right text-[12px] font-bold tabular-nums cursor-default relative"
+      style={{ color: dohColor(v), background: dohBg(v) }}
+      title={tooltip ?? dohLabel(v)}
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+    >
+      {fmtDoh(v)}
+      {show && v === null && (
+        <div className="absolute z-50 bottom-full right-0 mb-1 px-2 py-1 rounded text-[10px] whitespace-nowrap"
+          style={{ background: '#1a1a1a', border: '1px solid var(--border)', color: 'var(--t3)' }}>
+          Sin ventas en los últimos 90 días
+        </div>
+      )}
     </td>
   )
 }
 
-function VentasPromedioDiario() {
-  const [rows,    setRows]    = useState<RetailRow[]>([])
-  const [semanas, setSemanas] = useState<number[]>([])
-  const [paises,  setPaises]  = useState<string[]>([])
-  const [fSem,    setFSem]    = useState('')
-  const [fPais,   setFPais]   = useState('')
-  const [slider,  setSlider]  = useState(91)
-  const [maxDias, setMaxDias] = useState(91)
-  const [semAct,  setSemAct]  = useState<number|null>(null)
-  const [loading, setLoading] = useState(false)
+// ── Cabecera ordenable ─────────────────────────────────────────────────────────
+type SortDir = 'asc' | 'desc' | null
+function SortHeader({ label, field, sort, onSort, tooltip, sticky }: {
+  label: string; field: string
+  sort: { field: string; dir: SortDir }
+  onSort: (f: string) => void
+  tooltip?: string
+  sticky?: boolean
+}) {
+  const active = sort.field === field
+  return (
+    <th
+      className={`px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wide whitespace-nowrap cursor-pointer select-none ${sticky ? 'sticky z-10' : ''}`}
+      style={{ color: active ? 'var(--acc)' : 'rgba(255,255,255,0.4)', background: '#111009' }}
+      onClick={() => onSort(field)}
+      title={tooltip}
+    >
+      <span className="flex items-center justify-end gap-1">
+        {tooltip && <Info size={9} style={{ color: 'rgba(255,255,255,0.25)' }} />}
+        {label}
+        {active && sort.dir === 'asc'  ? <ArrowUp size={10} />  :
+         active && sort.dir === 'desc' ? <ArrowDown size={10} /> :
+         <ArrowUpDown size={10} style={{ opacity: 0.3 }} />}
+      </span>
+    </th>
+  )
+}
+
+// ── Componente principal ──────────────────────────────────────────────────────
+export default function DohPage() {
+  const [rows,      setRows]      = useState<DohRow[]>([])
+  const [kpi,       setKpi]       = useState<Kpi | null>(null)
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
+
+  // Filtros
+  const [paisOpts,   setPaisOpts]   = useState<string[]>([])
+  const [cadenaOpts, setCadenaOpts] = useState<string[]>([])
+  const [catOpts,    setCatOpts]    = useState<string[]>([])
+  const [fPais,      setFPais]      = useState<string[]>([])
+  const [fCadena,    setFCadena]    = useState('')
+  const [fCat,       setFCat]       = useState<string[]>([])
+  const [fQ,         setFQ]         = useState('')
+  const [soloRiesgo, setSoloRiesgo] = useState(false)
+  const [soloStock,  setSoloStock]  = useState(false)
+
+  // Tabla
+  const [sort, setSort] = useState<{ field: string; dir: SortDir }>({ field: 'inventario', dir: 'desc' })
+
+  // Upload Retail Link
   const [showUpload, setShowUpload] = useState(false)
-  const [upPais, setUpPais]   = useState('CR')
-  const [upDias, setUpDias]   = useState('91')
-  const [upSem,  setUpSem]    = useState('')
-  const [upFile, setUpFile]   = useState<File|null>(null)
-  const [upErr,  setUpErr]    = useState('')
-  const [upBusy, setUpBusy]   = useState(false)
+  const [upPais,  setUpPais]  = useState('CR')
+  const [upDias,  setUpDias]  = useState('91')
+  const [upSem,   setUpSem]   = useState('')
+  const [upFile,  setUpFile]  = useState<File | null>(null)
+  const [upErr,   setUpErr]   = useState('')
+  const [upBusy,  setUpBusy]  = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
-    setLoading(true)
+    setLoading(true); setError('')
     try {
       const p = new URLSearchParams()
-      if (fSem)  p.set('semana', fSem)
-      if (fPais) p.set('pais', fPais)
-      const d = await fetch('/api/inventario/doh-retail?' + p).then(r => r.json())
-      setRows(d.rows ?? []); setSemanas(d.semanas ?? []); setPaises(d.paises ?? [])
-      setSemAct(d.semana_actual ?? null)
-      const mx = Math.max(...(d.rows ?? []).map((r: RetailRow) => r.dias_periodo), 91)
-      setMaxDias(mx); setSlider(mx)
-    } finally { setLoading(false) }
-  }, [fSem, fPais])
+      if (fPais.length)   p.set('paises', fPais.join(','))
+      if (fCadena)        p.set('cadena', fCadena)
+      if (fCat.length)    p.set('categorias', fCat.join(','))
+      if (fQ)             p.set('q', fQ)
+      const d = await fetch('/api/inventario/doh?' + p).then(r => r.json())
+      if (d.error) throw new Error(d.error)
+      setRows(d.rows ?? [])
+      setKpi(d.kpi ?? null)
+      setPaisOpts(d.paisOpts ?? [])
+      setCadenaOpts(d.cadenaOpts ?? [])
+      setCatOpts(d.catOpts ?? [])
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [fPais, fCadena, fCat, fQ])
 
   useEffect(() => { load() }, [load])
 
-  const computed = useMemo<RetailComputed[]>(() => rows.map(r => computeRetail(r, slider)), [rows, slider])
+  // Filtros locales + sort
+  const sorted = useMemo(() => {
+    let data = rows.filter(r => {
+      if (soloRiesgo && !(r.doh_tiendas !== null && r.doh_tiendas <= 7)) return false
+      if (soloStock  && !(r.doh_tiendas !== null && r.doh_tiendas >  60)) return false
+      return true
+    })
+    if (!sort.field || !sort.dir) return data
+    return [...data].sort((a, b) => {
+      const va = (a as any)[sort.field] ?? -Infinity
+      const vb = (b as any)[sort.field] ?? -Infinity
+      return sort.dir === 'asc' ? va - vb : vb - va
+    })
+  }, [rows, sort, soloRiesgo, soloStock])
 
+  // Totales
   const totals = useMemo(() => {
-    if (!computed.length) return null
-    const s = (f: keyof RetailRow) => computed.reduce((a, r) => a + (Number(r[f])||0), 0)
-    const tv = s('ventas_periodo'), pd = slider > 0 && tv > 0 ? tv/slider : 0
-    const doh = (n: number) => pd > 0 ? n/pd : null
-    const inv = s('inventario'), tr = s('transito'), wh = s('wharehouse'), cu = s('inv_cedi_unds')
-    return { inventario: inv, ordenes: s('ordenes'), transito: tr, wharehouse: wh,
-      inv_cedi_cajas: s('inv_cedi_cajas'), inv_cedi_unds: cu, prom_diario: pd,
-      doh_tiendas: doh(inv), doh_tiendas_t: doh(inv+tr),
-      doh_cedi: doh(cu), doh_total: doh(inv+tr+wh+cu) }
-  }, [computed, slider])
+    if (!sorted.length) return null
+    const sum = (f: keyof DohRow) => sorted.reduce((s, r) => s + (Number(r[f]) || 0), 0)
+    const vpd = sum('prom_diario')
+    const inv = sum('inventario'), tr = sum('transito'), cu = sum('inv_cedi_unds')
+    const doh_t = vpd > 0 ? Math.ceil(inv / vpd)       : null
+    const doh_tt = vpd > 0 ? Math.ceil((inv+tr) / vpd) : null
+    const doh_c = vpd > 0 ? Math.ceil(cu / vpd)        : null
+    const doh_ct = vpd > 0 ? Math.ceil((cu+tr) / vpd)  : null
+    return {
+      inventario: inv, ordenes: sum('ordenes'), transito: tr,
+      wharehouse: sum('wharehouse'), inv_cedi_cajas: sum('inv_cedi_cajas'),
+      inv_cedi_unds: cu, prom_diario: vpd,
+      doh_tiendas: doh_t, doh_tiendas_t: doh_tt, doh_cedi: doh_c, doh_cedi_t: doh_ct,
+    }
+  }, [sorted])
+
+  const handleSort = (field: string) => {
+    setSort(prev =>
+      prev.field === field
+        ? { field, dir: prev.dir === 'desc' ? 'asc' : prev.dir === 'asc' ? null : 'desc' }
+        : { field, dir: 'desc' }
+    )
+  }
 
   const doUpload = async () => {
     if (!upFile) return setUpErr('Selecciona un CSV')
@@ -178,53 +219,161 @@ function VentasPromedioDiario() {
       const d = await fetch('/api/inventario/doh-retail/upload', { method: 'POST', body: fd }).then(r => r.json())
       if (d.error) throw new Error(d.error)
       setShowUpload(false); setUpFile(null); load()
-    } catch(e: any) { setUpErr(e.message) } finally { setUpBusy(false) }
+    } catch (e: any) { setUpErr(e.message) } finally { setUpBusy(false) }
   }
 
-  const fmt0 = (n: number) => n.toLocaleString('en-US', { maximumFractionDigits: 0 })
-  const fmtD = (v: number|null) => v===null||!isFinite(v) ? '—' : String(Math.round(v))
-  const semLabel = (s: number) => `${Math.floor(s/100)} S${String(s%100).padStart(2,'0')}`
-  const numSem   = Math.round(maxDias/7)
+  const exportExcel = () => {
+    const data = sorted.map(r => ({
+      'País':               r.pais,
+      'Cadena':             r.cadena,
+      'Item Nbr':           r.item_nbr,
+      'Descripción':        r.item,
+      'Tipo':               r.item_type,
+      'Estado':             r.item_status,
+      'Inventario':         r.inventario,
+      'Órdenes':            r.ordenes,
+      'Tránsito':           r.transito,
+      'Warehouse':          r.wharehouse,
+      'CEDI Cajas':         r.inv_cedi_cajas,
+      'CEDI Unds':          r.inv_cedi_unds,
+      'VPD 90d':            r.prom_diario,
+      'DOH Tiendas':        r.doh_tiendas ?? '',
+      'DOH Tiendas+Tráns.': r.doh_tiendas_t ?? '',
+      'DOH CEDI':           r.doh_cedi ?? '',
+      'DOH CEDI+Tráns.':    r.doh_cedi_t ?? '',
+    }))
+    const wb = XLSX.utils.book_new()
+    const ws = XLSX.utils.json_to_sheet(data)
+    XLSX.utils.book_append_sheet(wb, ws, 'DOH')
+    XLSX.writeFile(wb, `DOH_${new Date().toISOString().slice(0,10)}.xlsx`)
+  }
+
+  const s = { field: sort.field, dir: sort.dir }
 
   return (
-    <div className="card p-5 space-y-4">
-      {/* Header */}
-      <div className="flex items-start justify-between flex-wrap gap-2">
-        <div>
-          <h3 className="font-semibold text-[13px]" style={{ color: 'var(--t1)' }}>
-            Ventas Promedio Diario
-          </h3>
-          <p className="text-[11px]" style={{ color: 'var(--t3)' }}>
-            {semAct ? `Semana ${semAct} · ${numSem} semanas · Retail Link` : 'Sin datos — importa un CSV'}
-          </p>
+    <div className="p-4 md:p-6 space-y-5 max-w-[1600px] mx-auto">
+
+      {/* KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[
+          {
+            label: 'SKUs en Riesgo', value: kpi?.riesgo ?? '—',
+            sub: 'DOH ≤ 7 días', icon: AlertTriangle, color: '#ef4444', bg: '#ef444415',
+          },
+          {
+            label: 'SKUs Sobrestock', value: kpi?.sobrestock ?? '—',
+            sub: 'DOH > 60 días', icon: Package, color: '#3b82f6', bg: '#3b82f615',
+          },
+          {
+            label: 'VPD Total', value: kpi?.vpd_total !== undefined ? fmtN(kpi.vpd_total) : '—',
+            sub: 'Unidades / día (90d)', icon: TrendingUp, color: '#10b981', bg: '#10b98115',
+          },
+          {
+            label: 'DOH Promedio', value: kpi?.doh_prom !== null ? (kpi?.doh_prom ?? '—') + ' días' : '—',
+            sub: 'Promedio portafolio', icon: Package, color: '#c8873a', bg: '#c8873a15',
+          },
+        ].map(c => (
+          <div key={c.label} className="rounded-xl p-4 flex items-center gap-3"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: c.bg }}>
+              <c.icon size={18} style={{ color: c.color }} />
+            </div>
+            <div>
+              <div className="text-[22px] font-bold leading-none" style={{ color: c.color }}>{c.value}</div>
+              <div className="text-[11px] font-medium mt-0.5" style={{ color: 'var(--t1)' }}>{c.label}</div>
+              <div className="text-[10px]" style={{ color: 'var(--t3)' }}>{c.sub}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div className="rounded-xl p-4 flex flex-wrap gap-3 items-center"
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+
+        {/* Búsqueda */}
+        <div className="relative flex-1 min-w-[160px]">
+          <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--t3)' }} />
+          <input
+            value={fQ} onChange={e => setFQ(e.target.value)}
+            placeholder="Buscar SKU / descripción…"
+            className="w-full pl-7 pr-3 py-1.5 rounded-lg text-[12px] border"
+            style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--t1)' }}
+          />
         </div>
-        <div className="flex gap-2">
+
+        {/* País */}
+        <select value={fPais[0] || ''} onChange={e => setFPais(e.target.value ? [e.target.value] : [])}
+          className="border rounded-lg px-2 py-1.5 text-[12px]"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--t1)' }}>
+          <option value="">Todos los países</option>
+          {paisOpts.map(p => <option key={p} value={p}>{COUNTRY_FLAGS[p] ?? ''} {p}</option>)}
+        </select>
+
+        {/* Cadena */}
+        <select value={fCadena} onChange={e => setFCadena(e.target.value)}
+          className="border rounded-lg px-2 py-1.5 text-[12px]"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--t1)' }}>
+          <option value="">Todas las cadenas</option>
+          {cadenaOpts.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+
+        {/* Categoría */}
+        <select value={fCat[0] || ''} onChange={e => setFCat(e.target.value ? [e.target.value] : [])}
+          className="border rounded-lg px-2 py-1.5 text-[12px]"
+          style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--t1)' }}>
+          <option value="">Todas las categorías</option>
+          {catOpts.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
+
+        {/* Toggles */}
+        <label className="flex items-center gap-1.5 text-[11px] cursor-pointer select-none"
+          style={{ color: soloRiesgo ? '#ef4444' : 'var(--t3)' }}>
+          <input type="checkbox" checked={soloRiesgo} onChange={e => setSoloRiesgo(e.target.checked)} className="accent-red-500" />
+          Solo riesgo
+        </label>
+        <label className="flex items-center gap-1.5 text-[11px] cursor-pointer select-none"
+          style={{ color: soloStock ? '#3b82f6' : 'var(--t3)' }}>
+          <input type="checkbox" checked={soloStock} onChange={e => setSoloStock(e.target.checked)} className="accent-blue-500" />
+          Solo sobrestock
+        </label>
+
+        <div className="ml-auto flex gap-2">
           <button onClick={load} disabled={loading}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] border transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] border"
             style={{ borderColor: 'var(--border)', color: 'var(--t3)', background: 'var(--bg)' }}>
             <RefreshCw size={11} className={loading ? 'animate-spin' : ''} /> Actualizar
           </button>
+          <button onClick={exportExcel}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] border"
+            style={{ borderColor: 'var(--border)', color: 'var(--t3)', background: 'var(--bg)' }}>
+            <Download size={11} /> Excel
+          </button>
           <button onClick={() => setShowUpload(v => !v)}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium"
             style={{ background: 'var(--acc)', color: '#fff' }}>
             Importar CSV
           </button>
         </div>
       </div>
 
-      {/* Upload inline */}
+      {/* Upload Retail Link */}
       {showUpload && (
         <div className="rounded-xl p-4 space-y-3 text-[12px]"
           style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          <p className="font-semibold" style={{ color: 'var(--t2)' }}>Importar CSV Retail Link</p>
+          <div className="flex items-center justify-between">
+            <p className="font-semibold" style={{ color: 'var(--t2)' }}>Importar CSV Retail Link</p>
+            <button onClick={() => setShowUpload(false)}><X size={14} style={{ color: 'var(--t3)' }} /></button>
+          </div>
           <p className="text-[10px]" style={{ color: 'var(--t3)' }}>
-            Cabecera: Item Nbr, Item, Item Type, Item Status, Inventario, Ordenes, Transito, Wharehouse, Inv CEDI Cajas, Inv CEDI Unds, Ventas
+            Cabecera esperada: Item Nbr, Item, Item Type, Item Status, Inventario, Ordenes, Transito, Wharehouse, Inv CEDI Cajas, Inv CEDI Unds, Ventas
           </p>
           <div className="flex flex-wrap gap-2">
             <select value={upPais} onChange={e => setUpPais(e.target.value)}
               className="border rounded-lg px-2 py-1.5 text-[11px]"
               style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--t1)' }}>
-              {['CR','GT','HN','SV','NI','EC','CO'].map(p => <option key={p} value={p}>{p}</option>)}
+              {['CR','GT','HN','SV','NI','CO'].map(p => <option key={p} value={p}>{p}</option>)}
             </select>
             <input type="number" value={upDias} onChange={e => setUpDias(e.target.value)}
               placeholder="Días (91)" min={7} max={365}
@@ -247,747 +396,191 @@ function VentasPromedioDiario() {
             <button onClick={() => setShowUpload(false)}
               className="flex-1 rounded-lg py-1.5 text-[11px] border"
               style={{ borderColor: 'var(--border)', color: 'var(--t3)' }}>Cancelar</button>
-            <button onClick={doUpload} disabled={upBusy || !upFile}
-              className="flex-1 rounded-lg py-1.5 text-[11px] font-medium disabled:opacity-50"
-              style={{ background: 'var(--acc)', color: '#fff' }}>
-              {upBusy ? 'Subiendo…' : 'Importar'}
+            <button onClick={doUpload} disabled={upBusy}
+              className="flex-1 rounded-lg py-1.5 text-[11px] font-medium"
+              style={{ background: 'var(--acc)', color: '#fff', opacity: upBusy ? 0.6 : 1 }}>
+              {upBusy ? 'Importando…' : 'Importar'}
             </button>
           </div>
         </div>
       )}
 
-      {/* Filtros + slider */}
-      <div className="flex flex-wrap gap-3 items-end">
-        <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>Semana</span>
-          <select value={fSem} onChange={e => setFSem(e.target.value)}
-            className="border rounded-lg px-2.5 py-1.5 text-[11px] min-w-[120px]"
-            style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--t1)' }}>
-            <option value="">Más reciente</option>
-            {semanas.map(s => <option key={s} value={s}>{semLabel(s)}</option>)}
-          </select>
+      {/* Error */}
+      {error && (
+        <div className="rounded-xl p-3 text-[12px] text-red-400 flex items-center gap-2"
+          style={{ background: '#ef444415', border: '1px solid #ef444430' }}>
+          <AlertTriangle size={14} /> {error}
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>País</span>
-          <select value={fPais} onChange={e => setFPais(e.target.value)}
-            className="border rounded-lg px-2.5 py-1.5 text-[11px] min-w-[90px]"
-            style={{ borderColor: 'var(--border)', background: 'var(--bg)', color: 'var(--t1)' }}>
-            <option value="">Todos</option>
-            {paises.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
-        </div>
-        <div className="flex-1 min-w-[200px]">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: 'var(--t3)' }}>
-              Días para Promedio Diario →
-            </span>
-            <span className="text-[13px] font-bold tabular-nums" style={{ color: 'var(--acc)' }}>{slider}d</span>
-          </div>
-          <input type="range" min={7} max={maxDias} step={7} value={slider}
-            onChange={e => setSlider(Number(e.target.value))}
-            className="w-full h-1.5 rounded-full appearance-none cursor-pointer"
-            style={{ accentColor: 'var(--acc)' }} />
-          <div className="flex justify-between text-[10px] mt-0.5" style={{ color: 'var(--t3)' }}>
-            <span>7d</span><span>{maxDias}d ({numSem}sem)</span>
-          </div>
-        </div>
+      )}
+
+      {/* Semáforo legend */}
+      <div className="flex items-center gap-4 text-[10px]" style={{ color: 'var(--t3)' }}>
+        {[
+          { color: '#ef4444', label: '≤ 7 días — Riesgo quiebre' },
+          { color: '#f59e0b', label: '8–21 días — Precaución' },
+          { color: '#10b981', label: '22–60 días — Saludable' },
+          { color: '#3b82f6', label: '> 60 días — Sobrestock' },
+        ].map(s => (
+          <span key={s.label} className="flex items-center gap-1">
+            <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: s.color }} />
+            {s.label}
+          </span>
+        ))}
+        <span className="ml-auto">{sorted.length} SKUs · VPD calculado sobre 90 días</span>
       </div>
 
       {/* Tabla */}
-      {loading ? (
-        <p className="text-[12px] text-center py-6" style={{ color: 'var(--t3)' }}>Cargando…</p>
-      ) : computed.length === 0 ? (
-        <p className="text-[12px] text-center py-6" style={{ color: 'var(--t3)' }}>
-          Sin datos · usa "Importar CSV" para cargar un export de Retail Link
-        </p>
-      ) : (
-        <div className="overflow-x-auto -mx-5 px-5">
-          <table className="w-full text-[11px] whitespace-nowrap border-collapse">
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-[12px]" style={{ minWidth: 1200 }}>
             <thead>
-              <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                {['Item Nbr','Item','T','E','Inv.','Órd.','Trán.','Whouse',
-                  'DOH Tiendas','DOH+Trán.','Prom/día','CEDI Caj.','CEDI Unds.','DOH CEDI','DOH Total'
-                ].map((h,i) => (
-                  <th key={h} className={`px-2 py-2 text-[10px] font-semibold ${
-                    i >= 4 ? 'text-right' : 'text-left'} ${i === 4 ? 'border-l' : ''}`}
-                    style={{ color: 'var(--t3)', borderColor: 'var(--border)' }}>
-                    {h}
-                  </th>
-                ))}
+              <tr style={{ background: '#111009', borderBottom: '1px solid var(--border)' }}>
+                {/* Columnas sticky */}
+                <th className="sticky left-0 z-10 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
+                  style={{ color: 'rgba(255,255,255,0.4)', background: '#111009', minWidth: 90 }}>
+                  País
+                </th>
+                <th className="sticky left-[90px] z-10 px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
+                  style={{ color: 'rgba(255,255,255,0.4)', background: '#111009', minWidth: 100 }}>
+                  Item Nbr
+                </th>
+                <th className="sticky left-[190px] z-10 px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wide"
+                  style={{ color: 'rgba(255,255,255,0.4)', background: '#111009', minWidth: 180 }}>
+                  Descripción
+                </th>
+                <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
+                  style={{ color: 'rgba(255,255,255,0.4)' }}>Tipo</th>
+                <th className="px-2 py-2 text-left text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
+                  style={{ color: 'rgba(255,255,255,0.4)' }}>Est.</th>
+                <SortHeader label="Inventario"  field="inventario"     sort={s} onSort={handleSort} />
+                <SortHeader label="Órdenes"     field="ordenes"        sort={s} onSort={handleSort} />
+                <SortHeader label="Tránsito"    field="transito"       sort={s} onSort={handleSort} />
+                <SortHeader label="Warehouse"   field="wharehouse"     sort={s} onSort={handleSort} />
+                <SortHeader label="DOH Tiendas" field="doh_tiendas"    sort={s} onSort={handleSort}
+                  tooltip="CEILING(Inventario / VPD). VPD = ventas últimos 90 días ÷ 90." />
+                <SortHeader label="DOH T+Trán." field="doh_tiendas_t"  sort={s} onSort={handleSort}
+                  tooltip="CEILING((Inventario + Tránsito) / VPD)" />
+                <SortHeader label="VPD 90d"     field="prom_diario"    sort={s} onSort={handleSort}
+                  tooltip="Ventas Promedio Diario = suma unidades 90 días ÷ 90" />
+                <SortHeader label="CEDI Cajas"  field="inv_cedi_cajas" sort={s} onSort={handleSort} />
+                <SortHeader label="CEDI Unds"   field="inv_cedi_unds"  sort={s} onSort={handleSort} />
+                <SortHeader label="DOH CEDI"    field="doh_cedi"       sort={s} onSort={handleSort}
+                  tooltip="CEILING(CEDI Unds / VPD)" />
+                <SortHeader label="DOH CEDI+T"  field="doh_cedi_t"    sort={s} onSort={handleSort}
+                  tooltip="CEILING((CEDI Unds + Tránsito) / VPD)" />
+                <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wide whitespace-nowrap"
+                  style={{ color: 'rgba(255,255,255,0.4)' }}
+                  title="Dato proporcionado por el proveedor, pendiente de validar metodología.">
+                  DOH Total ⓘ
+                </th>
               </tr>
             </thead>
             <tbody>
-              {/* Totales */}
+              {/* Fila totales */}
               {totals && (
-                <tr className="font-bold" style={{ borderBottom: '2px solid var(--border)', background: 'var(--surface)' }}>
-                  <td className="px-2 py-1.5 text-[11px]" style={{ color: 'var(--t2)' }}>Totales</td>
-                  <td className="px-2 py-1.5 text-[11px]" style={{ color: 'var(--t3)' }}>{computed.length} SKUs</td>
+                <tr style={{ background: 'rgba(200,135,58,0.08)', borderBottom: '2px solid rgba(200,135,58,0.25)' }}>
+                  <td className="sticky left-0 px-3 py-2 text-[11px] font-bold whitespace-nowrap"
+                    style={{ background: 'rgba(200,135,58,0.08)', color: 'var(--acc)' }} colSpan={3}>
+                    TOTALES ({sorted.length} SKUs)
+                  </td>
                   <td /><td />
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t1)' }}>{fmt0(totals.inventario)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t2)' }}>{fmt0(totals.ordenes)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t2)' }}>{fmt0(totals.transito)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t2)' }}>{fmt0(totals.wharehouse)}</td>
-                  <RDohCell v={totals.doh_tiendas} />
-                  <RDohCell v={totals.doh_tiendas_t} />
-                  <td className="px-2 py-1.5 text-right tabular-nums font-bold" style={{ color: 'var(--t1)' }}>{fmtD(totals.prom_diario)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t2)' }}>{fmt0(totals.inv_cedi_cajas)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t2)' }}>{fmt0(totals.inv_cedi_unds)}</td>
-                  <RDohCell v={totals.doh_cedi} />
-                  <RDohCell v={totals.doh_total} />
+                  {[totals.inventario, totals.ordenes, totals.transito, totals.wharehouse].map((v, i) => (
+                    <td key={i} className="px-2 py-2 text-right text-[11px] font-bold tabular-nums"
+                      style={{ color: 'var(--t1)' }}>{fmtN(v)}</td>
+                  ))}
+                  <DohCell v={totals.doh_tiendas} />
+                  <DohCell v={totals.doh_tiendas_t} />
+                  <td className="px-2 py-2 text-right text-[11px] font-bold tabular-nums"
+                    style={{ color: 'var(--t2)' }}>{totals.prom_diario.toFixed(1)}</td>
+                  {[totals.inv_cedi_cajas, totals.inv_cedi_unds].map((v, i) => (
+                    <td key={i} className="px-2 py-2 text-right text-[11px] font-bold tabular-nums"
+                      style={{ color: 'var(--t1)' }}>{fmtN(v)}</td>
+                  ))}
+                  <DohCell v={totals.doh_cedi} />
+                  <DohCell v={totals.doh_cedi_t} />
+                  <td className="px-2 py-2 text-right text-[11px]" style={{ color: 'var(--t3)' }}>—</td>
                 </tr>
               )}
-              {computed.map(r => (
-                <tr key={r.id} style={{ borderBottom: '1px solid var(--border)' }}
-                  className="hover:bg-white/5 transition-colors">
-                  <td className="px-2 py-1.5 font-mono" style={{ color: 'var(--t3)' }}>{r.item_nbr}</td>
-                  <td className="px-2 py-1.5 max-w-[200px] truncate" style={{ color: 'var(--t1)' }} title={r.item}>{r.item}</td>
-                  <td className="px-2 py-1.5 text-center" style={{ color: 'var(--t3)' }}>{r.item_type}</td>
-                  <td className="px-2 py-1.5 text-center">
-                    <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-                      background: r.item_status==='A' ? '#10b98120' : 'var(--surface)',
-                      color: r.item_status==='A' ? '#10b981' : 'var(--t3)' }}>
-                      {r.item_status}
+
+              {loading && (
+                <tr>
+                  <td colSpan={17} className="py-12 text-center text-[12px]" style={{ color: 'var(--t3)' }}>
+                    <RefreshCw size={16} className="animate-spin inline mr-2" />Cargando…
+                  </td>
+                </tr>
+              )}
+
+              {!loading && sorted.length === 0 && (
+                <tr>
+                  <td colSpan={17} className="py-12 text-center text-[12px]" style={{ color: 'var(--t3)' }}>
+                    Sin datos — importa un CSV de Retail Link o carga inventario de Colombia
+                  </td>
+                </tr>
+              )}
+
+              {!loading && sorted.map((r, i) => (
+                <tr key={`${r.pais}-${r.item_nbr}-${i}`}
+                  className="transition-colors hover:bg-white/[0.03]"
+                  style={{ borderBottom: '1px solid var(--border)' }}>
+                  {/* Sticky cols */}
+                  <td className="sticky left-0 px-3 py-1.5 text-[12px] whitespace-nowrap"
+                    style={{ background: '#0d0d0b', color: 'var(--t2)' }}>
+                    <span className="mr-1">{COUNTRY_FLAGS[r.pais] ?? ''}</span>{r.pais}
+                  </td>
+                  <td className="sticky left-[90px] px-2 py-1.5 text-[11px] font-mono whitespace-nowrap"
+                    style={{ background: '#0d0d0b', color: 'var(--t3)' }}>
+                    {r.item_nbr}
+                  </td>
+                  <td className="sticky left-[190px] px-2 py-1.5 text-[12px]"
+                    style={{ background: '#0d0d0b', color: 'var(--t1)', maxWidth: 240 }}>
+                    <span className="block truncate" title={r.item}>{r.item || '—'}</span>
+                  </td>
+
+                  <td className="px-2 py-1.5 text-[11px] whitespace-nowrap" style={{ color: 'var(--t3)' }}>
+                    {r.item_type || '—'}
+                  </td>
+                  <td className="px-2 py-1.5 text-[11px] text-center">
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold"
+                      style={{ background: r.item_status === 'A' ? '#10b98118' : '#ef444418',
+                               color:      r.item_status === 'A' ? '#10b981'   : '#ef4444' }}>
+                      {r.item_status || 'A'}
                     </span>
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t1)' }}>{fmt0(r.inventario)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t3)' }}>{fmt0(r.ordenes)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t3)' }}>{fmt0(r.transito)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t3)' }}>{fmt0(r.wharehouse)}</td>
-                  <RDohCell v={r.doh_tiendas} />
-                  <RDohCell v={r.doh_tiendas_t} />
-                  <td className="px-2 py-1.5 text-right tabular-nums font-semibold" style={{ color: 'var(--t2)' }}>
-                    {r.prom_diario > 0 ? fmtD(r.prom_diario) : <span style={{ color: 'var(--t3)' }}>—</span>}
+
+                  {/* Numéricos */}
+                  {([r.inventario, r.ordenes, r.transito, r.wharehouse] as number[]).map((v, ci) => (
+                    <td key={ci} className="px-2 py-1.5 text-right text-[12px] tabular-nums"
+                      style={{ color: 'var(--t2)' }}>{v > 0 ? fmtN(v) : '—'}</td>
+                  ))}
+
+                  {/* DOH Tiendas */}
+                  <DohCell v={r.doh_tiendas} />
+                  <DohCell v={r.doh_tiendas_t} />
+
+                  {/* VPD */}
+                  <td className="px-2 py-1.5 text-right text-[12px] tabular-nums" style={{ color: 'var(--t3)' }}>
+                    {r.prom_diario > 0 ? r.prom_diario.toFixed(1) : '—'}
                   </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t3)' }}>{fmt0(r.inv_cedi_cajas)}</td>
-                  <td className="px-2 py-1.5 text-right tabular-nums" style={{ color: 'var(--t3)' }}>{fmt0(r.inv_cedi_unds)}</td>
-                  <RDohCell v={r.doh_cedi} />
-                  <RDohCell v={r.doh_total} />
+
+                  {/* CEDI */}
+                  {([r.inv_cedi_cajas, r.inv_cedi_unds] as number[]).map((v, ci) => (
+                    <td key={ci} className="px-2 py-1.5 text-right text-[12px] tabular-nums"
+                      style={{ color: 'var(--t2)' }}>{v > 0 ? fmtN(v) : '—'}</td>
+                  ))}
+
+                  {/* DOH CEDI */}
+                  <DohCell v={r.doh_cedi} />
+                  <DohCell v={r.doh_cedi_t} />
+
+                  {/* DOH Total — pendiente */}
+                  <td className="px-2 py-1.5 text-right text-[11px]" style={{ color: 'var(--t3)' }}
+                    title="Dato proporcionado por el proveedor, pendiente de validar metodología.">—</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      )}
+      </div>
     </div>
-  )
-}
-
-// ── Page ───────────────────────────────────────────────────────────────────────
-export default function DOHPage() {
-  const [fPaises,    setFPaisesRaw]  = useState<string[]>([])
-  const [fCats,      setFCatsRaw]    = useState<string[]>([])
-  const [fSubcats,   setFSubcats]    = useState<string[]>([])
-  const [fCadena,    setFCadena]     = useState('')
-  const [skuSearch,  setSkuSearch]   = useState('')
-
-  const [paisOpts,   setPaisOpts]   = useState<string[]>([])
-  const [catOpts,    setCatOpts]    = useState<string[]>([])
-  const [subcatOpts, setSubcatOpts] = useState<string[]>([])
-  const [cadenaOpts, setCadenaOpts] = useState<string[]>([])
-
-  const [kpi,      setKpi]      = useState<any>(null)
-  const [skus,     setSkus]     = useState<any[]>([])
-  const [byPais,   setByPais]   = useState<any[]>([])
-  const [byCat,    setByCat]    = useState<any[]>([])
-  const [byCadena, setByCadena] = useState<any[]>([])
-  const [loading,  setLoading]  = useState(true)
-  const [error,    setError]    = useState('')
-  const [sortDoh,     setSortDoh]     = useState<'asc' | 'desc' | null>(null)
-  const [hoveredRow,  setHoveredRow]  = useState<number | null>(null)
-  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
-
-  // Filtros desde charts (client-side)
-  const [chartPais, setChartPais] = useState<string | null>(null)
-  const [chartCat,  setChartCat]  = useState<string | null>(null)
-
-  const debounceT = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const cargar = useCallback((paises: string[], cats: string[], sku: string) => {
-    setLoading(true); setError('')
-    const p = new URLSearchParams()
-    if (paises.length) p.set('paises', paises.join(','))
-    if (cats.length)   p.set('categorias', cats.join(','))
-    if (sku.trim())    p.set('sku', sku.trim())
-    fetch('/api/inventario/doh?' + p.toString())
-      .then(r => r.json())
-      .then(j => {
-        if (j.error) { setError(j.error); return }
-        setKpi(j.kpi)
-        setSkus(j.skus || [])
-        setByPais(j.byPais || [])
-        setByCat(j.byCat || [])
-        setByCadena(j.byCadena || [])
-        if (j.paisOpts?.length)   setPaisOpts(j.paisOpts)
-        if (j.catOpts?.length)    setCatOpts(j.catOpts)
-        if (j.subcatOpts?.length) setSubcatOpts(j.subcatOpts)
-        if (j.cadenaOpts?.length) setCadenaOpts(j.cadenaOpts)
-      })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => {
-    if (debounceT.current) clearTimeout(debounceT.current)
-    debounceT.current = setTimeout(() => cargar(fPaises, fCats, skuSearch), 300)
-  }, [fPaises, fCats, skuSearch, cargar])
-
-  // ── Filtros jerárquicos: opciones derivadas del data cargado ─────────────
-  const availableCatOpts = useMemo(() => {
-    if (fPaises.length === 0) return catOpts
-    const cats = new Set(
-      skus.filter(s => s.pais && fPaises.includes(s.pais)).map(s => s.cat).filter(Boolean)
-    )
-    return catOpts.filter(c => cats.has(c))
-  }, [skus, fPaises, catOpts])
-
-  const availableSubcatOpts = useMemo(() => {
-    let filtered = skus
-    if (fPaises.length > 0) filtered = filtered.filter(s => s.pais && fPaises.includes(s.pais))
-    if (fCats.length > 0)   filtered = filtered.filter(s => fCats.includes(s.cat))
-    const subcats = new Set(filtered.map(s => s.subcat).filter(Boolean))
-    return subcatOpts.filter(sc => subcats.has(sc))
-  }, [skus, fPaises, fCats, subcatOpts])
-
-  // Auto-limpiar filtros hijo cuando cambia el padre
-  const setFPaises = (vals: string[]) => {
-    setFPaisesRaw(vals)
-    // Limpiar cats no disponibles en los nuevos países
-    if (vals.length > 0) {
-      const avail = new Set(skus.filter(s => vals.includes(s.pais)).map(s => s.cat))
-      const newCats = fCats.filter(c => avail.has(c))
-      if (newCats.length !== fCats.length) {
-        setFCatsRaw(newCats)
-        setFSubcats([])
-      }
-    }
-  }
-  const setFCats = (vals: string[]) => {
-    setFCatsRaw(vals)
-    // Limpiar subcats no disponibles en las nuevas cats
-    if (vals.length > 0) {
-      const avail = new Set(skus.filter(s => vals.includes(s.cat)).map(s => s.subcat))
-      const newSubs = fSubcats.filter(sc => avail.has(sc))
-      if (newSubs.length !== fSubcats.length) setFSubcats(newSubs)
-    }
-  }
-
-  const limpiar = () => {
-    setFPaisesRaw([]); setFCatsRaw([]); setFSubcats([]); setFCadena(''); setSkuSearch('')
-    setChartPais(null); setChartCat(null)
-  }
-  const hayFiltros = fPaises.length > 0 || fCats.length > 0 || fSubcats.length > 0 ||
-    skuSearch.trim().length > 0 || fCadena !== ''
-
-  const totalCat = byCat.reduce((s, c) => s + c.qty, 0)
-
-  // ── DOH stats ──────────────────────────────────────────────────────────────
-  const dohStats = useMemo(() => {
-    const withDoh = skus.filter(s => s.doh !== null)
-    return {
-      sobrestock: withDoh.filter(s => s.doh > 60).length,
-      saludable:  withDoh.filter(s => s.doh >= 30 && s.doh <= 60).length,
-      riesgo:     withDoh.filter(s => s.doh < 30).length,
-      sinDatos:   skus.filter(s => s.doh === null).length,
-      avgDoh:     withDoh.length > 0
-        ? Math.round(withDoh.reduce((a, s) => a + s.doh, 0) / withDoh.length * 10) / 10
-        : null,
-    }
-  }, [skus])
-
-  // ── Filtered + sorted SKU list ─────────────────────────────────────────────
-  const displaySkus = useMemo(() => {
-    let list = skus
-    if (fCadena)          list = list.filter(s => s.cadenas_list?.includes(fCadena))
-    if (chartPais)        list = list.filter(s => s.pais === chartPais)
-    if (chartCat)         list = list.filter(s => s.cat  === chartCat)
-    if (fSubcats.length > 0) list = list.filter(s => fSubcats.includes(s.subcat))
-    if (sortDoh === 'asc')
-      list = [...list].sort((a, b) => (a.doh ?? Infinity) - (b.doh ?? Infinity))
-    else if (sortDoh === 'desc')
-      list = [...list].sort((a, b) => (b.doh ?? -Infinity) - (a.doh ?? -Infinity))
-    return list
-  }, [skus, fCadena, chartPais, chartCat, fSubcats, sortDoh])
-
-  const toggleSort = () => {
-    setSortDoh(prev => prev === null ? 'desc' : prev === 'desc' ? 'asc' : null)
-  }
-
-  const toggleExpand = (key: string) => {
-    setExpandedRows(prev => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
-  }
-
-  return (
-    <div className="space-y-5">
-
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-[10px] tracking-[2px] uppercase font-medium mb-1" style={{ color: 'var(--t3)' }}>
-            Comercial · Operaciones
-          </p>
-          <h1 className="text-xl font-bold" style={{ color: 'var(--t1)' }}>DOH — Days on Hand</h1>
-          <p className="text-[11px] mt-0.5" style={{ color: 'var(--t3)' }}>
-            Días de inventario disponible · Fórmula: Stock ÷ Promedio ventas diarias (90 días)
-          </p>
-        </div>
-        <button
-          onClick={() => cargar(fPaises, fCats, skuSearch)}
-          className="flex items-center gap-2 px-3 py-2 rounded-lg text-[12px] border transition-all hover:opacity-80"
-          style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--t3)' }}
-        >
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-        </button>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="flex items-center gap-2 text-[13px] rounded-lg px-4 py-3 border"
-          style={{ background: '#ef444415', borderColor: '#ef444440', color: '#f87171' }}>
-          <AlertTriangle size={14} /> {error}
-        </div>
-      )}
-
-      {/* Filtros jerárquicos */}
-      <div className="card p-4">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>
-            Filtros
-            <span className="ml-2 normal-case font-normal" style={{ color: 'var(--t3)', opacity: 0.6 }}>
-              jerárquicos: País → Categoría → Subcategoría
-            </span>
-          </p>
-          {hayFiltros && (
-            <button onClick={limpiar}
-              className="flex items-center gap-1.5 text-[10px] hover:opacity-70 transition-opacity"
-              style={{ color: 'var(--t3)' }}>
-              <RotateCcw size={10} /> Limpiar todo
-            </button>
-          )}
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-          {/* 1. País */}
-          <MultiSelect
-            label="País"
-            options={paisOpts.map(p => ({ value: p, label: `${COUNTRY_FLAGS[p] || ''} ${p}` }))}
-            value={fPaises} onChange={setFPaises}
-            placeholder="Todos los países" selectAllLabel="Todos los países"
-          />
-          {/* 2. Categoría — filtrada por países seleccionados */}
-          <MultiSelect
-            label={fPaises.length > 0 ? `Categoría (${availableCatOpts.length})` : 'Categoría'}
-            options={availableCatOpts.map(c => ({ value: c, label: c }))}
-            value={fCats} onChange={setFCats}
-            placeholder="Todas las categorías" selectAllLabel="Todas las categorías"
-          />
-          {/* 3. Subcategoría — filtrada por categorías seleccionadas */}
-          <MultiSelect
-            label={fCats.length > 0 ? `Subcategoría (${availableSubcatOpts.length})` : 'Subcategoría'}
-            options={availableSubcatOpts.map(sc => ({ value: sc, label: sc }))}
-            value={fSubcats} onChange={setFSubcats}
-            placeholder="Todas las subcategorías" selectAllLabel="Todas"
-          />
-          {/* 4. Retailer / Cadena */}
-          <div>
-            <div className="text-[10px] uppercase tracking-widest font-medium mb-1.5" style={{ color: 'var(--t3)' }}>
-              Retailer / Cadena
-            </div>
-            <select
-              value={fCadena}
-              onChange={e => setFCadena(e.target.value)}
-              className="w-full text-[12px] px-3 py-2 rounded-lg border outline-none transition-all"
-              style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--t1)' }}
-              onFocus={e => (e.target.style.borderColor = 'var(--acc)')}
-              onBlur={e => (e.target.style.borderColor = 'var(--border)')}
-            >
-              <option value="">Todos los retailers</option>
-              {cadenaOpts.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
-          {/* 5. SKU / Descripción */}
-          <div>
-            <div className="text-[10px] uppercase tracking-widest font-medium mb-1.5" style={{ color: 'var(--t3)' }}>
-              SKU / Descripción
-            </div>
-            <input
-              value={skuSearch}
-              onChange={e => setSkuSearch(e.target.value)}
-              placeholder="Buscar producto..."
-              className="w-full text-[12px] px-3 py-2 rounded-lg border outline-none transition-all"
-              style={{ background: 'var(--bg)', borderColor: 'var(--border)', color: 'var(--t1)' }}
-              onFocus={e => (e.target.style.borderColor = 'var(--acc)')}
-              onBlur={e => (e.target.style.borderColor = 'var(--border)')}
-            />
-          </div>
-        </div>
-        {hayFiltros && (
-          <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-            {fPaises.map(p => (
-              <Chip key={p} label={`${COUNTRY_FLAGS[p] || ''} ${p}`} onRemove={() => setFPaises(fPaises.filter(x => x !== p))} />
-            ))}
-            {fCats.map(c => (
-              <Chip key={c} label={c} onRemove={() => setFCats(fCats.filter(x => x !== c))} />
-            ))}
-            {fSubcats.map(sc => (
-              <Chip key={sc} label={sc} onRemove={() => setFSubcats(fSubcats.filter(x => x !== sc))} />
-            ))}
-            {fCadena && <Chip label={fCadena} onRemove={() => setFCadena('')} />}
-            {skuSearch.trim() && <Chip label={`"${skuSearch}"`} onRemove={() => setSkuSearch('')} />}
-          </div>
-        )}
-      </div>
-
-      {/* KPIs inventario */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: 'Unidades en Stock',  value: loading ? '...' : fmtN(kpi?.totalQty   || 0), sub: 'total inventario',   icon: <Package size={14} />, color: '#c8873a' },
-          { label: 'Puntos de Venta',    value: loading ? '...' : fmtN(kpi?.totalPdvs  || 0), sub: 'tiendas con stock',  icon: <Store size={14} />,   color: '#34d399' },
-          { label: 'SKUs activos',       value: loading ? '...' : fmtN(kpi?.totalSkus  || 0), sub: 'referencias únicas', icon: <Tag size={14} />,     color: '#93c5fd' },
-          { label: 'Países',             value: loading ? '...' : fmtN(kpi?.totalPaises|| 0), sub: 'con inventario',     icon: <Globe2 size={14} />,  color: '#a78bfa' },
-        ].map((k, i) => (
-          <div key={i} className="card p-4 relative overflow-hidden">
-            <div className="absolute top-0 left-0 bottom-0 w-0.5" style={{ background: k.color }} />
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>{k.label}</p>
-              <span style={{ color: k.color }}>{k.icon}</span>
-            </div>
-            <p className="text-2xl font-bold" style={{ color: 'var(--t1)' }}>{k.value}</p>
-            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>{k.sub}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* DOH KPIs — colores corregidos */}
-      {!loading && skus.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="card p-4 relative overflow-hidden">
-            <div className="absolute top-0 left-0 bottom-0 w-0.5" style={{ background: '#c8873a' }} />
-            <p className="text-[9px] tracking-[2px] uppercase font-semibold mb-2" style={{ color: 'var(--t3)' }}>DOH Promedio</p>
-            <p className="text-2xl font-bold" style={{ color: dohStats.avgDoh !== null ? dohColor(dohStats.avgDoh) : 'var(--t3)' }}>
-              {dohStats.avgDoh !== null ? dohStats.avgDoh + 'd' : '—'}
-            </p>
-            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>
-              {dohStats.avgDoh !== null ? dohLabel(dohStats.avgDoh) : 'sin datos de venta'}
-            </p>
-          </div>
-          {/* Sobrestock — amarillo */}
-          <div className="card p-4 relative overflow-hidden">
-            <div className="absolute top-0 left-0 bottom-0 w-0.5" style={{ background: '#f59e0b' }} />
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>Sobrestock</p>
-              <TrendingUp size={14} style={{ color: '#f59e0b' }} />
-            </div>
-            <p className="text-2xl font-bold" style={{ color: '#f59e0b' }}>{dohStats.sobrestock}</p>
-            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>SKUs con DOH &gt; 60 días</p>
-          </div>
-          {/* Saludable — verde */}
-          <div className="card p-4 relative overflow-hidden">
-            <div className="absolute top-0 left-0 bottom-0 w-0.5" style={{ background: '#10b981' }} />
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>Saludable</p>
-              <span style={{ color: '#10b981', fontSize: 14 }}>●</span>
-            </div>
-            <p className="text-2xl font-bold" style={{ color: '#10b981' }}>{dohStats.saludable}</p>
-            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>SKUs con DOH 30–60 días</p>
-          </div>
-          {/* Riesgo — rojo */}
-          <div className="card p-4 relative overflow-hidden">
-            <div className="absolute top-0 left-0 bottom-0 w-0.5" style={{ background: '#ef4444' }} />
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>Riesgo Quiebre</p>
-              <TrendingDown size={14} style={{ color: '#ef4444' }} />
-            </div>
-            <p className="text-2xl font-bold" style={{ color: '#ef4444' }}>{dohStats.riesgo}</p>
-            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>SKUs con DOH &lt; 30 días</p>
-          </div>
-        </div>
-      )}
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="card p-5">
-          <div className="flex items-center justify-between mb-0.5">
-            <h3 className="font-semibold text-[13px]" style={{ color: 'var(--t1)' }}>Inventario por País</h3>
-            {chartPais && (
-              <button onClick={() => setChartPais(null)}
-                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full transition-opacity hover:opacity-70"
-                style={{ background: '#c8873a20', color: '#c8873a', border: '1px solid #c8873a40' }}>
-                {chartPais} <X size={8} />
-              </button>
-            )}
-          </div>
-          <p className="text-[11px] mb-4" style={{ color: 'var(--t3)' }}>
-            Unidades en stock · <span style={{ color: 'var(--acc)' }}>click para filtrar tabla</span>
-          </p>
-          {loading
-            ? <div className="h-[220px] animate-pulse rounded-lg" style={{ background: 'var(--border)' }} />
-            : byPais.length === 0 ? <EmptyChart />
-            : <BarChartPro data={byPais} dataKey="qty" nameKey="pais" layout="vertical"
-                height={220} formatter={fmtN} tooltipUnit="uds" showLabels yWidth={32}
-                onSelect={setChartPais} />
-          }
-        </div>
-        <div className="card p-5">
-          <div className="flex items-center justify-between mb-0.5">
-            <h3 className="font-semibold text-[13px]" style={{ color: 'var(--t1)' }}>Mix por Categoría</h3>
-            {chartCat && (
-              <button onClick={() => setChartCat(null)}
-                className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full transition-opacity hover:opacity-70"
-                style={{ background: '#c8873a20', color: '#c8873a', border: '1px solid #c8873a40' }}>
-                {chartCat} <X size={8} />
-              </button>
-            )}
-          </div>
-          <p className="text-[11px] mb-4" style={{ color: 'var(--t3)' }}>
-            % unidades · <span style={{ color: 'var(--acc)' }}>click para filtrar tabla</span>
-          </p>
-          {loading
-            ? <div className="h-[240px] animate-pulse rounded-lg" style={{ background: 'var(--border)' }} />
-            : byCat.length === 0 ? <EmptyChart />
-            : <DonutChartPro data={byCat} total={totalCat} colorMap={CAT_COLOR} fallbackColors={COLORS} height={240}
-                onSelect={setChartCat} />
-          }
-        </div>
-      </div>
-
-      {!loading && byCadena.length > 0 && (
-        <div className="card p-5">
-          <h3 className="font-semibold text-[13px] mb-0.5" style={{ color: 'var(--t1)' }}>Top 10 Retailers</h3>
-          <p className="text-[11px] mb-4" style={{ color: 'var(--t3)' }}>Unidades en inventario por cadena</p>
-          <BarChartPro data={byCadena} dataKey="qty" nameKey="cadena" colors="#c8873a"
-            height={200} formatter={fmtN} tooltipUnit="uds" xAngle={-30} yWidth={50} />
-        </div>
-      )}
-
-      {/* ── Ventas Promedio Diario (Retail Link) ───────────────────────────────── */}
-      <VentasPromedioDiario />
-
-      {/* ── DOH Table ──────────────────────────────────────────────────────────── */}
-      <div className="card p-5">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <div>
-            <h3 className="font-semibold text-[13px]" style={{ color: 'var(--t1)' }}>
-              DOH por SKU
-            </h3>
-            <p className="text-[11px]" style={{ color: 'var(--t3)' }}>
-              {loading ? '...' : `${displaySkus.filter(s => !s.noStock).length} con stock`}
-              {!loading && displaySkus.some(s => s.noStock) && (
-                <span style={{ color: 'var(--t3)', opacity: 0.6 }}>
-                  {' + '}{displaySkus.filter(s => s.noStock).length} sin stock (catálogo)
-                </span>
-              )}
-              {chartPais && <span style={{ color: 'var(--acc)' }}> · País: {chartPais}</span>}
-              {chartCat  && <span style={{ color: 'var(--acc)' }}> · Cat: {chartCat}</span>}
-              {' · '}Stock ÷ Prom ventas diarias 90d
-            </p>
-          </div>
-          {/* Leyenda — colores corregidos */}
-          <div className="flex items-center gap-3 flex-wrap">
-            {[
-              { color: '#f59e0b', label: 'Sobrestock >60d' },
-              { color: '#10b981', label: 'Saludable 30-60d' },
-              { color: '#ef4444', label: 'Riesgo <30d' },
-            ].map(({ color, label }) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: color }} />
-                <span className="text-[10px]" style={{ color: 'var(--t3)' }}>{label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {loading
-          ? <div className="space-y-2">{Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="h-8 rounded animate-pulse" style={{ background: 'var(--border)' }} />
-            ))}</div>
-          : displaySkus.length === 0
-            ? <p className="text-[12px] text-center py-8" style={{ color: 'var(--t3)' }}>
-                Sin datos para los filtros seleccionados
-              </p>
-            : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-[11px]" style={{ minWidth: 720 }}>
-                  <thead>
-                    <tr className="border-b text-[9px] uppercase tracking-widest"
-                      style={{ borderColor: 'var(--border)', color: 'var(--t3)' }}>
-                      <th className="text-left pb-2 pr-2 w-6"></th>
-                      <th className="text-left pb-2 pr-3 w-7">#</th>
-                      <th className="text-left pb-2 pr-3">País</th>
-                      <th className="text-left pb-2 pr-3">Cód. Barras</th>
-                      <th className="text-left pb-2 pr-3">Producto</th>
-                      <th className="text-left pb-2 pr-3">Subcategoría</th>
-                      <th className="text-left pb-2 pr-3">Retailer</th>
-                      <th className="text-right pb-2 pr-3">Inventario</th>
-                      <th className="text-right pb-2 pr-3">Ventas 90d</th>
-                      <th className="text-right pb-2 pr-3">Prom / día</th>
-                      {/* Sortable DOH column */}
-                      <th className="text-right pb-2 cursor-pointer select-none" onClick={toggleSort}>
-                        <div className="flex items-center justify-end gap-1 hover:opacity-70 transition-opacity">
-                          DOH
-                          {sortDoh === null   && <ArrowUpDown size={9} />}
-                          {sortDoh === 'desc' && <ArrowDown   size={9} />}
-                          {sortDoh === 'asc'  && <ArrowUp     size={9} />}
-                        </div>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {displaySkus.map((s: any, i: number) => {
-                      const rowKey = `${s.sku}|${s.pais}`
-                      const isExpanded = expandedRows.has(rowKey)
-                      const hasCadenas = s.cadenas_detail && s.cadenas_detail.length > 1
-                      const isNoStock  = s.noStock === true
-
-                      return (
-                        <Fragment key={rowKey}>
-                          <tr
-                            onMouseEnter={() => setHoveredRow(i)}
-                            onMouseLeave={() => setHoveredRow(null)}
-                            className="border-b transition-colors"
-                            style={{
-                              borderColor: 'var(--border)',
-                              background: hoveredRow === i ? 'var(--surface)' : 'transparent',
-                              opacity: isNoStock ? 0.5 : 1,
-                            }}>
-                            {/* Expand toggle */}
-                            <td className="py-2 pr-2">
-                              {hasCadenas && (
-                                <button
-                                  onClick={() => toggleExpand(rowKey)}
-                                  className="flex items-center justify-center w-4 h-4 rounded transition-opacity hover:opacity-70"
-                                  style={{ color: 'var(--t3)' }}>
-                                  {isExpanded
-                                    ? <ChevronDown size={10} />
-                                    : <ChevronRight size={10} />
-                                  }
-                                </button>
-                              )}
-                            </td>
-                            <td className="py-2 pr-3" style={{ color: 'var(--t3)' }}>{i + 1}</td>
-                            <td className="py-2 pr-3" style={{ color: 'var(--t2)' }}>
-                              {s.pais
-                                ? <span className="whitespace-nowrap">{COUNTRY_FLAGS[s.pais] || ''} {s.pais}</span>
-                                : <span style={{ color: 'var(--t3)', fontStyle: 'italic' }}>—</span>
-                              }
-                            </td>
-                            {/* Código de barras — click drill-down */}
-                            <td className="py-2 pr-3">
-                              <button
-                                onClick={() => setSkuSearch(s.barcode || s.sku)}
-                                className="font-mono text-[10px] hover:underline transition-colors"
-                                style={{ color: 'var(--acc)' }}
-                                title="Click para filtrar por este producto">
-                                {s.barcode || s.sku || '—'}
-                              </button>
-                            </td>
-                            <td className="py-2 pr-3 max-w-[180px] truncate font-medium"
-                              style={{ color: isNoStock ? 'var(--t3)' : 'var(--t1)' }} title={s.desc}>
-                              {s.desc}
-                            </td>
-                            <td className="py-2 pr-3">
-                              <span className="text-[9px]" style={{ color: 'var(--t3)' }}>{s.subcat || '—'}</span>
-                            </td>
-                            <td className="py-2 pr-3">
-                              {s.cadena_principal
-                                ? <span className="text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap"
-                                    style={{ background: 'var(--border)', color: 'var(--t2)' }}>
-                                    {s.cadena_principal}
-                                    {hasCadenas && (
-                                      <span style={{ color: 'var(--t3)', marginLeft: 4 }}>+{s.cadenas_detail.length - 1}</span>
-                                    )}
-                                  </span>
-                                : <span style={{ color: 'var(--t3)' }}>—</span>
-                              }
-                            </td>
-                            <td className="py-2 pr-3 text-right font-bold" style={{ color: isNoStock ? 'var(--t3)' : 'var(--t1)' }}>
-                              {isNoStock ? <span style={{ color: 'var(--t3)', fontStyle: 'italic' }}>sin stock</span> : fmtN(s.qty)}
-                            </td>
-                            <td className="py-2 pr-3 text-right" style={{ color: 'var(--t2)' }}>
-                              {s.ventas90d !== null ? fmtN(s.ventas90d) : <span style={{ color: 'var(--t3)' }}>—</span>}
-                            </td>
-                            <td className="py-2 pr-3 text-right" style={{ color: 'var(--t2)' }}>
-                              {s.avg_daily !== null ? s.avg_daily.toFixed(1) : <span style={{ color: 'var(--t3)' }}>—</span>}
-                            </td>
-                            {/* DOH badge */}
-                            <td className="py-2 text-right">
-                              <span
-                                className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold"
-                                style={{
-                                  background: dohBg(s.doh),
-                                  color: dohColor(s.doh),
-                                  border: `1px solid ${dohColor(s.doh)}30`,
-                                  minWidth: 52,
-                                  textAlign: 'center',
-                                }}
-                                title={dohLabel(s.doh)}>
-                                {s.doh !== null ? s.doh + 'd' : '—'}
-                              </span>
-                            </td>
-                          </tr>
-
-                          {/* Expanded: desglose por cadena */}
-                          {isExpanded && hasCadenas && s.cadenas_detail.map((cd: any, ci: number) => (
-                            <tr key={`${rowKey}-cadena-${ci}`}
-                              className="border-b"
-                              style={{
-                                borderColor: 'var(--border)',
-                                background: `${dohBg(s.doh)}`,
-                              }}>
-                              <td colSpan={2} />
-                              <td className="py-1.5 pr-3">
-                                <span style={{ color: 'var(--t3)', fontSize: 9 }}>└</span>
-                              </td>
-                              <td colSpan={3} className="py-1.5 pr-3">
-                                <span className="text-[10px] px-2 py-0.5 rounded-full"
-                                  style={{ background: 'var(--border)', color: 'var(--t2)' }}>
-                                  {cd.cadena}
-                                </span>
-                              </td>
-                              <td />
-                              <td className="py-1.5 pr-3 text-right text-[10px]" style={{ color: 'var(--t2)' }}>
-                                {fmtN(cd.qty)}
-                                <span className="ml-1" style={{ color: 'var(--t3)', fontSize: 9 }}>
-                                  ({s.qty > 0 ? Math.round(cd.qty / s.qty * 100) : 0}%)
-                                </span>
-                              </td>
-                              <td colSpan={3} />
-                            </tr>
-                          ))}
-                        </Fragment>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )
-        }
-      </div>
-
-    </div>
-  )
-}
-
-// ── Sub-components ────────────────────────────────────────────────────────────
-function EmptyChart() {
-  return (
-    <div className="h-[220px] flex items-center justify-center text-[12px]" style={{ color: 'var(--t3)' }}>
-      Sin datos para los filtros seleccionados
-    </div>
-  )
-}
-
-function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
-  return (
-    <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
-      style={{ background: '#c8873a20', color: '#c8873a', border: '1px solid #c8873a35' }}>
-      {label}
-      <button onClick={onRemove} className="hover:opacity-70 ml-0.5 flex-shrink-0">
-        <X size={9} />
-      </button>
-    </span>
   )
 }
