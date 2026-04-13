@@ -57,11 +57,27 @@ function VarBadge({ v }: { v: number | null }) {
 
 function ModalTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
+  const precio  = payload.find((p: any) => p.dataKey === 'precio')
+  const variac  = payload.find((p: any) => p.dataKey === 'variacion')
   return (
-    <div className="rounded-xl px-3 py-2.5 shadow-2xl min-w-[130px]"
+    <div className="rounded-xl px-3 py-2.5 shadow-2xl min-w-[150px]"
       style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-      <p className="text-[10px] uppercase tracking-widest mb-1.5" style={{ color: 'var(--t3)' }}>{label}</p>
-      {payload.map((p: any, i: number) => (
+      <p className="text-[10px] uppercase tracking-widest mb-2" style={{ color: 'var(--t3)' }}>{label}</p>
+      {precio && (
+        <div className="flex items-center justify-between gap-4 mb-1">
+          <span className="text-[10px]" style={{ color: 'var(--t3)' }}>Precio prom.</span>
+          <span className="text-[13px] font-bold" style={{ color: AMBER }}>{fmtP(precio.value)}</span>
+        </div>
+      )}
+      {variac && variac.value !== null && variac.value !== undefined && (
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-[10px]" style={{ color: 'var(--t3)' }}>Variación</span>
+          <span className="text-[13px] font-bold" style={{ color: variac.value >= 0 ? '#10b981' : '#ef4444' }}>
+            {variac.value >= 0 ? '+' : ''}{variac.value.toFixed(1)}%
+          </span>
+        </div>
+      )}
+      {!precio && !variac && payload.map((p: any, i: number) => (
         <div key={i} className="flex items-center justify-between gap-3">
           <span className="text-[10px]" style={{ color: 'var(--t3)' }}>{p.name}</span>
           <span className="text-[13px] font-bold" style={{ color: p.fill ?? p.color ?? AMBER }}>
@@ -923,20 +939,28 @@ export default function ResumenPage() {
               {/* Content */}
               <div className="flex-1 overflow-auto px-6 py-4">
                 {modalTab === 'chart' ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <LineChart data={metrics.evoData} margin={{ top: 4, right: 16, left: 4, bottom: metrics.evoData.length > 10 ? 56 : 4 }}>
+                  <ResponsiveContainer width="100%" height={320}>
+                    <ComposedChart data={metrics.evoData} margin={{ top: 8, right: 48, left: 4, bottom: metrics.evoData.length > 10 ? 56 : 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                       <XAxis dataKey="label" tick={{ fontSize: 10, fill: 'var(--t3)' }}
                         angle={metrics.evoData.length > 10 ? -40 : 0}
                         textAnchor={metrics.evoData.length > 10 ? 'end' : 'middle'}
                         height={metrics.evoData.length > 10 ? 56 : 30}
                         interval={Math.max(Math.ceil(metrics.evoData.length / 12) - 1, 0)} />
-                      <YAxis tick={{ fontSize: 10, fill: 'var(--t3)' }} tickFormatter={fmtP} width={64} />
+                      <YAxis yAxisId="precio" tick={{ fontSize: 10, fill: 'var(--t3)' }} tickFormatter={fmtP} width={64} />
+                      <YAxis yAxisId="var" orientation="right" tick={{ fontSize: 10, fill: 'var(--t3)' }}
+                        tickFormatter={(v: number) => v.toFixed(0) + '%'} width={44} />
                       <Tooltip content={<ModalTooltip />} />
-                      <Line dataKey="precio" name="Precio" stroke={AMBER} strokeWidth={2.5}
+                      <ReferenceLine yAxisId="var" y={0} stroke="var(--border)" strokeWidth={1} />
+                      <Bar yAxisId="var" dataKey="variacion" name="Variación" maxBarSize={28} radius={[3,3,0,0]}>
+                        {metrics.evoData.map((row, i) => (
+                          <Cell key={i} fill={row.variacion === null ? 'transparent' : row.variacion >= 0 ? '#10b981' : '#ef4444'} opacity={0.7} />
+                        ))}
+                      </Bar>
+                      <Line yAxisId="precio" dataKey="precio" name="Precio" stroke={AMBER} strokeWidth={2.5}
                         dot={{ r: 3, fill: AMBER }} activeDot={{ r: 6, fill: AMBER }}
                         type="monotone" animationDuration={600} />
-                    </LineChart>
+                    </ComposedChart>
                   </ResponsiveContainer>
                 ) : (
                   <div className="overflow-x-auto">
