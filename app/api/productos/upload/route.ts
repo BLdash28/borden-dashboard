@@ -75,57 +75,59 @@ export async function POST(req: NextRequest) {
         cabecera: Object.keys(sampleRow).join(' | '),
       }, { status: 400 })
 
-    const toUpsert: Record<string, any>[] = []
+    const toInsert: Record<string, any>[] = []
     const errores: string[] = []
 
     for (let i = 0; i < rawRows.length; i++) {
-      const r     = rawRows[i]
-      const sku   = norm(colInterno ? r[colInterno] : '')
-      const desc  = norm(colDesc    ? r[colDesc]    : '')
+      const r       = rawRows[i]
+      const barras  = norm(colBarras  ? r[colBarras]  : '')
+      const interno = norm(colInterno ? r[colInterno] : '')
+      const desc    = norm(colDesc    ? r[colDesc]    : '')
 
-      if (!sku && !desc) continue
+      // Fila vacía — saltar
+      if (!barras && !interno && !desc) continue
 
-      const row: Record<string, any> = {
-        sku:           sku   || desc.slice(0, 50),
-        descripcion:   desc  || sku,
-        categoria:     norm(colCat    ? r[colCat]    : '') || null,
-        subcategoria:  norm(colSubcat ? r[colSubcat] : '') || null,
-        codigo_barras: norm(colBarras ? r[colBarras] : '') || null,
-        is_active:     true,
-      }
+      // codigo_barras es la llave maestra; si no hay, usar cod_interno como fallback
+      const codigoBarras = barras || interno || null
 
-      // Limpiar strings vacíos → null
-      for (const k of Object.keys(row)) {
-        if (row[k] === '') row[k] = null
-      }
-
-      if (!row.sku) {
-        errores.push(`Fila ${i + 2}: sin SKU — omitida`)
+      if (!codigoBarras) {
+        errores.push(`Fila ${i + 2}: sin código de barras ni código interno — omitida`)
         continue
       }
 
-      toUpsert.push(row)
+      const row: Record<string, any> = {
+        sku:           interno || barras,   // cod_interno preferido; barras como fallback
+        descripcion:   desc    || interno || barras,
+        categoria:     norm(colCat    ? r[colCat]    : '') || null,
+        subcategoria:  norm(colSubcat ? r[colSubcat] : '') || null,
+        codigo_barras: codigoBarras,
+        is_active:     true,
+      }
+
+      toInsert.push(row)
     }
 
-    if (toUpsert.length === 0)
+    if (toInsert.length === 0)
       return NextResponse.json({ error: 'No se encontraron filas válidas', errores }, { status: 400 })
 
-    // Deduplicar por SKU — mantener último registro si hay duplicados en el archivo
+    // Deduplicar por codigo_barras (el que manda)
     const dedupMap: Record<string, Record<string, any>> = {}
-    for (const row of toUpsert) dedupMap[row.sku] = row
+    for (const row of toInsert) {
+      const key = row.codigo_barras || row.sku
+      dedupMap[key] = row
+    }
     const deduped = Object.values(dedupMap)
 
-    // Upsert por SKU (actualiza si ya existe, inserta si no)
-    const BATCH   = 200
-    let insertados = 0
-    let actualizados = 0
+    const BATCH     = 200
+    let insertados  = 0
 
     for (let b = 0; b < deduped.length; b += BATCH) {
       const batch = deduped.slice(b, b + BATCH)
-      const { data, error } = await supabase
-        .from('dim_producto')
-        .upsert(batch, { onConflict: 'sku', ignoreDuplicates: false })
-        .select('id')
+
+      // Si se truncó primero, INSERT simple. Si no, upsert por sku
+      const { data, error } = truncate
+        ? await supabase.from('dim_producto').insert(batch).select('id')
+        : await supabase.from('dim_producto').upsert(batch, { onConflict: 'sku', ignoreDuplicates: false }).select('id')
 
       if (error) throw new Error(error.message)
       insertados += data?.length ?? batch.length
@@ -134,7 +136,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       ok:          true,
       insertados,
-      actualizados,
       total_filas: deduped.length,
       errores:     errores.slice(0, 10),
       columnas_detectadas: { colCat, colSubcat, colBarras, colInterno, colDesc },
