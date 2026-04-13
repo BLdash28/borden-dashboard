@@ -14,12 +14,14 @@ function eanNorm(raw: string): string | null {
   return s.length >= 13 ? s.slice(0, 13) : s.padStart(13, '0')
 }
 
-async function fetchAll(query: any): Promise<any[]> {
+// fetchAll usando factory fn para crear query fresco en cada página
+// (evita el bug de postgrest-js v2 donde reutilizar el builder da resultados vacíos)
+async function fetchAll(factory: () => any): Promise<any[]> {
   const PAGE = 1000
   let all: any[] = []
   let from = 0
   while (true) {
-    const { data, error } = await query.range(from, from + PAGE - 1)
+    const { data, error } = await factory().range(from, from + PAGE - 1)
     if (error) throw new Error(error.message)
     if (!data || data.length === 0) break
     all = all.concat(data)
@@ -32,9 +34,9 @@ async function fetchAll(query: any): Promise<any[]> {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
-    const anoP   = searchParams.get('ano')
-    const mesP   = searchParams.get('mes')
-    const catP   = searchParams.get('categoria')
+    const anoP    = searchParams.get('ano')
+    const mesP    = searchParams.get('mes')
+    const catP    = searchParams.get('categoria')
     const cadenaP = searchParams.get('cadena')
 
     const buildQ = () => {
@@ -52,17 +54,10 @@ export async function GET(req: NextRequest) {
     const cutoff = new Date()
     cutoff.setDate(cutoff.getDate() - 90)
     const cutoffAno = cutoff.getFullYear()
-    const cutoffMes = cutoff.getMonth() + 1
-
-    // Diagnóstico: conteo directo sin fetchAll
-    const { count: directCount, error: countErr } = await supabase
-      .from('inventario_colombia')
-      .select('*', { count: 'exact', head: true })
-    console.log('[INV API] direct count:', directCount, 'err:', countErr?.message)
 
     const [invRows, salesData] = await Promise.all([
-      fetchAll(buildQ()),
-      fetchAll(
+      fetchAll(buildQ),
+      fetchAll(() =>
         supabase
           .from('fact_sales_sellout')
           .select('codigo_barras, ventas_unidades')
@@ -110,7 +105,6 @@ export async function GET(req: NextRequest) {
       if (r.punto_venta) invMap[en].pdvs.add(r.punto_venta)
     }
 
-    console.log('[INV API] invRows:', invRows.length, 'first raw:', invRows[0])
     const skus = Object.values(invMap).map(s => {
       const ventas90d = salesMap[s.ean] ?? null
       const avgDaily  = ventas90d !== null ? ventas90d / 90 : null
@@ -144,9 +138,8 @@ export async function GET(req: NextRequest) {
     const periodos   = [...new Set(invRows.map((r: any) => `${r.ano}-${String(r.mes).padStart(2,'0')}`))]
       .sort().reverse().slice(0, 24)
 
-    // Mapas para el merge en la vista Colombia
-    const eanQtyMap:  Record<string, number> = {}
-    const descMap:    Record<string, string>  = {}
+    const eanQtyMap: Record<string, number> = {}
+    const descMap:   Record<string, string>  = {}
 
     for (const s of Object.values(invMap)) {
       eanQtyMap[s.ean] = s.qty
@@ -154,7 +147,6 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      _debug: { invRows_count: invRows.length, skus_count: skus.length, direct_count: directCount, count_err: countErr?.message },
       kpi: { totalQty, totalValor, totalPdvs, totalSkus },
       skus,
       eanQtyMap,

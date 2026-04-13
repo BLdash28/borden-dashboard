@@ -428,25 +428,25 @@ function ModSellOut({ data, fil, bm, overrides, onEdit }: {
   }, [data, fil.moneda, tasa])
 
   const byCadena = useMemo(() => {
-    const m: Record<string, { cadena: string; sku: string; sout: number; und: number; pv_sum: number; n: number }> = {}
+    const m: Record<string, { cadena: string; sku: string; sout: number; und: number; pv_sum: number; pc_sum: number; n: number }> = {}
     data.forEach(r => {
       const k = bm.cadenaBySub[r.cadena] || r.cadena || '(Sin cadena)'
       const skuKey = r.sku || r.codigo_barras || k
-      if (!m[k]) m[k] = { cadena: k, sku: skuKey, sout: 0, und: 0, pv_sum: 0, n: 0 }
+      if (!m[k]) m[k] = { cadena: k, sku: skuKey, sout: 0, und: 0, pv_sum: 0, pc_sum: 0, n: 0 }
       m[k].sout    += r.valor_sell_out_cop
       m[k].und     += r.unidades_sell_out
       m[k].pv_sum  += r.precio_venta
+      m[k].pc_sum  += r.precio_compra
       m[k].n++
     })
     return Object.values(m).sort((a, b) => b.sout - a.sout).map(r => {
-      const ov = overrides[r.cadena] || {}
-      return {
-        cadena: r.cadena,
-        sku:    r.cadena,
-        sout:   ov['valor_sell_out_cop'] ?? r.sout,
-        und:    ov['unidades_sell_out']  ?? r.und,
-        pv:     ov['precio_venta']       ?? (r.n > 0 ? Math.round(r.pv_sum / r.n) : 0),
-      }
+      const ov     = overrides[r.cadena] || {}
+      const sout   = ov['valor_sell_out_cop'] ?? r.sout
+      const und    = ov['unidades_sell_out']  ?? r.und
+      const avgPc  = r.n > 0 ? r.pc_sum / r.n : 0
+      const costo  = Math.round(und * avgPc)
+      const spread = sout - costo
+      return { cadena: r.cadena, sku: r.cadena, sout, und, costo, spread }
     })
   }, [data, bm, overrides])
 
@@ -521,27 +521,34 @@ function ModSellOut({ data, fil, bm, overrides, onEdit }: {
         <table className="w-full text-xs">
           <thead>
             <tr className="bg-slate-50">
-              {['Cadena', 'Unidades', 'Valor Sell Out', '% del Total'].map(h => (
+              {['Cadena', 'Unidades', vista === 'precio' ? 'Valor a P. Venta' : 'Valor a Costo', 'Spread (V−C)', '% del Total'].map(h => (
                 <th key={h} className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {byCadena.map((r, i) => (
-              <tr key={i} className="border-t border-slate-50 hover:bg-slate-50/60">
-                <td className="px-4 py-2.5 font-semibold text-slate-700">{r.cadena}</td>
-                <td className="px-4 py-2.5 tabular-nums text-slate-600">{r.und.toLocaleString('es-CO')}</td>
-                <td className="px-4 py-2.5 font-semibold tabular-nums text-blue-700">{fmtCOP(r.sout, fil.moneda, tasa)}</td>
-                <td className="px-4 py-2.5">
-                  <div className="flex items-center gap-2">
-                    <div className="w-24 h-1.5 bg-slate-100 rounded-full">
-                      <div className="h-full bg-blue-500 rounded-full" style={{ width: (r.sout / totalSout * 100) + '%' }} />
+            {byCadena.map((r, i) => {
+              const val = vista === 'precio' ? r.sout : r.costo
+              const base = vista === 'precio' ? totalSout : byCadena.reduce((s, x) => s + x.costo, 0)
+              return (
+                <tr key={i} className="border-t border-slate-50 hover:bg-slate-50/60">
+                  <td className="px-4 py-2.5 font-semibold text-slate-700">{r.cadena}</td>
+                  <td className="px-4 py-2.5 tabular-nums text-slate-600">{r.und.toLocaleString('es-CO')}</td>
+                  <td className="px-4 py-2.5 font-semibold tabular-nums text-blue-700">{fmtCOP(val, fil.moneda, tasa)}</td>
+                  <td className="px-4 py-2.5 font-bold tabular-nums" style={{ color: r.spread > 0 ? C.green : r.spread < 0 ? C.red : '#94a3b8' }}>
+                    {r.spread !== 0 ? (r.spread > 0 ? '+' : '') + fmtCOP(Math.abs(r.spread), fil.moneda, tasa) : '—'}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 h-1.5 bg-slate-100 rounded-full">
+                        <div className="h-full bg-blue-500 rounded-full" style={{ width: base > 0 ? (val / base * 100) + '%' : '0%' }} />
+                      </div>
+                      <span className="text-slate-500 tabular-nums">{base > 0 ? (val / base * 100).toFixed(1) : '0.0'}%</span>
                     </div>
-                    <span className="text-slate-500 tabular-nums">{(r.sout / totalSout * 100).toFixed(1)}%</span>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -1456,7 +1463,6 @@ export default function VistaColombia() {
             tasa_usd_cop:          4320,
           }
         })
-        console.log('[INV DEBUG] invD:', { error: invD.error, skus_count: invD.skus?.length, first: invD.skus?.[0], _debug: invD._debug })
         setApiError(null)
         setAllData(apiRows)
         setInvSkus(invD.skus || [])
