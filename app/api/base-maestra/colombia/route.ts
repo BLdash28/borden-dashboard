@@ -1,23 +1,29 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { unstable_cache } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } }
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
+
+const getBaseMaestra = unstable_cache(
+  async () => {
+    const { data, error } = await supabase
+      .from('base_maestra_colombia')
+      .select('cadena, subcadena, departamento, ciudad, punto_venta')
+    if (error) throw error
+    return data || []
+  },
+  ['base-maestra-colombia'],
+  { revalidate: 3600, tags: ['base-maestra-colombia'] } // 1 hora
 )
 
 export async function GET() {
   try {
-    const { data, error } = await supabase
-      .from('base_maestra_colombia')
-      .select('cadena, subcadena, departamento, ciudad, punto_venta')
-
-    if (error) throw error
-
-    const rows = data || []
+    const rows = await getBaseMaestra()
 
     const cadenaSet      = new Set<string>()
     const subcadenaSet   = new Set<string>()

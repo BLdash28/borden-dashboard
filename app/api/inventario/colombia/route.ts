@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { Pool } from 'pg'
 
 export const dynamic = 'force-dynamic'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } }
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-const poolNeon = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  max: 5,
-})
 
 function eanNorm(raw: string): string | null {
   const s = (raw || '').replace(/\D/g, '')
@@ -59,7 +51,13 @@ export async function GET(req: NextRequest) {
       return q
     }
 
-    const [invRows, dimRows, salesResult] = await Promise.all([
+    // Fecha hace 90 días para filtrar ventas
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - 90)
+    const cutoffAno = cutoff.getFullYear()
+    const cutoffMes = cutoff.getMonth() + 1
+
+    const [invRows, dimRows, salesData] = await Promise.all([
       fetchAll(buildQ()),
       // Catálogo maestro Colombia desde Supabase
       fetchAll(
@@ -68,18 +66,23 @@ export async function GET(req: NextRequest) {
           .select('cod_barras, cod_interno, descripcion, categoria, subcategoria')
           .eq('is_active', true)
       ),
-      // Ventas 90d Colombia para calcular DOI
-      poolNeon.query(
-        `SELECT codigo_barras,
-                SUM(ventas_unidades)::numeric AS ventas_90d
-         FROM v_ventas
-         WHERE pais = 'CO'
-           AND make_date(ano::int, mes::int, GREATEST(dia::int, 1)) >= CURRENT_DATE - INTERVAL '90 days'
-         GROUP BY codigo_barras`
+      // Ventas 90d Colombia para calcular DOI — via Supabase (fact_sales_sellout)
+      fetchAll(
+        supabase
+          .from('fact_sales_sellout')
+          .select('codigo_barras, ventas_unidades, ano, mes')
+          .eq('pais', 'CO')
+          .or(`ano.gt.${cutoffAno},and(ano.eq.${cutoffAno},mes.gte.${cutoffMes})`)
       ),
     ])
 
-    const salesRows = salesResult.rows
+    // Agregar ventas 90d por codigo_barras
+    const salesMap90: Record<string, number> = {}
+    for (const r of salesData) {
+      const en = eanNorm(r.codigo_barras || '')
+      if (en) salesMap90[en] = (salesMap90[en] || 0) + (Number(r.ventas_unidades) || 0)
+    }
+    const salesRows = Object.entries(salesMap90).map(([codigo_barras, ventas_90d]) => ({ codigo_barras, ventas_90d }))
 
     // ── 2. Mapas de lookup dim_producto_colombia ──────────────────────────────
     type DimProd = { sku: string; barcode: string; descripcion: string; categoria: string; subcategoria: string }

@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { unstable_cache } from 'next/cache'
 
 export const dynamic = 'force-dynamic'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  { global: { fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' }) } }
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
 function eanNorm(raw: string): string | null {
@@ -15,13 +15,21 @@ function eanNorm(raw: string): string | null {
   return s.length >= 13 ? s.slice(0, 13) : s.padStart(13, '0')
 }
 
-export async function GET(_req: NextRequest) {
-  try {
+const getPrecios = unstable_cache(
+  async () => {
     const { data, error } = await supabase
       .from('precios_colombia')
       .select('cod_barras, cod_interno, descripcion, cadena, formato, precio_compra, precio_comparable, precio_venta')
-
     if (error) throw new Error(error.message)
+    return data || []
+  },
+  ['precios-colombia'],
+  { revalidate: 3600, tags: ['precios-colombia'] } // 1 hora
+)
+
+export async function GET(_req: NextRequest) {
+  try {
+    const data = await getPrecios()
 
     // Mapa: ean → precios (sin cadena = genérico)
     // Mapa: cod_interno → precios

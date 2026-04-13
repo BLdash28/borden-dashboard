@@ -594,20 +594,47 @@ function ModSellOut({ data, fil, bm, overrides, onEdit }: {
 // ══════════════════════════════════════════════════════════════════════════════
 //  MÓDULO 4 — INVENTARIO
 // ══════════════════════════════════════════════════════════════════════════════
-function ModInventario({ data, fil, overrides, onEdit }: {
-  data: Row[]; fil: Filtros
+function ModInventario({ data, invSkus, fil, overrides, onEdit }: {
+  data: Row[]; invSkus: any[]; fil: Filtros
   overrides: Record<string, Record<string, number>>
   onEdit: (ctx: EditCtx) => void
 }) {
   const tasa = fil.tasa
 
   const invData = useMemo(() => {
+    // ── Fuente primaria: skus del API de inventario (con qty real) ──────────
+    if (invSkus.length > 0) {
+      // Mapa de sout por EAN/SKU desde datos de ventas
+      const soutMap: Record<string, number> = {}
+      data.forEach(r => {
+        const key = r.sku || r.codigo_barras
+        if (key) soutMap[key] = (soutMap[key] || 0) + r.unidades_sell_out
+      })
+      const SEMANAS = 13
+      return invSkus
+        .filter(s => s.qty > 0)
+        .map(s => {
+          const key      = s.sku || s.ean
+          const inv      = overrides[key]?.['inventario_unidades'] ?? s.qty
+          const soutDay  = (soutMap[key] || 0) / (SEMANAS * 7)
+          const doi      = soutDay > 0 ? Math.round(inv / soutDay) : null
+          const valorCop = s.valor_cop || 0
+          return {
+            sku: s.sku || '', ean: s.ean || '', desc: s.descripcion || '',
+            cat: s.categoria || '', subcat: s.subcategoria || '',
+            inv, pc: valorCop > 0 && inv > 0 ? Math.round(valorCop / inv) : 0,
+            sout_daily: +soutDay.toFixed(1), doi, valorCop, avgDaily: +soutDay.toFixed(1),
+          }
+        })
+        .sort((a, b) => b.valorCop - a.valorCop)
+    }
+
+    // ── Fallback: cruce desde datos de ventas (comportamiento anterior) ──────
     const m: Record<string, { sku: string; ean: string; desc: string; cat: string; subcat: string; inv: number; pc: number; sout_daily: number }> = {}
     data.forEach(r => {
       const key = r.sku || r.codigo_barras
       if (!key) return
       if (!m[key]) m[key] = { sku: r.sku, ean: r.codigo_barras || r.sku, desc: r.descripcion || r.sku, cat: r.categoria, subcat: r.subcategoria, inv: r.inventario_unidades, pc: r.precio_compra, sout_daily: 0 }
-      // inv y pc se fijan en la primera fila — no acumular (es snapshot)
       if (m[key].pc === 0 && r.precio_compra > 0) m[key].pc = r.precio_compra
       m[key].sout_daily += r.unidades_sell_out
     })
@@ -621,8 +648,8 @@ function ModInventario({ data, fil, overrides, onEdit }: {
         const valorCop = Math.round(inv * r.pc)
         return { ...r, inv, doi, avgDaily: +avgDaily.toFixed(1), valorCop }
       })
-      .sort((a, b) => a.valorCop - b.valorCop)   // de menor a mayor
-  }, [data, overrides])
+      .sort((a, b) => a.valorCop - b.valorCop)
+  }, [data, invSkus, overrides])
 
   const doiChart = invData.filter(r => r.doi !== null).map(r => ({
     name: (r.desc || r.ean).slice(0, 20),
@@ -1340,6 +1367,7 @@ export default function VistaColombia() {
   const [opsCadenas, setOpsCadenas]   = useState<string[]>([])
   const [opsFormatos, setOpsFormatos] = useState<string[]>([])
   const [opsSubcats, setOpsSubcats]   = useState<string[]>([])
+  const [invSkus, setInvSkus] = useState<any[]>([])
   const [showUpload, setShowUpload] = useState(false)
   const [upFile, setUpFile]         = useState<File | null>(null)
   const [upBusy, setUpBusy]         = useState(false)
@@ -1429,6 +1457,7 @@ export default function VistaColombia() {
         })
         setApiError(null)
         setAllData(apiRows)
+        setInvSkus(invD.skus || [])
         setOpsCadenas(ventasD.cadenas || [])
         setOpsFormatos(ventasD.formatos || [])
         setOpsSubcats([...new Set(apiRows.map(r => r.subcategoria).filter(Boolean))].sort() as string[])
@@ -1739,7 +1768,7 @@ export default function VistaColombia() {
             {modulo === 'kpis'       && <ModKPIs        data={filteredData} fil={fil} bm={bm} />}
             {modulo === 'sellin'     && <ModSellIn      data={filteredData} fil={fil} overrides={overrideMap['sellin'] || {}} onEdit={setEditCtx} />}
             {modulo === 'sellout'    && <ModSellOut     data={filteredData} fil={fil} bm={bm} overrides={overrideMap['sellout'] || {}} onEdit={setEditCtx} />}
-            {modulo === 'inventario' && <ModInventario  data={filteredData} fil={fil} overrides={overrideMap['inventario'] || {}} onEdit={setEditCtx} />}
+            {modulo === 'inventario' && <ModInventario  data={filteredData} invSkus={invSkus} fil={fil} overrides={overrideMap['inventario'] || {}} onEdit={setEditCtx} />}
             {modulo === 'devol'      && <ModDevoluciones data={filteredData} fil={fil} overrides={overrideMap['devol'] || {}} onEdit={setEditCtx} />}
             {modulo === 'precios'    && <ModPrecios     data={filteredData} fil={fil} />}
             {modulo === 'historial'  && <ModHistorial   ajustes={ajustes} />}
