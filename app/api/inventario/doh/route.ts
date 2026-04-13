@@ -96,10 +96,11 @@ export async function GET(req: NextRequest) {
         // Ventas 90d por descripción + país
         poolNeon.query(
           `SELECT UPPER(TRIM(REGEXP_REPLACE(descripcion, '^\\d+[-–]\\s*', ''))) AS desc_norm,
+                  COALESCE(codigo_barras, '') AS barcode,
                   pais, SUM(ventas_unidades)::numeric AS ventas_90d
            FROM v_ventas
            WHERE make_date(ano::int, mes::int, COALESCE(dia::int, 1)) >= CURRENT_DATE - INTERVAL '90 days'
-           GROUP BY UPPER(TRIM(REGEXP_REPLACE(descripcion, '^\\d+[-–]\\s*', ''))), pais`
+           GROUP BY UPPER(TRIM(REGEXP_REPLACE(descripcion, '^\\d+[-–]\\s*', ''))), codigo_barras, pais`
         ),
         // Catálogo completo dim_producto (68 productos activos)
         poolNeon.query(
@@ -174,10 +175,13 @@ export async function GET(req: NextRequest) {
 
     const allRows = [...rows, ...coMapped]
 
-    // ── 2. Mapa de ventas ─────────────────────────────────────────────────────
-    const salesMap: Record<string, number> = {}
+    // ── 2. Mapa de ventas — indexado por barcode y por descripción ───────────
+    const salesByBarcode: Record<string, number> = {}  // barcode|pais
+    const salesMap: Record<string, number> = {}         // desc_norm|pais
     for (const r of salesRows) {
-      salesMap[`${r.desc_norm}|${r.pais}`] = Number(r.ventas_90d) || 0
+      const v = Number(r.ventas_90d) || 0
+      if (r.barcode) salesByBarcode[`${r.barcode}|${r.pais}`] = (salesByBarcode[`${r.barcode}|${r.pais}`] || 0) + v
+      salesMap[`${r.desc_norm}|${r.pais}`] = (salesMap[`${r.desc_norm}|${r.pais}`] || 0) + v
     }
 
     // ── 2b. Mapas de lookup dim_producto ──────────────────────────────────────
@@ -285,7 +289,10 @@ export async function GET(req: NextRequest) {
 
         const descClean = s.desc.replace(/^\d+[-–]\s*/i, '').trim()
         const descNorm  = descClean.toUpperCase()
-        const ventas90d = salesMap[`${descNorm}|${s.pais}`] ?? null
+        // Match: 1° por barcode, 2° por descripción normalizada
+        const ventas90d = salesByBarcode[`${s.barcode}|${s.pais}`]
+          ?? salesMap[`${descNorm}|${s.pais}`]
+          ?? null
         const avgDaily  = ventas90d !== null ? ventas90d / 90 : null
         const doh       = avgDaily !== null && avgDaily > 0
           ? Math.round((s.qty / avgDaily) * 10) / 10
