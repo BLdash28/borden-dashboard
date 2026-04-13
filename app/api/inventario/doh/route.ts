@@ -87,10 +87,10 @@ export async function GET(req: NextRequest) {
     const buildQCO = () => {
       let q = supabase
         .from('inventario_colombia')
-        .select('punto_venta, codigo_interno, ean_producto, descripcion, qty')
+        .select('punto_venta, codigo_barras, descripcion, qty')
         .order('ano', { ascending: false })
         .order('mes', { ascending: false })
-      if (skuSearch) q = q.or(`descripcion.ilike.%${skuSearch}%,ean_producto.ilike.%${skuSearch}%,codigo_interno.ilike.%${skuSearch}%`)
+      if (skuSearch) q = q.or(`descripcion.ilike.%${skuSearch}%,codigo_barras.ilike.%${skuSearch}%`)
       return q
     }
 
@@ -153,13 +153,13 @@ export async function GET(req: NextRequest) {
     // snapshot más reciente por punto_venta + ean_producto (evitar duplicados)
     const coSnap: Record<string, any> = {}
     for (const r of coRows) {
-      const k = `${r.punto_venta}|${r.ean_producto || r.codigo_interno}`
+      const k = `${r.punto_venta}|${r.codigo_barras}`
       if (!coSnap[k]) coSnap[k] = r
     }
 
     const coMapped = Object.values(coSnap).map((r: any) => {
-      const ean = (r.ean_producto || '').trim()
-      const sku = (r.codigo_interno || '').trim().toUpperCase()
+      const ean = (r.codigo_barras || '').trim()
+      const sku = ean
       const dim = dimCOByEan[ean] || dimCOBySku[sku] || null
       // filtro de categoría client-side si viene catFilter
       if (catFilter.length && dim && !catFilter.some(c => (dim.categoria || '').toLowerCase() === c.toLowerCase())) return null
