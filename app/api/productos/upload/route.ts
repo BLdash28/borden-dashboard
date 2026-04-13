@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
       }
 
       const row: Record<string, any> = {
-        sku:           codigoBarras,        // codigo_barras es la llave maestra → garantiza unicidad
+        sku:           interno || barras,
         descripcion:   desc    || interno || barras,
         categoria:     norm(colCat    ? r[colCat]    : '') || null,
         subcategoria:  norm(colSubcat ? r[colSubcat] : '') || null,
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
       // Si se truncó primero, INSERT simple. Si no, upsert por sku
       const { data, error } = truncate
         ? await supabase.from('dim_producto').insert(batch).select('id')
-        : await supabase.from('dim_producto').upsert(batch, { onConflict: 'sku', ignoreDuplicates: false }).select('id')
+        : await supabase.from('dim_producto').upsert(batch, { onConflict: 'codigo_barras', ignoreDuplicates: false }).select('id')
 
       if (error) throw new Error(error.message)
       insertados += data?.length ?? batch.length
