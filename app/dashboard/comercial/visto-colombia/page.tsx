@@ -11,6 +11,7 @@ import {
   TrendingUp, TrendingDown, Package, ShoppingCart, DollarSign,
   RotateCcw, Download, AlertTriangle, CheckCircle, Clock,
   Filter, ChevronDown, BarChart2, ArrowUpRight, ArrowDownRight, History,
+  Upload, X, RefreshCw,
 } from 'lucide-react'
 import { fmtCOP, fmtPrice, fmtN, exportCSV, PRODUCTOS, type Filtros, type Row } from './_data'
 
@@ -1339,6 +1340,10 @@ export default function VistaColombia() {
   const [opsCadenas, setOpsCadenas]   = useState<string[]>([])
   const [opsFormatos, setOpsFormatos] = useState<string[]>([])
   const [opsSubcats, setOpsSubcats]   = useState<string[]>([])
+  const [showUpload, setShowUpload] = useState(false)
+  const [upFile, setUpFile]         = useState<File | null>(null)
+  const [upBusy, setUpBusy]         = useState(false)
+  const [upMsg, setUpMsg]           = useState<{ ok: boolean; text: string } | null>(null)
   const [fil, setFil] = useState<Filtros>({
     fechaDesde:   '',
     fechaHasta:   '',
@@ -1495,6 +1500,29 @@ export default function VistaColombia() {
     return overrideMap[modulo]?.[clave]?.[campo] ?? fallback
   }, [overrideMap])
 
+  const doUpload = async () => {
+    if (!upFile) return
+    setUpBusy(true)
+    setUpMsg(null)
+    const fd = new FormData()
+    fd.append('file', upFile)
+    try {
+      const d = await fetch('/api/inventario/colombia/upload', { method: 'POST', body: fd }).then(r => r.json())
+      if (d.error) {
+        setUpMsg({ ok: false, text: d.error })
+      } else {
+        setUpMsg({ ok: true, text: `${d.insertados.toLocaleString()} filas insertadas correctamente.` })
+        setUpFile(null)
+        // Reload inventory data
+        setTimeout(() => { setShowUpload(false); setUpMsg(null); window.location.reload() }, 1800)
+      }
+    } catch {
+      setUpMsg({ ok: false, text: 'Error de conexión.' })
+    } finally {
+      setUpBusy(false)
+    }
+  }
+
   const activeFiltersCount = [fil.formato, fil.subcategoria, fil.cadena, fil.subcadena, fil.departamento, fil.ciudad]
     .reduce((s, a) => s + a.length, 0)
 
@@ -1517,8 +1545,13 @@ export default function VistaColombia() {
               </div>
             </div>
 
-            {/* Moneda toggle */}
+            {/* Actions + Moneda toggle */}
             <div className="flex items-center gap-2">
+              <button onClick={() => { setShowUpload(v => !v); setUpMsg(null) }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                style={{ background: showUpload ? '#f59e0b' : '#fef3c7', color: showUpload ? '#fff' : '#92400e' }}>
+                <Upload size={12} /> Subir inventario
+              </button>
               {activeFiltersCount > 0 && (
                 <button onClick={() => setFil(prev => ({ ...prev, formato: [], subcategoria: [], cadena: [], subcadena: [], departamento: [], ciudad: [] }))}
                   className="text-[10px] text-slate-400 hover:text-red-500 flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-red-50 transition-all">
@@ -1543,6 +1576,39 @@ export default function VistaColombia() {
               )}
             </div>
           </div>
+
+          {/* Upload panel */}
+          {showUpload && (
+            <div className="mb-3 p-4 rounded-xl border border-amber-200 bg-amber-50">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold text-amber-800">Subir inventario Colombia (CSV)</p>
+                <button onClick={() => { setShowUpload(false); setUpMsg(null); setUpFile(null) }}>
+                  <X size={14} className="text-amber-400 hover:text-amber-700" />
+                </button>
+              </div>
+              <p className="text-[10px] text-amber-600 mb-3">
+                Columnas esperadas: <span className="font-mono">ano, mes, dia, ean_punto_venta, punto_venta, marca, codigo_interno, ean_producto, descripcion, qty, valor_cop</span>
+              </p>
+              <div className="flex items-center gap-3">
+                <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-amber-300 bg-white cursor-pointer hover:bg-amber-50 transition-all">
+                  <Upload size={13} className="text-amber-400" />
+                  <span className="text-xs text-slate-500">{upFile ? upFile.name : 'Seleccionar archivo CSV'}</span>
+                  <input type="file" accept=".csv,.txt" className="hidden" onChange={e => { setUpFile(e.target.files?.[0] || null); setUpMsg(null) }} />
+                </label>
+                <button onClick={doUpload} disabled={upBusy || !upFile}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white transition-all disabled:opacity-50"
+                  style={{ background: '#f59e0b' }}>
+                  {upBusy ? <RefreshCw size={12} className="animate-spin" /> : <Upload size={12} />}
+                  {upBusy ? 'Cargando...' : 'Subir'}
+                </button>
+              </div>
+              {upMsg && (
+                <p className={`mt-2 text-[11px] font-medium ${upMsg.ok ? 'text-green-700' : 'text-red-600'}`}>
+                  {upMsg.ok ? '✓' : '⚠'} {upMsg.text}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Filtros row */}
           <div className="flex items-center gap-2 flex-wrap">
