@@ -161,7 +161,7 @@ export async function GET(req: NextRequest) {
       return {
         pais:         'CO',
         cliente:      '',
-        cadena:       'Éxito',
+        cadena:       '',
         categoria:    dim?.categoria    || '',
         subcategoria: dim?.subcategoria || '',
         punto_venta:  r.punto_venta     || '',
