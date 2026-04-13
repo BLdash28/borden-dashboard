@@ -111,12 +111,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No se encontraron filas válidas', errores }, { status: 400 })
 
     // Deduplicar por codigo_barras (el que manda)
-    const dedupMap: Record<string, Record<string, any>> = {}
+    const dedupCB: Record<string, Record<string, any>> = {}
     for (const row of toInsert) {
-      const key = row.codigo_barras || row.sku
-      dedupMap[key] = row
+      dedupCB[row.codigo_barras || row.sku] = row
     }
-    const deduped = Object.values(dedupMap)
+    // Deduplicar también por sku para evitar conflictos en INSERT
+    const dedupSku: Record<string, Record<string, any>> = {}
+    for (const row of Object.values(dedupCB)) {
+      dedupSku[row.sku || row.codigo_barras] = row
+    }
+    const deduped = Object.values(dedupSku)
 
     const BATCH     = 200
     let insertados  = 0
