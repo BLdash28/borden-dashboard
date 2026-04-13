@@ -404,7 +404,8 @@ function ModSellOut({ data, fil, bm, overrides, onEdit }: {
   overrides: Record<string, Record<string, number>>
   onEdit: (ctx: EditCtx) => void
 }) {
-  const [vista, setVista] = useState<'costo' | 'precio'>('precio')
+  const [vista, setVista]             = useState<'costo' | 'precio'>('precio')
+  const [expanded, setExpanded]       = useState<string | null>(null)
   const tasa = fil.tasa
 
   const MESES_CORTOS = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
@@ -449,6 +450,30 @@ function ModSellOut({ data, fil, bm, overrides, onEdit }: {
       return { cadena: r.cadena, sku: r.cadena, sout, und, costo, spread }
     })
   }, [data, bm, overrides])
+
+  const skusByCadena = useMemo(() => {
+    if (!expanded) return []
+    const m: Record<string, { ean: string; desc: string; und: number; sout: number; pc_sum: number; n: number }> = {}
+    data.forEach(r => {
+      const cadena = bm.cadenaBySub[r.cadena] || r.cadena || '(Sin cadena)'
+      if (cadena !== expanded) return
+      const key = r.codigo_barras || r.sku || r.descripcion || '?'
+      if (!m[key]) m[key] = { ean: r.codigo_barras || r.sku || '', desc: r.descripcion || r.sku || key, und: 0, sout: 0, pc_sum: 0, n: 0 }
+      m[key].und    += r.unidades_sell_out
+      m[key].sout   += r.valor_sell_out_cop
+      m[key].pc_sum += r.precio_compra
+      m[key].n++
+    })
+    return Object.values(m)
+      .map(r => {
+        const avgPc  = r.n > 0 ? r.pc_sum / r.n : 0
+        const costo  = Math.round(r.und * avgPc)
+        const spread = r.sout - costo
+        return { ...r, costo, spread }
+      })
+      .sort((a, b) => b.sout - a.sout)
+      .slice(0, 30)
+  }, [expanded, data, bm])
 
   const totalSin  = data.reduce((s, r) => s + r.valor_sell_in_cop, 0)
   const totalSout = data.reduce((s, r) => s + r.valor_sell_out_cop, 0)
@@ -528,25 +553,73 @@ function ModSellOut({ data, fil, bm, overrides, onEdit }: {
           </thead>
           <tbody>
             {byCadena.map((r, i) => {
-              const val = vista === 'precio' ? r.sout : r.costo
-              const base = vista === 'precio' ? totalSout : byCadena.reduce((s, x) => s + x.costo, 0)
+              const val      = vista === 'precio' ? r.sout : r.costo
+              const base     = vista === 'precio' ? totalSout : byCadena.reduce((s, x) => s + x.costo, 0)
+              const isOpen   = expanded === r.cadena
               return (
-                <tr key={i} className="border-t border-slate-50 hover:bg-slate-50/60">
-                  <td className="px-4 py-2.5 font-semibold text-slate-700">{r.cadena}</td>
-                  <td className="px-4 py-2.5 tabular-nums text-slate-600">{r.und.toLocaleString('es-CO')}</td>
-                  <td className="px-4 py-2.5 font-semibold tabular-nums text-blue-700">{fmtCOP(val, fil.moneda, tasa)}</td>
-                  <td className="px-4 py-2.5 font-bold tabular-nums" style={{ color: r.spread > 0 ? C.green : r.spread < 0 ? C.red : '#94a3b8' }}>
-                    {r.spread !== 0 ? (r.spread > 0 ? '+' : '') + fmtCOP(Math.abs(r.spread), fil.moneda, tasa) : '—'}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <div className="flex items-center gap-2">
-                      <div className="w-24 h-1.5 bg-slate-100 rounded-full">
-                        <div className="h-full bg-blue-500 rounded-full" style={{ width: base > 0 ? (val / base * 100) + '%' : '0%' }} />
+                <>
+                  <tr key={i}
+                    className="border-t border-slate-50 hover:bg-blue-50/40 cursor-pointer transition-colors"
+                    onClick={() => setExpanded(isOpen ? null : r.cadena)}>
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">
+                      <div className="flex items-center gap-1.5">
+                        <ChevronDown size={13} className={`text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                        {r.cadena}
                       </div>
-                      <span className="text-slate-500 tabular-nums">{base > 0 ? (val / base * 100).toFixed(1) : '0.0'}%</span>
-                    </div>
-                  </td>
-                </tr>
+                    </td>
+                    <td className="px-4 py-2.5 tabular-nums text-slate-600">{r.und.toLocaleString('es-CO')}</td>
+                    <td className="px-4 py-2.5 font-semibold tabular-nums text-blue-700">{fmtCOP(val, fil.moneda, tasa)}</td>
+                    <td className="px-4 py-2.5 font-bold tabular-nums" style={{ color: r.spread > 0 ? C.green : r.spread < 0 ? C.red : '#94a3b8' }}>
+                      {r.spread !== 0 ? (r.spread > 0 ? '+' : '') + fmtCOP(Math.abs(r.spread), fil.moneda, tasa) : '—'}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="w-24 h-1.5 bg-slate-100 rounded-full">
+                          <div className="h-full bg-blue-500 rounded-full" style={{ width: base > 0 ? (val / base * 100) + '%' : '0%' }} />
+                        </div>
+                        <span className="text-slate-500 tabular-nums">{base > 0 ? (val / base * 100).toFixed(1) : '0.0'}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                  {isOpen && (
+                    <tr key={`${i}-detail`}>
+                      <td colSpan={5} className="bg-slate-50/80 px-6 py-3 border-t border-blue-100">
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 mb-2">
+                          Top SKUs — {r.cadena}
+                        </p>
+                        {skusByCadena.length === 0 ? (
+                          <p className="text-xs text-slate-400">Sin datos de SKU.</p>
+                        ) : (
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr>
+                                {['Cód. Barras', 'Descripción', 'Unidades', 'Valor Sell Out', 'Spread (V−C)', '% Cadena'].map(h => (
+                                  <th key={h} className="text-left pb-1.5 pr-4 text-[9px] font-bold uppercase tracking-wider text-slate-400">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {skusByCadena.map((s, j) => (
+                                <tr key={j} className="border-t border-slate-100">
+                                  <td className="py-1.5 pr-4 text-slate-400 font-mono">{s.ean || '—'}</td>
+                                  <td className="py-1.5 pr-4 font-semibold text-slate-700 max-w-[200px] truncate">{s.desc}</td>
+                                  <td className="py-1.5 pr-4 tabular-nums text-slate-600">{s.und.toLocaleString('es-CO')}</td>
+                                  <td className="py-1.5 pr-4 font-semibold tabular-nums text-blue-700">{fmtCOP(vista === 'precio' ? s.sout : s.costo, fil.moneda, tasa)}</td>
+                                  <td className="py-1.5 pr-4 font-bold tabular-nums" style={{ color: s.spread > 0 ? C.green : s.spread < 0 ? C.red : '#94a3b8' }}>
+                                    {s.spread !== 0 ? (s.spread > 0 ? '+' : '') + fmtCOP(Math.abs(s.spread), fil.moneda, tasa) : '—'}
+                                  </td>
+                                  <td className="py-1.5 tabular-nums text-slate-500">
+                                    {r.sout > 0 ? (s.sout / r.sout * 100).toFixed(1) : '0.0'}%
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        )}
+                      </td>
+                    </tr>
+                  )}
+                </>
               )
             })}
           </tbody>

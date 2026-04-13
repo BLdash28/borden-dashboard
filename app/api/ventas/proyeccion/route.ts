@@ -49,18 +49,22 @@ export async function GET(req: NextRequest) {
     if (mes) { rWhere.push(`mes = $${ri++}`); rParams.push(Number(mes)) }
 
     const { rows: realRows } = await pool.query<{
-      ano: string; mes: string; valor_real: string
+      ano: string; mes: string; pais: string; categoria: string; valor_real: string
     }>(`
-      SELECT ano, mes, SUM(ventas_valor) AS valor_real
+      SELECT ano, mes, pais, categoria, SUM(ventas_valor) AS valor_real
       FROM fact_sales_sellout
       WHERE ${rWhere.join(' AND ')}
-      GROUP BY ano, mes
+      GROUP BY ano, mes, pais, categoria
     `, rParams)
 
-    // realMap: "<ano>-<mes>" → valor_real
+    // realMap total: "<ano>-<mes>" → valor_real
+    // realByPaisCat: "<ano>-<mes>-<pais>-<cat>" → valor_real
     const realMap: Record<string, number> = {}
+    const realByPaisCat: Record<string, number> = {}
     for (const r of realRows) {
-      realMap[`${r.ano}-${r.mes}`] = Number(r.valor_real) || 0
+      const key = `${r.ano}-${r.mes}`
+      realMap[key] = (realMap[key] || 0) + (Number(r.valor_real) || 0)
+      realByPaisCat[`${r.ano}-${r.mes}-${r.pais}-${r.categoria}`] = Number(r.valor_real) || 0
     }
 
     // ── Años disponibles ─────────────────────────────────────────
@@ -89,18 +93,23 @@ export async function GET(req: NextRequest) {
       ORDER BY mes ASC, empresa ASC, categoria ASC, pais ASC, cliente ASC
     `, cParams)
 
-    const catRows = catDbRows.map(r => ({
-      id:               Number(r.id),
-      ano:              Number(r.ano),
-      mes:              Number(r.mes),
-      mes_label:        MES[Number(r.mes)] ?? String(r.mes),
-      empresa:          r.empresa,
-      categoria:        r.categoria,
-      pais:             r.pais    ?? '',
-      cliente:          r.cliente ?? '',
-      valor_proyectado: Number(r.valor_usd),
-      real_usd:         r.real_usd !== null ? Number(r.real_usd) : null,
-    }))
+    const catRows = catDbRows.map(r => {
+      // real_usd manual tiene prioridad; si es null, buscar en fact_sales_sellout por pais+categoria
+      const selloutReal = realByPaisCat[`${r.ano}-${r.mes}-${r.pais}-${r.categoria}`] ?? null
+      const real_usd    = r.real_usd !== null ? Number(r.real_usd) : selloutReal
+      return {
+        id:               Number(r.id),
+        ano:              Number(r.ano),
+        mes:              Number(r.mes),
+        mes_label:        MES[Number(r.mes)] ?? String(r.mes),
+        empresa:          r.empresa,
+        categoria:        r.categoria,
+        pais:             r.pais    ?? '',
+        cliente:          r.cliente ?? '',
+        valor_proyectado: Number(r.valor_usd),
+        real_usd,
+      }
+    })
 
     // ── Mapa de real_usd manual por empresa+mes (suma de cat rows) ───
     const manualRealMap: Record<string, number> = {}
