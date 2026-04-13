@@ -1344,6 +1344,9 @@ export default function VistaColombia() {
   const [upFile, setUpFile]         = useState<File | null>(null)
   const [upBusy, setUpBusy]         = useState(false)
   const [upMsg, setUpMsg]           = useState<{ ok: boolean; text: string } | null>(null)
+  const [upPeriodo, setUpPeriodo]   = useState(() => {
+    const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
   const [fil, setFil] = useState<Filtros>({
     fechaDesde:   '',
     fechaHasta:   '',
@@ -1504,8 +1507,11 @@ export default function VistaColombia() {
     if (!upFile) return
     setUpBusy(true)
     setUpMsg(null)
+    const [anoStr, mesStr] = upPeriodo.split('-')
     const fd = new FormData()
     fd.append('file', upFile)
+    fd.append('ano', anoStr)
+    fd.append('mes', mesStr)
     try {
       const d = await fetch('/api/inventario/colombia/upload', { method: 'POST', body: fd }).then(r => r.json())
       if (d.error) {
@@ -1587,8 +1593,14 @@ export default function VistaColombia() {
                 </button>
               </div>
               <p className="text-[10px] text-amber-600 mb-3">
-                Columnas esperadas: <span className="font-mono">ano, mes, dia, ean_punto_venta, punto_venta, marca, codigo_interno, ean_producto, descripcion, qty, valor_cop</span>
+                Columnas reconocidas: <span className="font-mono">PA, CLIENTE, CADENA, FORMATO, CATEGORIA, SUBCATEGORIA, PUNTO DE VENTA, CODIGO DE BARRA, DESCRIPCION, QTY, PRECIO VALOR</span>
               </p>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] text-amber-700 font-semibold whitespace-nowrap">Período del archivo:</span>
+                <input type="month" value={upPeriodo} onChange={e => setUpPeriodo(e.target.value)}
+                  className="text-xs font-bold text-slate-700 border border-amber-300 rounded-lg px-2 py-1 bg-white outline-none" />
+                <span className="text-[10px] text-amber-500">(si el CSV no tiene columnas de año/mes)</span>
+              </div>
               <div className="flex items-center gap-3">
                 <label className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-amber-300 bg-white cursor-pointer hover:bg-amber-50 transition-all">
                   <Upload size={13} className="text-amber-400" />

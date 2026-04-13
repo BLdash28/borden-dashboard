@@ -27,6 +27,9 @@ export async function POST(req: NextRequest) {
 
     const formData = await req.formData()
     const file     = formData.get('file') as File | null
+    // Período manual si el CSV no tiene ano/mes
+    const anoParam = formData.get('ano') as string | null
+    const mesParam = formData.get('mes') as string | null
 
     if (!file) return NextResponse.json({ error: 'No se recibió archivo' }, { status: 400 })
 
@@ -34,51 +37,76 @@ export async function POST(req: NextRequest) {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
     if (lines.length < 2) return NextResponse.json({ error: 'CSV vacío o sin datos' }, { status: 400 })
 
-    // Detectar separador
-    const sep = lines[0].split(';').length > lines[0].split(',').length ? ';' : ','
+    // Detectar separador (tabulación, punto y coma, coma)
+    const firstLine = lines[0]
+    const sep = firstLine.includes('\t') ? '\t'
+              : firstLine.split(';').length > firstLine.split(',').length ? ';' : ','
 
-    const header = lines[0].split(sep).map(h =>
-      h.replace(/[^a-zA-Z0-9_áéíóúñ]/gi, '').trim().toLowerCase()
+    // Normalizar cabecera: minúsculas, sin caracteres especiales excepto letras y números
+    const rawHeader = lines[0].split(sep)
+    const header = rawHeader.map(h =>
+      h.replace(/['"]/g, '').trim().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quitar tildes
+        .replace(/\s+/g, '_')
+        .replace(/[^a-z0-9_]/g, '')
     )
 
     const idx = (keys: string[]): number =>
       header.findIndex(h => keys.some(k => h === k || h.includes(k)))
 
     const col = {
-      ano:             idx(['ano', 'año', 'year']),
+      ano:             idx(['ano', 'year', 'anio']),
       mes:             idx(['mes', 'month']),
-      dia:             idx(['dia', 'día', 'day']),
-      ean_punto_venta: idx(['ean_punto_venta', 'eanpuntoventa', 'ean_point_sale', 'eanpointsale']),
-      punto_venta:     idx(['punto_venta', 'puntoventa', 'punto de venta', 'store', 'tienda']),
+      dia:             idx(['dia', 'day']),
+      fecha:           idx(['fecha', 'date', 'periodo', 'period']),
+      pais:            idx(['pa', 'pais', 'country', 'pa_']),
+      cliente:         idx(['cliente', 'client', 'customer']),
+      cadena:          idx(['cadena', 'chain']),
+      formato:         idx(['formato', 'format']),
+      categoria:       idx(['categoria', 'category']),
+      subcategoria:    idx(['subcategoria', 'subcategory', 'subcat']),
+      punto_venta:     idx(['punto_venta', 'punto_de_venta', 'puntoventa', 'store', 'tienda', 'pdv']),
+      ean_punto_venta: idx(['ean_punto_venta', 'eanpuntoventa', 'ean_point', 'ean_pdv']),
+      codigo_interno:  idx(['codigo_interno', 'codigointerno', 'cod_interno', 'plu', 'sku']),
+      ean_producto:    idx(['codigo_de_barra', 'codigo_barra', 'codigobarras', 'codigo_barras',
+                            'ean_producto', 'eanproducto', 'ean', 'barcode']),
+      descripcion:     idx(['descripcion', 'description', 'producto', 'product', 'desc']),
       marca:           idx(['marca', 'brand']),
-      codigo_interno:  idx(['codigo_interno', 'codigointerno', 'cod_interno', 'plu', 'sku', 'codigo interno']),
-      ean_producto:    idx(['ean_producto', 'ean producto', 'eanproducto', 'ean', 'barcode', 'codigo_barras']),
-      descripcion:     idx(['descripcion', 'descripción', 'producto', 'description', 'product']),
-      qty:             idx(['qty', 'inventario q', 'inventarioq', 'cantidad', 'quantity', 'unidades', 'inventario_q']),
-      valor_cop:       idx(['valor_cop', 'valorcop', 'inventario cop', 'inventariocop', 'valor', 'value', 'inventario_cop']),
+      qty:             idx(['qty', 'cantidad', 'quantity', 'unidades', 'inventario_q', 'inv_q', 'stock']),
+      valor_cop:       idx(['precio_valor', 'preciovalo', 'valor_cop', 'valorcop', 'valor',
+                            'inventario_cop', 'price', 'precio']),
     }
 
-    // Validar columnas mínimas
-    const missing = (['ano', 'mes'] as const).filter(k => col[k] < 0)
-    if (missing.length > 0) {
-      return NextResponse.json({
-        error: `Columnas requeridas no encontradas: ${missing.join(', ')}. Cabecera detectada: ${header.join(', ')}`
-      }, { status: 400 })
-    }
+    // Período fallback: parámetro manual o fecha actual
+    const fallbackAno = anoParam ? parseInt(anoParam) : new Date().getFullYear()
+    const fallbackMes = mesParam ? parseInt(mesParam) : new Date().getMonth() + 1
 
     const rows: Record<string, unknown>[] = []
     const errors: string[] = []
 
     for (let i = 1; i < lines.length; i++) {
       const cells = lines[i].split(sep)
-      const get   = (c: number) => c >= 0 ? (cells[c] || '').trim() : ''
+      const get   = (c: number) => c >= 0 ? (cells[c] ?? '').replace(/^["']|["']$/g, '').trim() : ''
 
-      const ano = parseIntVal(get(col.ano))
-      const mes = parseIntVal(get(col.mes))
-      const dia = parseIntVal(get(col.dia))
+      // Período: columna en CSV > parámetro manual > fecha actual
+      let ano = col.ano >= 0 ? parseIntVal(get(col.ano)) : 0
+      let mes = col.mes >= 0 ? parseIntVal(get(col.mes)) : 0
+      let dia = col.dia >= 0 ? parseIntVal(get(col.dia)) : 0
 
-      if (!ano || !mes) {
-        errors.push(`Fila ${i + 1}: ano="${ano}" mes="${mes}" — omitida`)
+      // Si hay columna fecha tipo "2025-03" o "03/2025"
+      if ((!ano || !mes) && col.fecha >= 0) {
+        const f = get(col.fecha)
+        const m1 = f.match(/^(\d{4})[-/](\d{1,2})/)
+        const m2 = f.match(/^(\d{1,2})[-/](\d{4})/)
+        if (m1) { ano = parseInt(m1[1]); mes = parseInt(m1[2]) }
+        else if (m2) { mes = parseInt(m2[1]); ano = parseInt(m2[2]) }
+      }
+
+      if (!ano) ano = fallbackAno
+      if (!mes) mes = fallbackMes
+
+      if (!ano || !mes || mes < 1 || mes > 12) {
+        errors.push(`Fila ${i + 1}: período inválido ano=${ano} mes=${mes} — omitida`)
         continue
       }
 
@@ -98,7 +126,11 @@ export async function POST(req: NextRequest) {
     }
 
     if (rows.length === 0) {
-      return NextResponse.json({ error: 'No se encontraron filas válidas', detalles: errors }, { status: 400 })
+      return NextResponse.json({
+        error: 'No se encontraron filas válidas',
+        cabecera_detectada: header.join(' | '),
+        detalles: errors.slice(0, 5),
+      }, { status: 400 })
     }
 
     // Insertar en lotes de 500 vía Supabase
