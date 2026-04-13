@@ -1393,7 +1393,7 @@ export default function VistaColombia() {
     setLoading(true)
     Promise.all([
       fetch('/api/ventas/colombia').then(r => r.json()).catch(() => ({ rows: [], cadenas: [], formatos: [] })),
-      fetch('/api/inventario/colombia').then(r => r.json()).catch(() => ({ eanQtyMap: {}, skuQtyMap: {}, skuEanMap: {}, skuDescMap: {}, descMap: {} })),
+      fetch('/api/inventario/colombia').then(r => r.json()).then(d => { if (d.error) console.error('inventario/colombia:', d.error); return d; }).catch(() => ({ skus: [], eanQtyMap: {}, skuQtyMap: {}, skuEanMap: {}, skuDescMap: {}, descMap: {} })),
       fetch('/api/precios/colombia').then(r => r.json()).catch(() => ({ byEan: {}, bySku: {} })),
       fetch('/api/base-maestra/colombia').then(r => r.json()).catch(() => ({})),
       fetch('/api/ajustes/colombia').then(r => r.json()).catch(() => ([])),
