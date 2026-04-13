@@ -148,6 +148,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
+      _debug: { invRows_count: invRows.length, skus_count: skus.length },
       kpi: { totalQty, totalValor, totalPdvs, totalSkus },
       skus,
       eanQtyMap,

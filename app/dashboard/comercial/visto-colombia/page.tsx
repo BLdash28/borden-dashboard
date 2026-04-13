@@ -1456,7 +1456,7 @@ export default function VistaColombia() {
             tasa_usd_cop:          4320,
           }
         })
-        console.log('[INV DEBUG] invD:', { error: invD.error, skus_count: invD.skus?.length, first: invD.skus?.[0] })
+        console.log('[INV DEBUG] invD:', { error: invD.error, skus_count: invD.skus?.length, first: invD.skus?.[0], _debug: invD._debug })
         setApiError(null)
         setAllData(apiRows)
         setInvSkus(invD.skus || [])
