@@ -97,32 +97,21 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ── 3. VPD 90 días desde fact_sales_sellout (Supabase) ───────────────────
+    // ── 3. VPD 90 días via RPC get_vpd_90d() ─────────────────────────────────
     const vpdMap: Record<string, { vpd_unidades: number; vpd_valor: number; descripcion: string; categoria: string }> = {}
     try {
-      const desde = new Date()
-      desde.setDate(desde.getDate() - 90)
-      const desdeAno = desde.getFullYear()
-      const desdeMes = desde.getMonth() + 1
-
-      // Traer ventas de los últimos 90 días agrupadas por pais+sku
-      // Supabase no soporta GROUP BY nativo en .select(), usamos rpc o filtramos y agregamos en memoria
-      const { data: ventasData } = await supabase
-        .from('fact_sales_sellout')
-        .select('pais, sku, descripcion, categoria, ventas_unidades, ventas_valor, ano, mes')
-        .or(`ano.gt.${desdeAno},and(ano.eq.${desdeAno},mes.gte.${desdeMes})`)
-        .limit(200000)
-
-      for (const r of (ventasData || [])) {
-        const key = `${r.pais}|${r.sku}`
-        if (!vpdMap[key]) {
-          vpdMap[key] = { vpd_unidades: 0, vpd_valor: 0, descripcion: r.descripcion || '', categoria: r.categoria || '' }
+      const { data: vpdRows, error: vpdErr } = await supabase.rpc('get_vpd_90d')
+      if (vpdErr) throw new Error(vpdErr.message)
+      for (const r of (vpdRows || [])) {
+        vpdMap[`${r.pais}|${r.sku}`] = {
+          vpd_unidades: Number(r.vpd_unidades) || 0,
+          vpd_valor:    Number(r.vpd_valor)    || 0,
+          descripcion:  r.descripcion || '',
+          categoria:    r.categoria   || '',
         }
-        vpdMap[key].vpd_unidades += (Number(r.ventas_unidades) || 0) / 90
-        vpdMap[key].vpd_valor    += (Number(r.ventas_valor)    || 0) / 90
       }
     } catch {
-      // fact_sales_sellout no disponible en Supabase — DOH mostrará —
+      // RPC no disponible aún — DOH mostrará —
     }
 
     // ── 4. Unificar filas ─────────────────────────────────────────────────────
