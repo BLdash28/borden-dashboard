@@ -104,6 +104,7 @@ export async function GET(req: NextRequest) {
       if (r.punto_venta) invMap[en].pdvs.add(r.punto_venta)
     }
 
+    console.log('[INV API] invRows:', invRows.length, 'first raw:', invRows[0])
     const skus = Object.values(invMap).map(s => {
       const ventas90d = salesMap[s.ean] ?? null
       const avgDaily  = ventas90d !== null ? ventas90d / 90 : null
