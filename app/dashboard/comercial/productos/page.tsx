@@ -161,8 +161,9 @@ export default function ProductosPage() {
   const [fSub,    setFSub]    = useState('')
   const [fBuscar, setFBuscar] = useState('')
 
-  const [upBusy,  setUpBusy]  = useState(false)
-  const [upMsg,   setUpMsg]   = useState<{ ok: boolean; text: string } | null>(null)
+  const [upBusy,     setUpBusy]     = useState(false)
+  const [upMsg,      setUpMsg]      = useState<{ ok: boolean; text: string } | null>(null)
+  const [upTruncate, setUpTruncate] = useState(false)
   const fileRef = React.useRef<HTMLInputElement>(null)
 
   const debounceT = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -205,6 +206,7 @@ export default function ProductosPage() {
     setUpBusy(true); setUpMsg(null)
     const fd = new FormData()
     fd.append('file', file)
+    fd.append('truncate', String(upTruncate))
     try {
       const res  = await fetch('/api/productos/upload', { method: 'POST', body: fd })
       const data = await res.json()
@@ -274,6 +276,11 @@ export default function ProductosPage() {
             </span>
           )}
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleUpload} />
+          <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+            <input type="checkbox" checked={upTruncate} onChange={e => setUpTruncate(e.target.checked)}
+              className="rounded border-gray-300 text-amber-500 focus:ring-amber-400" />
+            Reemplazar todo
+          </label>
           <button onClick={() => fileRef.current?.click()} disabled={upBusy}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm disabled:opacity-50">
             <Upload size={14} className={upBusy ? 'animate-bounce' : ''} />

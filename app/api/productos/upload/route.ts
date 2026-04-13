@@ -27,8 +27,15 @@ export async function POST(req: NextRequest) {
     await requireAuth()
 
     const formData = await req.formData()
-    const file     = formData.get('file') as File | null
+    const file      = formData.get('file')      as File | null
+    const truncate  = formData.get('truncate')  === 'true'
     if (!file) return NextResponse.json({ error: 'No se recibió archivo' }, { status: 400 })
+
+    // Limpiar tabla antes de importar si se solicita
+    if (truncate) {
+      const { error: delErr } = await supabase.from('dim_producto').delete().gte('id', 0)
+      if (delErr) throw new Error('Error limpiando tabla: ' + delErr.message)
+    }
 
     const buffer    = Buffer.from(await file.arrayBuffer())
     const workbook  = XLSX.read(buffer, { type: 'buffer' })
@@ -103,13 +110,18 @@ export async function POST(req: NextRequest) {
     if (toUpsert.length === 0)
       return NextResponse.json({ error: 'No se encontraron filas válidas', errores }, { status: 400 })
 
+    // Deduplicar por SKU — mantener último registro si hay duplicados en el archivo
+    const dedupMap: Record<string, Record<string, any>> = {}
+    for (const row of toUpsert) dedupMap[row.sku] = row
+    const deduped = Object.values(dedupMap)
+
     // Upsert por SKU (actualiza si ya existe, inserta si no)
     const BATCH   = 200
     let insertados = 0
     let actualizados = 0
 
-    for (let b = 0; b < toUpsert.length; b += BATCH) {
-      const batch = toUpsert.slice(b, b + BATCH)
+    for (let b = 0; b < deduped.length; b += BATCH) {
+      const batch = deduped.slice(b, b + BATCH)
       const { data, error } = await supabase
         .from('dim_producto')
         .upsert(batch, { onConflict: 'sku', ignoreDuplicates: false })
@@ -123,7 +135,7 @@ export async function POST(req: NextRequest) {
       ok:          true,
       insertados,
       actualizados,
-      total_filas: toUpsert.length,
+      total_filas: deduped.length,
       errores:     errores.slice(0, 10),
       columnas_detectadas: { colCat, colSubcat, colBarras, colInterno, colDesc },
     })
