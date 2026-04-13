@@ -1,7 +1,6 @@
 // app/api/inventario/doh/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { pool as poolNeon } from '@/lib/db/pool'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
 
 export const dynamic = 'force-dynamic'
@@ -98,23 +97,32 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // ── 3. VPD 90 días (mv_vpd_90d en Neon) ──────────────────────────────────
-    let vpdMap: Record<string, { vpd_unidades: number; vpd_valor: number; descripcion: string; categoria: string }> = {}
+    // ── 3. VPD 90 días desde fact_sales_sellout (Supabase) ───────────────────
+    const vpdMap: Record<string, { vpd_unidades: number; vpd_valor: number; descripcion: string; categoria: string }> = {}
     try {
-      const { rows: vpdRows } = await poolNeon.query(
-        `SELECT pais, sku, vpd_unidades, vpd_valor, descripcion, categoria
-         FROM mv_vpd_90d`
-      )
-      for (const r of vpdRows) {
-        vpdMap[`${r.pais}|${r.sku}`] = {
-          vpd_unidades: Number(r.vpd_unidades) || 0,
-          vpd_valor:    Number(r.vpd_valor)    || 0,
-          descripcion:  r.descripcion || '',
-          categoria:    r.categoria   || '',
+      const desde = new Date()
+      desde.setDate(desde.getDate() - 90)
+      const desdeAno = desde.getFullYear()
+      const desdeMes = desde.getMonth() + 1
+
+      // Traer ventas de los últimos 90 días agrupadas por pais+sku
+      // Supabase no soporta GROUP BY nativo en .select(), usamos rpc o filtramos y agregamos en memoria
+      const { data: ventasData } = await supabase
+        .from('fact_sales_sellout')
+        .select('pais, sku, descripcion, categoria, ventas_unidades, ventas_valor, ano, mes')
+        .or(`ano.gt.${desdeAno},and(ano.eq.${desdeAno},mes.gte.${desdeMes})`)
+        .limit(200000)
+
+      for (const r of (ventasData || [])) {
+        const key = `${r.pais}|${r.sku}`
+        if (!vpdMap[key]) {
+          vpdMap[key] = { vpd_unidades: 0, vpd_valor: 0, descripcion: r.descripcion || '', categoria: r.categoria || '' }
         }
+        vpdMap[key].vpd_unidades += (Number(r.ventas_unidades) || 0) / 90
+        vpdMap[key].vpd_valor    += (Number(r.ventas_valor)    || 0) / 90
       }
     } catch {
-      // mv_vpd_90d no existe aún — VPD vacío, DOH será null
+      // fact_sales_sellout no disponible en Supabase — DOH mostrará —
     }
 
     // ── 4. Unificar filas ─────────────────────────────────────────────────────
