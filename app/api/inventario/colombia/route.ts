@@ -44,10 +44,10 @@ export async function GET(req: NextRequest) {
     const buildQ = () => {
       let q = supabase
         .from('inventario_colombia')
-        .select('ano, mes, dia, ean_punto_venta, punto_venta, marca, codigo_interno, ean_producto, descripcion, qty, valor_cop')
+        .select('ano, mes, dia, pais, cliente, cadena, formato, categoria, subcategoria, punto_venta, ean_punto_venta, codigo_interno, ean_producto, descripcion, qty, valor_cop')
       if (anoP)   q = q.eq('ano', parseInt(anoP))
       if (mesP)   q = q.eq('mes', parseInt(mesP))
-      if (marcaP) q = q.ilike('marca', marcaP)
+      if (marcaP) q = q.ilike('cadena', marcaP)
       return q
     }
 
@@ -120,33 +120,34 @@ export async function GET(req: NextRequest) {
     // ── 4. Agregar inventario por ean_producto ────────────────────────────────
     type InvEntry = {
       ean: string; sku: string; descripcion: string
-      categoria: string; subcategoria: string; marca: string
+      categoria: string; subcategoria: string
+      cadena: string; formato: string; cliente: string
       qty: number; valor_cop: number
-      pdvs: Set<string>; marcas: Set<string>
+      pdvs: Set<string>
     }
     const invMap: Record<string, InvEntry> = {}
 
     for (const r of invRows) {
       const dim = matchDim(r.ean_producto || '', r.codigo_interno || '')
-      const en  = eanNorm(r.ean_producto || '') || (r.ean_producto || '')
+      const en  = eanNorm(r.ean_producto || '') || (r.ean_producto || r.codigo_interno || '')
 
       if (!invMap[en]) invMap[en] = {
         ean:          en,
         sku:          dim?.sku          || r.codigo_interno || '',
         descripcion:  dim?.descripcion  || r.descripcion    || '',
-        categoria:    dim?.categoria    || '',
-        subcategoria: dim?.subcategoria || '',
-        marca:        r.marca           || '',
+        categoria:    r.categoria       || dim?.categoria    || '',
+        subcategoria: r.subcategoria    || dim?.subcategoria || '',
+        cadena:       r.cadena          || '',
+        formato:      r.formato         || '',
+        cliente:      r.cliente         || '',
         qty:          0,
         valor_cop:    0,
         pdvs:         new Set(),
-        marcas:       new Set(),
       }
 
       invMap[en].qty       += Number(r.qty)       || 0
       invMap[en].valor_cop += Number(r.valor_cop) || 0
       if (r.punto_venta) invMap[en].pdvs.add(r.punto_venta)
-      if (r.marca)       invMap[en].marcas.add(r.marca)
     }
 
     // ── 5. Calcular DOI y construir lista final ───────────────────────────────
@@ -164,7 +165,9 @@ export async function GET(req: NextRequest) {
           descripcion:  s.descripcion,
           categoria:    s.categoria,
           subcategoria: s.subcategoria,
-          marca:        s.marca,
+          cadena:       s.cadena,
+          formato:      s.formato,
+          cliente:      s.cliente,
           qty:          s.qty,
           valor_cop:    s.valor_cop,
           n_pdvs:       s.pdvs.size,
@@ -176,12 +179,12 @@ export async function GET(req: NextRequest) {
       .sort((a, b) => b.qty - a.qty)
 
     // ── 6. KPIs y opciones de filtro ─────────────────────────────────────────
-    const totalQty  = invRows.reduce((s: number, r: any) => s + (Number(r.qty) || 0), 0)
+    const totalQty   = invRows.reduce((s: number, r: any) => s + (Number(r.qty) || 0), 0)
     const totalValor = invRows.reduce((s: number, r: any) => s + (Number(r.valor_cop) || 0), 0)
-    const totalPdvs = new Set(invRows.map((r: any) => r.punto_venta).filter(Boolean)).size
-    const totalSkus = Object.keys(invMap).length
+    const totalPdvs  = new Set(invRows.map((r: any) => r.punto_venta).filter(Boolean)).size
+    const totalSkus  = Object.keys(invMap).length
 
-    const marcaOpts   = [...new Set(invRows.map((r: any) => r.marca).filter(Boolean))].sort()
+    const marcaOpts   = [...new Set(invRows.map((r: any) => r.cadena).filter(Boolean))].sort()
     const catOpts     = [...new Set(skus.map(s => s.categoria).filter(Boolean))].sort()
     const subcatOpts  = [...new Set(skus.map(s => s.subcategoria).filter(Boolean))].sort()
     const periodos    = [...new Set(invRows.map((r: any) => `${r.ano}-${String(r.mes).padStart(2,'0')}`))]
