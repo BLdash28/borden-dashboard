@@ -32,23 +32,51 @@ export async function GET(req: NextRequest) {
     const incluirCO = efectivoPaises.length === 0 || efectivoPaises.includes('CO')
     const incluirRL = efectivoPaises.length === 0 || efectivoPaises.some((p: string) => p !== 'CO')
 
-    // ── 1. Retail Link (Supabase) — semana más reciente por pais+item ───────────
+    // ── 1a. Retail Link (Supabase) — semana más reciente por pais+item ──────────
     const rlRows: any[] = []
     if (incluirRL) {
       const paisCondRL = efectivoPaises.filter((p: string) => p !== 'CO')
-      let q = supabase
+      let qRL = supabase
         .from('inventario_doh_retail')
         .select('pais, item_nbr, item, item_type, item_status, inventario, ordenes, transito, wharehouse, inv_cedi_cajas, inv_cedi_unds, semana')
         .order('pais').order('item_nbr').order('semana', { ascending: false })
-      if (paisCondRL.length > 0) q = q.in('pais', paisCondRL)
-      const { data: rlData, error: rlErr } = await q.limit(5000)
-      if (rlErr) throw new Error(rlErr.message)
-      // DISTINCT ON (pais, item_nbr) — tomar solo la semana más reciente
+      if (paisCondRL.length > 0) qRL = qRL.in('pais', paisCondRL)
+      const { data: rlData } = await qRL.limit(5000)
       const seen = new Set<string>()
       for (const r of (rlData || [])) {
         const k = `${r.pais}|${r.item_nbr}`
         if (!seen.has(k)) { seen.add(k); rlRows.push(r) }
       }
+    }
+
+    // ── 1b. inventario_pdv (Supabase) — agregar por pais+sku si RL vacío ────────
+    const pdvRows: any[] = []
+    if (incluirRL && rlRows.length === 0) {
+      const paisCondPDV = efectivoPaises.filter((p: string) => p !== 'CO')
+      let qPDV = supabase
+        .from('inventario_pdv')
+        .select('pais, cadena, sku, codigo_barras, descripcion, categoria, qty')
+      if (paisCondPDV.length > 0) qPDV = qPDV.in('pais', paisCondPDV)
+      const { data: pdvData } = await qPDV.limit(50000)
+      // Agregar por pais+sku
+      const pdvMap: Record<string, any> = {}
+      for (const r of (pdvData || [])) {
+        const key = `${r.pais}|${r.sku || r.codigo_barras}`
+        if (!pdvMap[key]) {
+          pdvMap[key] = {
+            pais:        r.pais,
+            cadena:      r.cadena || '',
+            item_nbr:    r.sku || r.codigo_barras || '',
+            item:        r.descripcion || '',
+            item_type:   r.categoria  || '',
+            item_status: 'A',
+            inventario:  0, ordenes: 0, transito: 0, wharehouse: 0,
+            inv_cedi_cajas: 0, inv_cedi_unds: 0, semana: null,
+          }
+        }
+        pdvMap[key].inventario += Number(r.qty) || 0
+      }
+      pdvRows.push(...Object.values(pdvMap))
     }
 
     // ── 2. Colombia (Supabase) — período más reciente ─────────────────────────
@@ -118,7 +146,7 @@ export async function GET(req: NextRequest) {
     const allRows = [
       ...rlRows.map((r: any) => ({
         pais:       r.pais,
-        cadena:     'Walmart',
+        cadena:     r.cadena || 'Walmart',
         item_nbr:   String(r.item_nbr),
         item:       r.item       || '',
         item_type:  r.item_type  || '',
@@ -131,6 +159,7 @@ export async function GET(req: NextRequest) {
         inv_cedi_unds:  Number(r.inv_cedi_unds)  || 0,
         semana:     r.semana ?? null,
       })),
+      ...pdvRows,
       ...coRows.map((r: any) => ({ ...r, semana: null })),
     ]
 
