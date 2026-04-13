@@ -1,6 +1,6 @@
 'use client'
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { Search, RefreshCw, Package, Plus, Pencil, X } from 'lucide-react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
+import { Search, RefreshCw, Package, Plus, Pencil, X, Upload } from 'lucide-react'
 
 interface Producto {
   id: number | null
@@ -161,6 +161,10 @@ export default function ProductosPage() {
   const [fSub,    setFSub]    = useState('')
   const [fBuscar, setFBuscar] = useState('')
 
+  const [upBusy,  setUpBusy]  = useState(false)
+  const [upMsg,   setUpMsg]   = useState<{ ok: boolean; text: string } | null>(null)
+  const fileRef = React.useRef<HTMLInputElement>(null)
+
   const debounceT = useRef<ReturnType<typeof setTimeout> | null>(null)
   const initDone  = useRef(false)
 
@@ -194,6 +198,29 @@ export default function ProductosPage() {
   const onSub    = (v: string) => { setFSub(v); trigger(fCat, v, fBuscar) }
   const onBuscar = (v: string) => { setFBuscar(v); trigger(fCat, fSub, v) }
   const limpiar  = () => { setFCat(''); setFSub(''); setFBuscar(''); cargar('', '', '') }
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUpBusy(true); setUpMsg(null)
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const res  = await fetch('/api/productos/upload', { method: 'POST', body: fd })
+      const data = await res.json()
+      if (data.error) {
+        setUpMsg({ ok: false, text: data.error })
+      } else {
+        setUpMsg({ ok: true, text: `${data.total_filas} productos importados correctamente.` })
+        setTimeout(() => { setUpMsg(null); cargar(fCat, fSub, fBuscar) }, 2500)
+      }
+    } catch {
+      setUpMsg({ ok: false, text: 'Error de conexión.' })
+    } finally {
+      setUpBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
 
   const handleSaved = (p: Producto) => {
     setProductos(prev => {
@@ -241,6 +268,17 @@ export default function ProductosPage() {
           <p className="text-sm text-gray-400 mt-1">Base maestra de productos</p>
         </div>
         <div className="flex items-center gap-2">
+          {upMsg && (
+            <span className={`text-xs font-semibold px-3 py-1.5 rounded-lg ${upMsg.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>
+              {upMsg.ok ? '✓' : '✗'} {upMsg.text}
+            </span>
+          )}
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleUpload} />
+          <button onClick={() => fileRef.current?.click()} disabled={upBusy}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm disabled:opacity-50">
+            <Upload size={14} className={upBusy ? 'animate-bounce' : ''} />
+            {upBusy ? 'Importando…' : 'Importar Excel/CSV'}
+          </button>
           <button onClick={limpiar}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
