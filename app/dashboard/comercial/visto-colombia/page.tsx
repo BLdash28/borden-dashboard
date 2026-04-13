@@ -1019,8 +1019,8 @@ function ModPrecios({ data, fil }: { data: Row[]; fil: Filtros }) {
         const pc    = base.pc    ?? Math.round(r.pc_sum    / r.n)
         const pcomp = base.pcomp ?? Math.round(r.pcomp_sum / r.n)
         const pv    = base.pv    ?? Math.round(r.pv_sum    / r.n)
-        // Spread = P.Compra − P.Comparable
-        const spread = pc - pcomp
+        // Spread = P.Venta − P.Compra
+        const spread = pv - pc
         // Margen neto sobre precio de venta
         const margen = pv > 0 ? +((pv - pc) / pv * 100).toFixed(1) : null
         return { sku: r.sku, desc: r.desc, cat: r.cat, subcat: r.subcat,
@@ -1042,8 +1042,8 @@ function ModPrecios({ data, fil }: { data: Row[]; fil: Filtros }) {
     'Descripción',
     `P. Compra (${moneda})`,
     `P. Comparable (${moneda})`,
-    'Spread',
     `P. Venta (${moneda})`,
+    'Spread (V−C)',
     'Margen',
     '',
   ]
@@ -1104,10 +1104,10 @@ function ModPrecios({ data, fil }: { data: Row[]; fil: Filtros }) {
                   <td className="px-3 py-2.5 font-semibold text-slate-700 max-w-[160px] truncate">{r.desc}</td>
                   <td className="px-3 py-2.5 text-violet-700 font-bold tabular-nums">{fmtPco(r.pc)}</td>
                   <td className="px-3 py-2.5 text-slate-500 tabular-nums">{fmtPco(r.pcomp)}</td>
-                  <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: r.spread > 0 ? C.amber : r.spread < 0 ? C.green : '#94a3b8' }}>
+                  <td className="px-3 py-2.5 font-bold text-blue-800 tabular-nums">{fmtPco(r.pv)}</td>
+                  <td className="px-3 py-2.5 font-bold tabular-nums" style={{ color: r.spread > 0 ? C.green : r.spread < 0 ? C.red : '#94a3b8' }}>
                     {r.spread !== 0 ? (r.spread > 0 ? '+' : '') + fmtPco(Math.abs(r.spread)) : '—'}
                   </td>
-                  <td className="px-3 py-2.5 font-bold text-blue-800 tabular-nums">{fmtPco(r.pv)}</td>
                   <td className="px-3 py-2.5 font-bold" style={{ color: r.margen !== null && r.margen >= 15 ? C.green : r.margen !== null && r.margen >= 8 ? C.amber : C.red }}>
                     {r.margen !== null ? r.margen + '%' : '—'}
                   </td>

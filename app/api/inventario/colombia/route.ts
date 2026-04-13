@@ -54,6 +54,12 @@ export async function GET(req: NextRequest) {
     const cutoffAno = cutoff.getFullYear()
     const cutoffMes = cutoff.getMonth() + 1
 
+    // Diagnóstico: conteo directo sin fetchAll
+    const { count: directCount, error: countErr } = await supabase
+      .from('inventario_colombia')
+      .select('*', { count: 'exact', head: true })
+    console.log('[INV API] direct count:', directCount, 'err:', countErr?.message)
+
     const [invRows, salesData] = await Promise.all([
       fetchAll(buildQ()),
       fetchAll(
@@ -148,7 +154,7 @@ export async function GET(req: NextRequest) {
     }
 
     return NextResponse.json({
-      _debug: { invRows_count: invRows.length, skus_count: skus.length },
+      _debug: { invRows_count: invRows.length, skus_count: skus.length, direct_count: directCount, count_err: countErr?.message },
       kpi: { totalQty, totalValor, totalPdvs, totalSkus },
       skus,
       eanQtyMap,
