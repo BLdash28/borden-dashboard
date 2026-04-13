@@ -87,7 +87,7 @@ export async function GET(req: NextRequest) {
     const buildQCO = () => {
       let q = supabase
         .from('inventario_colombia')
-        .select('ean_punto_venta, punto_venta, codigo_interno, ean_producto, descripcion, qty')
+        .select('punto_venta, codigo_interno, ean_producto, descripcion, qty')
         .order('ano', { ascending: false })
         .order('mes', { ascending: false })
       if (skuSearch) q = q.or(`descripcion.ilike.%${skuSearch}%,ean_producto.ilike.%${skuSearch}%,codigo_interno.ilike.%${skuSearch}%`)
