@@ -1,18 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { pool } from '@/lib/db/pool'
 
 export const dynamic = 'force-dynamic'
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
 
 function parseNum(v: string | undefined): number {
   if (!v) return 0
   return parseFloat(v.replace(/,/g, '').trim()) || 0
 }
 
+/** Calcula el número de semana ISO YYYYWW */
 function isoWeek(date: Date): number {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()))
   const dayNum = d.getUTCDay() || 7
@@ -39,6 +35,7 @@ export async function POST(req: NextRequest) {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
     if (lines.length < 2) return NextResponse.json({ error: 'CSV vacío' }, { status: 400 })
 
+    // Parsear cabecera — normalizar nombres
     const header = lines[0].split(',').map(h =>
       h.replace(/[^a-zA-Z0-9 ]/g, '').trim().toLowerCase()
     )
@@ -53,9 +50,9 @@ export async function POST(req: NextRequest) {
       item_status:    idx(['item status', 'status', 'estado']),
       inventario:     idx(['inventario', 'inventory', 'store inv']),
       ordenes:        idx(['ordenes', 'orders', 'orden']),
-      transito:       idx(['transito', 'transit']),
+      transito:       idx(['transito', 'transit', 'transito']),
       wharehouse:     idx(['wharehouse', 'warehouse', 'bodega']),
-      inv_cedi_cajas: idx(['cedi cajas', 'cajas cedi', 'cajas']),
+      inv_cedi_cajas: idx(['cedi cajas', 'cedi caj', 'cajas cedi', 'cajas']),
       inv_cedi_unds:  idx(['cedi unds', 'cedi unit', 'unds cedi', 'unidades cedi']),
       ventas:         idx(['ventas', 'sales', 'venta']),
     }
@@ -65,6 +62,7 @@ export async function POST(req: NextRequest) {
     for (let i = 1; i < lines.length; i++) {
       const cells = lines[i].split(',')
       const get   = (c: number) => c >= 0 ? (cells[c] || '').trim() : ''
+
       const item_nbr = get(col.item_nbr)
       if (!item_nbr) continue
 
@@ -86,26 +84,37 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    if (rows.length === 0)
+    if (rows.length === 0) {
       return NextResponse.json({ error: 'No se encontraron filas válidas' }, { status: 400 })
-
-    // Borrar semana+pais y re-insertar
-    const { error: delErr } = await supabase
-      .from('inventario_doh_retail')
-      .delete()
-      .eq('semana', semana)
-      .eq('pais', pais)
-    if (delErr) throw new Error(delErr.message)
-
-    const BATCH = 500
-    let insertados = 0
-    for (let b = 0; b < rows.length; b += BATCH) {
-      const { error } = await supabase.from('inventario_doh_retail').insert(rows.slice(b, b + BATCH))
-      if (error) throw new Error(error.message)
-      insertados += Math.min(BATCH, rows.length - b)
     }
 
-    return NextResponse.json({ ok: true, insertados, semana, pais })
+    // Borrar semana+pais anteriores y re-insertar
+    await pool.query(
+      'DELETE FROM inventario_doh_retail WHERE semana = $1 AND pais = $2',
+      [semana, pais]
+    )
+
+    const vals = rows.map((_, i) => {
+      const base = i * 14
+      return `($${base+1},$${base+2},$${base+3},$${base+4},$${base+5},$${base+6},$${base+7},$${base+8},$${base+9},$${base+10},$${base+11},$${base+12},$${base+13},$${base+14})`
+    }).join(',')
+
+    const flat = rows.flatMap(r => [
+      r.semana, r.pais, r.item_nbr, r.item, r.item_type, r.item_status,
+      r.inventario, r.ordenes, r.transito, r.wharehouse,
+      r.inv_cedi_cajas, r.inv_cedi_unds, r.ventas_periodo, r.dias_periodo,
+    ])
+
+    await pool.query(
+      `INSERT INTO inventario_doh_retail
+         (semana,pais,item_nbr,item,item_type,item_status,
+          inventario,ordenes,transito,wharehouse,
+          inv_cedi_cajas,inv_cedi_unds,ventas_periodo,dias_periodo)
+       VALUES ${vals}`,
+      flat
+    )
+
+    return NextResponse.json({ ok: true, insertados: rows.length, semana, pais })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('doh-retail upload error:', msg)
