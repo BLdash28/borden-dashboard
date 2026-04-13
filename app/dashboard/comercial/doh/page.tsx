@@ -395,6 +395,7 @@ export default function DOHPage() {
   const [sortDoh,     setSortDoh]     = useState<'asc' | 'desc' | null>(null)
   const [hoveredRow,  setHoveredRow]  = useState<number | null>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+  const [kpiModal, setKpiModal] = useState<{ title: string; color: string; items: any[] } | null>(null)
 
   // Filtros desde charts (client-side)
   const [chartPais, setChartPais] = useState<string | null>(null)
@@ -664,6 +665,7 @@ export default function DOHPage() {
       {/* DOH KPIs — colores corregidos */}
       {!loading && skus.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* DOH Promedio */}
           <div className="card p-4 relative overflow-hidden">
             <div className="absolute top-0 left-0 bottom-0 w-0.5" style={{ background: '#c8873a' }} />
             <p className="text-[9px] tracking-[2px] uppercase font-semibold mb-2" style={{ color: 'var(--t3)' }}>DOH Promedio</p>
@@ -675,34 +677,115 @@ export default function DOHPage() {
             </p>
           </div>
           {/* Sobrestock — amarillo */}
-          <div className="card p-4 relative overflow-hidden">
+          <div className="card p-4 relative overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => setKpiModal({
+              title: 'Sobrestock — DOH > 60 días',
+              color: '#f59e0b',
+              items: skus.filter(s => s.doh !== null && s.doh > 60).sort((a,b) => b.doh - a.doh),
+            })}>
             <div className="absolute top-0 left-0 bottom-0 w-0.5" style={{ background: '#f59e0b' }} />
             <div className="flex items-center justify-between mb-2">
               <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>Sobrestock</p>
               <TrendingUp size={14} style={{ color: '#f59e0b' }} />
             </div>
             <p className="text-2xl font-bold" style={{ color: '#f59e0b' }}>{dohStats.sobrestock}</p>
-            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>SKUs con DOH &gt; 60 días</p>
+            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>SKUs con DOH &gt; 60 días · ver detalle →</p>
           </div>
           {/* Saludable — verde */}
-          <div className="card p-4 relative overflow-hidden">
+          <div className="card p-4 relative overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => setKpiModal({
+              title: 'Saludable — DOH 30–60 días',
+              color: '#10b981',
+              items: skus.filter(s => s.doh !== null && s.doh >= 30 && s.doh <= 60).sort((a,b) => a.doh - b.doh),
+            })}>
             <div className="absolute top-0 left-0 bottom-0 w-0.5" style={{ background: '#10b981' }} />
             <div className="flex items-center justify-between mb-2">
               <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>Saludable</p>
               <span style={{ color: '#10b981', fontSize: 14 }}>●</span>
             </div>
             <p className="text-2xl font-bold" style={{ color: '#10b981' }}>{dohStats.saludable}</p>
-            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>SKUs con DOH 30–60 días</p>
+            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>SKUs con DOH 30–60 días · ver detalle →</p>
           </div>
           {/* Riesgo — rojo */}
-          <div className="card p-4 relative overflow-hidden">
+          <div className="card p-4 relative overflow-hidden cursor-pointer hover:opacity-80 transition-opacity"
+            onClick={() => setKpiModal({
+              title: 'Riesgo Quiebre — DOH < 30 días',
+              color: '#ef4444',
+              items: skus.filter(s => s.doh !== null && s.doh < 30).sort((a,b) => a.doh - b.doh),
+            })}>
             <div className="absolute top-0 left-0 bottom-0 w-0.5" style={{ background: '#ef4444' }} />
             <div className="flex items-center justify-between mb-2">
               <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>Riesgo Quiebre</p>
               <TrendingDown size={14} style={{ color: '#ef4444' }} />
             </div>
             <p className="text-2xl font-bold" style={{ color: '#ef4444' }}>{dohStats.riesgo}</p>
-            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>SKUs con DOH &lt; 30 días</p>
+            <p className="text-[10px] mt-1" style={{ color: 'var(--t3)' }}>SKUs con DOH &lt; 30 días · ver detalle →</p>
+          </div>
+        </div>
+      )}
+
+      {/* Modal KPI detalle */}
+      {kpiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setKpiModal(null)}>
+          <div className="w-full max-w-lg max-h-[80vh] flex flex-col rounded-2xl overflow-hidden"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            onClick={e => e.stopPropagation()}>
+            {/* Header modal */}
+            <div className="flex items-center justify-between px-5 py-4 border-b flex-shrink-0"
+              style={{ borderColor: 'var(--border)' }}>
+              <div>
+                <div className="w-2 h-2 rounded-full inline-block mr-2" style={{ background: kpiModal.color }} />
+                <span className="font-semibold text-[13px]" style={{ color: 'var(--t1)' }}>{kpiModal.title}</span>
+              </div>
+              <button onClick={() => setKpiModal(null)} style={{ color: 'var(--t3)' }}>
+                <X size={16} />
+              </button>
+            </div>
+            {/* Lista */}
+            <div className="overflow-y-auto flex-1">
+              {kpiModal.items.length === 0 ? (
+                <p className="text-center py-10 text-[12px]" style={{ color: 'var(--t3)' }}>Sin SKUs en esta categoría</p>
+              ) : (
+                <table className="w-full text-[12px]">
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
+                      <th className="px-4 py-2 text-left text-[10px] uppercase tracking-wide font-semibold" style={{ color: 'var(--t3)' }}>SKU / Descripción</th>
+                      <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wide font-semibold" style={{ color: 'var(--t3)' }}>País</th>
+                      <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wide font-semibold" style={{ color: 'var(--t3)' }}>Stock</th>
+                      <th className="px-4 py-2 text-right text-[10px] uppercase tracking-wide font-semibold" style={{ color: 'var(--t3)' }}>DOH</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kpiModal.items.map((s, i) => (
+                      <tr key={i} className="border-b transition-colors hover:bg-white/[0.03]"
+                        style={{ borderColor: 'var(--border)' }}>
+                        <td className="px-4 py-2.5">
+                          <div className="font-medium text-[12px]" style={{ color: 'var(--t1)' }}>{s.desc}</div>
+                          <div className="text-[10px]" style={{ color: 'var(--t3)' }}>{s.sku}</div>
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-[11px]" style={{ color: 'var(--t3)' }}>
+                          {COUNTRY_FLAGS[s.pais] ?? ''} {s.pais}
+                        </td>
+                        <td className="px-4 py-2.5 text-right tabular-nums" style={{ color: 'var(--t2)' }}>
+                          {fmtN(s.qty)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-bold tabular-nums"
+                          style={{ color: kpiModal.color }}>
+                          {s.doh}d
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            {/* Footer */}
+            <div className="px-5 py-3 border-t text-[11px] flex-shrink-0"
+              style={{ borderColor: 'var(--border)', color: 'var(--t3)' }}>
+              {kpiModal.items.length} SKU{kpiModal.items.length !== 1 ? 's' : ''}
+            </div>
           </div>
         </div>
       )}
