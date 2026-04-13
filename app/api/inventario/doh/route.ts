@@ -1,7 +1,7 @@
 // app/api/inventario/doh/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { Pool } from 'pg'
+import { pool as poolNeon } from '@/lib/db/pool'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
 
 export const dynamic = 'force-dynamic'
@@ -10,12 +10,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
-
-const poolNeon = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  max: 5,
-})
 
 function ceil0(n: number | null): number | null {
   if (n === null || !isFinite(n)) return null
