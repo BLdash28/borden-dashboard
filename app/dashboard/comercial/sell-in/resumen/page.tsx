@@ -60,8 +60,8 @@ export default function SellInResumen() {
       if (t) qs.set('tipo_negocio', t)
 
       const [kR, eR] = await Promise.all([
-        fetch('/api/comercial/sell-in/kpis?' + qs).then(r => r.ok ? r.json() : {}),
-        fetch('/api/comercial/sell-in/evolucion?' + qs).then(r => r.ok ? r.json() : {}),
+        fetch('/api/comercial/sell-in/kpis?' + qs).then(r => r.ok ? r.json() : {}) as Promise<any>,
+        fetch('/api/comercial/sell-in/evolucion?' + qs).then(r => r.ok ? r.json() : {}) as Promise<any>,
       ])
       if (kR.kpis) setKpi(kR.kpis)
       if (eR.mensual) setMensual(eR.mensual)
