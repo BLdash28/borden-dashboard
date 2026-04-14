@@ -2,6 +2,7 @@ import React from 'react'
 import type { Metadata } from 'next'
 import './globals.css'
 import { Toaster } from 'sonner'
+import { SpeedInsights } from '@vercel/speed-insights/next'
 
 export const metadata: Metadata = {
   title: 'BL Food · Dashboard BI',
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         <Toaster richColors position="top-right" />
+        <SpeedInsights />
       </body>
     </html>
   )
