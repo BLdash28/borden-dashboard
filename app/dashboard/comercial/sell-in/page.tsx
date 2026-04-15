@@ -263,7 +263,7 @@ export default function SellInPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-widest">Dashboard Comercial</p>
+          <p className="text-xs text-gray-400 uppercase tracking-widest">Ventas</p>
           <h1 className="text-2xl font-bold text-gray-800">Ventas Sell In</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -324,7 +324,7 @@ export default function SellInPage() {
 
         {/* Jerarquía geográfica: País → Canal → Cliente */}
         <div className="mb-3">
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Geografía / Comercial</p>
+          <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Geografía / Ventas</p>
           <div className="flex items-start gap-1.5 flex-wrap">
             <div className="flex-1 min-w-[160px]">
               <MultiSelect

@@ -361,7 +361,7 @@ export default function VentasPaisPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--t3)' }}>Dashboard Comercial</p>
+          <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--t3)' }}>Ventas</p>
           <h1 className="text-2xl font-bold" style={{ color: 'var(--t1)' }}>Ventas Diarias por País</h1>
         </div>
         <div className="flex items-center gap-2">

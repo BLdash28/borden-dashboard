@@ -309,7 +309,7 @@ export default function ResumenPage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] tracking-[2px] uppercase font-medium mb-1" style={{ color: 'var(--t3)' }}>
-            Comercial · Visión General
+            Ventas · Visión General
           </p>
           <h1 className="text-xl font-bold" style={{ color: 'var(--t1)' }}>Resumen Ejecutivo</h1>
         </div>

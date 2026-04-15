@@ -1,7 +1,7 @@
 'use client'
 import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { RefreshCw, Download, Upload, X, AlertTriangle, CheckCircle } from 'lucide-react'
+import { RefreshCw, Download, Upload, X, AlertTriangle, CheckCircle, Search } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -49,16 +49,14 @@ export default function SelloutPage() {
   const [fCats,      setFCats]      = useState<string[]>([])
   const [fSubcats,   setFSubcats]   = useState<string[]>([])
   const [fClientes,  setFClientes]  = useState<string[]>([])
-  const [fSkus,      setFSkus]      = useState<string[]>([])
-  const [fBarcodes,  setFBarcodes]  = useState<string[]>([])
+  const [buscar,     setBuscar]     = useState('')
+  const [buscarInput, setBuscarInput] = useState('')
 
   // Options
   const [paisOpts,    setPaisOpts]    = useState<string[]>([])
   const [catOpts,     setCatOpts]     = useState<string[]>([])
   const [subcatOpts,  setSubcatOpts]  = useState<string[]>([])
   const [clienteOpts, setClienteOpts] = useState<string[]>([])
-  const [skuOpts,     setSkuOpts]     = useState<string[]>([])
-  const [barcodeOpts, setBarcodeOpts] = useState<{ value: string; label: string }[]>([])
 
   // Data
   const [rows,    setRows]    = useState<SelloutRow[]>([])
@@ -68,12 +66,21 @@ export default function SelloutPage() {
   const [loading, setLoading] = useState(true)
   const [sort,    setSort]    = useState<SortState>({ key: 'ventas_valor', dir: 'desc' })
 
+  // Role
+  const [isSuperadmin, setIsSuperadmin] = useState(false)
+  useEffect(() => {
+    fetch('/api/me').then(r => r.json()).then(j => {
+      setIsSuperadmin(j.role === 'superadmin')
+    }).catch(() => {})
+  }, [])
+
   // Upload state
   const [showUpload, setShowUpload] = useState(false)
-  const [upFile,     setUpFile]     = useState<File | null>(null)
-  const [upArchivo,  setUpArchivo]  = useState('')
-  const [upBusy,     setUpBusy]     = useState(false)
-  const [upResult,   setUpResult]   = useState<{ ok: boolean; msg: string } | null>(null)
+  const [upFile,       setUpFile]       = useState<File | null>(null)
+  const [upArchivo,    setUpArchivo]    = useState('')
+  const [upReemplazar, setUpReemplazar] = useState(false)
+  const [upBusy,       setUpBusy]       = useState(false)
+  const [upResult,     setUpResult]     = useState<{ ok: boolean; msg: string } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const PAGE_SIZE = 500
@@ -149,49 +156,13 @@ export default function SelloutPage() {
     })
   }, [fAnos, fMeses, fPaises, fCats])
 
-  // ── Cascade: fCats + fSubcats + fClientes → skuOpts (lazy) ───────────────
-  useEffect(() => {
-    if (!fPaises.length && !fCats.length && !fClientes.length) { setSkuOpts([]); setFSkus([]); return }
-    const p = new URLSearchParams({ dim: 'sku' })
-    if (fAnos.length)    p.set('anos',          fAnos.join(','))
-    if (fMeses.length)   p.set('meses',         fMeses.join(','))
-    if (fPaises.length)  p.set('paises',        fPaises.join(','))
-    if (fCats.length)    p.set('categorias',    fCats.join(','))
-    if (fSubcats.length) p.set('subcategorias', fSubcats.join(','))
-    if (fClientes.length) p.set('clientes',     fClientes.join(','))
-    fetch('/api/ventas/dimension?' + p).then(r => r.json()).then(j => {
-      const opts = (j.rows || []).map((r: { nombre: string }) => r.nombre).filter(Boolean)
-      setSkuOpts(opts)
-      setFSkus(prev => prev.filter(v => opts.includes(v)))
-    })
-  }, [fAnos, fMeses, fPaises, fCats, fSubcats, fClientes])
 
-  // ── Cascade: fSkus → barcodeOpts (lazy) ──────────────────────────────────
-  useEffect(() => {
-    if (!fSkus.length) { setBarcodeOpts([]); setFBarcodes([]); return }
-    const p = new URLSearchParams({ dim: 'codigo_barras' })
-    if (fAnos.length)    p.set('anos',          fAnos.join(','))
-    if (fMeses.length)   p.set('meses',         fMeses.join(','))
-    if (fPaises.length)  p.set('paises',        fPaises.join(','))
-    if (fCats.length)    p.set('categorias',    fCats.join(','))
-    if (fSubcats.length) p.set('subcategorias', fSubcats.join(','))
-    if (fClientes.length) p.set('clientes',     fClientes.join(','))
-    if (fSkus.length)    p.set('skus',          fSkus.join(','))
-    fetch('/api/ventas/dimension?' + p).then(r => r.json()).then(j => {
-      const opts: { value: string; label: string }[] = (j.rows || []).map((r: { nombre: string }) => ({
-        value: r.nombre.split(' — ')[0] ?? r.nombre,
-        label: r.nombre,
-      }))
-      setBarcodeOpts(opts)
-      setFBarcodes(prev => prev.filter(v => opts.some(o => o.value === v)))
-    })
-  }, [fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus])
 
   // ── Fetch data ────────────────────────────────────────────────────────────
   const cargar = useCallback((
     anos: string[], meses: string[],
     paises: string[], cats: string[], subcats: string[],
-    clientes: string[], skus: string[], barcodes: string[],
+    clientes: string[], buscarVal: string,
     pg: number
   ) => {
     setLoading(true)
@@ -202,8 +173,7 @@ export default function SelloutPage() {
     if (cats.length)      p.set('categorias', cats.join(','))
     if (subcats.length)   p.set('subcategorias', subcats.join(','))
     if (clientes.length)  p.set('clientes', clientes.join(','))
-    if (skus.length)      p.set('skus', skus.join(','))
-    if (barcodes.length)  p.set('barcodes', barcodes.join(','))
+    if (buscarVal.trim()) p.set('buscar', buscarVal.trim())
     p.set('page', String(pg))
     p.set('pageSize', String(PAGE_SIZE))
 
@@ -232,25 +202,26 @@ export default function SelloutPage() {
   }, [])
 
   useEffect(() => {
-    cargar([], [], [], [], [], [], [], [], 1)
+    cargar([], [], [], [], [], [], '', 1)
   }, [cargar])
 
   const triggerCargar = (
     anos = fAnos, meses = fMeses,
     paises = fPaises, cats = fCats, subcats = fSubcats,
-    clientes = fClientes, skus = fSkus, barcodes = fBarcodes,
+    clientes = fClientes, buscarVal = buscar,
     pg = 1
   ) => {
     setPage(pg)
-    cargar(anos, meses, paises, cats, subcats, clientes, skus, barcodes, pg)
+    cargar(anos, meses, paises, cats, subcats, clientes, buscarVal, pg)
   }
 
   const limpiar = () => {
     setFAnos([]); setFMeses([])
     setFPaises([]); setFCats([]); setFSubcats([])
-    setFClientes([]); setFSkus([]); setFBarcodes([])
+    setFClientes([])
+    setBuscar(''); setBuscarInput('')
     setPage(1)
-    cargar([], [], [], [], [], [], [], [], 1)
+    cargar([], [], [], [], [], [], '', 1)
   }
 
   // ── Sort logic ────────────────────────────────────────────────────────────
@@ -286,12 +257,13 @@ export default function SelloutPage() {
       const fd = new FormData()
       fd.append('file', upFile)
       if (upArchivo.trim()) fd.append('archivo', upArchivo.trim())
+      if (upReemplazar) fd.append('reemplazar', '1')
       const res = await fetch('/api/ventas/sellout/upload', { method: 'POST', body: fd })
       const j   = await res.json()
       if (!res.ok || j.error) {
         setUpResult({ ok: false, msg: j.error || 'Error al cargar' })
       } else {
-        setUpResult({ ok: true, msg: `${j.insertados.toLocaleString()} filas cargadas correctamente${j.omitidos ? ` · ${j.omitidos} omitidas` : ''}` })
+        setUpResult({ ok: true, msg: `${j.insertados.toLocaleString()} filas cargadas correctamente${j.eliminados ? ` · ${j.eliminados.toLocaleString()} eliminadas antes` : ''}${j.omitidos ? ` · ${j.omitidos} omitidas` : ''}` })
         setUpFile(null)
         if (fileRef.current) fileRef.current.value = ''
         triggerCargar()
@@ -348,7 +320,7 @@ export default function SelloutPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-widest">Dashboard Comercial</p>
+          <p className="text-xs text-gray-400 uppercase tracking-widest">Ventas</p>
           <h1 className="text-2xl font-bold text-gray-800">Ventas Sellout</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -359,13 +331,15 @@ export default function SelloutPage() {
           >
             <Download size={14} /> CSV
           </button>
-          <button
-            onClick={() => { setShowUpload(v => !v); setUpResult(null) }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white shadow-sm"
-            style={{ background: '#c8873a' }}
-          >
-            <Upload size={14} /> Importar CSV
-          </button>
+          {isSuperadmin && (
+            <button
+              onClick={() => { setShowUpload(v => !v); setUpResult(null) }}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white shadow-sm"
+              style={{ background: '#c8873a' }}
+            >
+              <Upload size={14} /> Importar CSV
+            </button>
+          )}
           <button
             onClick={() => triggerCargar()}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm"
@@ -377,7 +351,7 @@ export default function SelloutPage() {
       </div>
 
       {/* Upload panel */}
-      {showUpload && (
+      {isSuperadmin && showUpload && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 space-y-4">
           <div className="flex items-center justify-between">
             <div>
@@ -390,6 +364,16 @@ export default function SelloutPage() {
               <X size={14} />
             </button>
           </div>
+
+          <label className="flex items-center gap-2 cursor-pointer w-fit">
+            <input
+              type="checkbox"
+              checked={upReemplazar}
+              onChange={e => setUpReemplazar(e.target.checked)}
+              className="w-4 h-4 accent-amber-500 rounded"
+            />
+            <span className="text-sm text-gray-700 font-medium">Reemplazar todo (elimina datos existentes antes de cargar)</span>
+          </label>
 
           <div className="flex flex-wrap gap-3 items-end">
             <div>
@@ -489,20 +473,31 @@ export default function SelloutPage() {
             onChange={v => { setFClientes(v); triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, v) }}
             placeholder="Todos"
           />
-          <MultiSelect
-            label="SKU"
-            options={skuOpts.map(s => ({ value: s, label: s }))}
-            value={fSkus}
-            onChange={v => { setFSkus(v); triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, v) }}
-            placeholder="Todos"
-          />
-          <MultiSelect
-            label="Código de Barras"
-            options={barcodeOpts}
-            value={fBarcodes}
-            onChange={v => { setFBarcodes(v); triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus, v) }}
-            placeholder="Todos"
-          />
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Buscar</label>
+            <form onSubmit={e => {
+              e.preventDefault()
+              setBuscar(buscarInput)
+              triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, buscarInput)
+            }} className="relative">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                value={buscarInput}
+                onChange={e => setBuscarInput(e.target.value)}
+                placeholder="Barras, SKU o descripción…"
+                className="w-full pl-7 pr-7 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+              {buscarInput && (
+                <button type="button" onClick={() => {
+                  setBuscarInput(''); setBuscar('')
+                  triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, '')
+                }} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X size={12} />
+                </button>
+              )}
+            </form>
+          </div>
         </div>
       </div>
 
@@ -616,7 +611,7 @@ export default function SelloutPage() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                     <button
-                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus, fBarcodes, pg) }}
+                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, buscar, pg) }}
                       disabled={page === 1}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >
@@ -624,7 +619,7 @@ export default function SelloutPage() {
                     </button>
                     <span className="text-sm text-gray-500">Página {page} de {totalPages}</span>
                     <button
-                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus, fBarcodes, pg) }}
+                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, buscar, pg) }}
                       disabled={page === totalPages}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >

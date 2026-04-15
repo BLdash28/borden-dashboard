@@ -280,7 +280,7 @@ export default function CrecimientosPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-widest">Dashboard Comercial</p>
+          <p className="text-xs text-gray-400 uppercase tracking-widest">Ventas</p>
           <h1 className="text-2xl font-bold text-gray-800">Crecimientos YTD</h1>
           {anoActual > 0 && (
             <p className="text-xs text-gray-400 mt-1">

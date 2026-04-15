@@ -529,7 +529,7 @@ export default function DOHPage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <p className="text-[10px] tracking-[2px] uppercase font-medium mb-1" style={{ color: 'var(--t3)' }}>
-            Comercial · Operaciones
+            Ventas · Operaciones
           </p>
           <h1 className="text-xl font-bold" style={{ color: 'var(--t1)' }}>DOH — Days on Hand</h1>
           <p className="text-[11px] mt-0.5" style={{ color: 'var(--t3)' }}>

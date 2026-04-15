@@ -420,7 +420,7 @@ export default function CumplimientoPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-widest">Dashboard Comercial</p>
+          <p className="text-xs text-gray-400 uppercase tracking-widest">Ventas</p>
           <h1 className="text-2xl font-bold text-gray-800">Cumplimiento</h1>
           {!loading && <p className="text-xs mt-0.5" style={{ color: 'var(--t3)' }}>{periodoLabel}</p>}
         </div>

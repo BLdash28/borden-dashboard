@@ -1657,7 +1657,7 @@ export default function VistaColombia() {
               </div>
               <div>
                 <h1 className="font-black text-slate-900 text-sm leading-none">Colombia</h1>
-                <p className="text-[10px] text-slate-400 mt-0.5">Dashboard Comercial · BL Foods</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Ventas · BL Foods</p>
               </div>
             </div>
 
