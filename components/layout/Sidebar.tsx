@@ -206,7 +206,8 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
 
             {isSectionOpen(group.section) && group.items.map(item => {
               const fullHref = currentDept ? `/dashboard/${currentDept}${item.href}` : '#'
-              const isActive = pathname === fullHref || pathname.startsWith(fullHref + '/')
+              const isActive = pathname === fullHref ||
+                (pathname.startsWith(fullHref + '/') && fullHref !== `/dashboard/${currentDept}/sell-in`)
               return (
                 <Link key={item.href} href={fullHref}
                   className={cn(
