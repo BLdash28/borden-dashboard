@@ -62,7 +62,7 @@ const MENUS: Record<string, { section: string; items: { href: string; icon: any;
 
 const DEPTS = ['comercial','mercadeo','operaciones','finanzas']
 const DEPT_LABELS: Record<string,string> = {
-  comercial:'Comercial', mercadeo:'Mercadeo', operaciones:'Operaciones', finanzas:'Finanzas'
+  comercial:'Ventas', mercadeo:'Mercadeo', operaciones:'Operaciones', finanzas:'Finanzas'
 }
 const DEPT_HOME: Record<string,string> = {
   comercial:'/resumen', mercadeo:'/resumen', operaciones:'/registros-sanitarios', finanzas:'/resumen'

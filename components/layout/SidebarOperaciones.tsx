@@ -8,7 +8,7 @@ import { useState } from 'react'
 
 const DEPTS = ['comercial','mercadeo','operaciones','finanzas']
 const DEPT_LABELS: Record<string,string> = {
-  comercial:'Comercial', mercadeo:'Mercadeo', operaciones:'Operaciones', finanzas:'Finanzas'
+  comercial:'Ventas', mercadeo:'Mercadeo', operaciones:'Operaciones', finanzas:'Finanzas'
 }
 
 export default function SidebarOperaciones({ profile }: { profile?: any }) {
