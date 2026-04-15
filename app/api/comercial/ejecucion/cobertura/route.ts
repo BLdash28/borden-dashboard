@@ -7,12 +7,17 @@ export const dynamic = 'force-dynamic'
 // Cobertura PDV: cuántos puntos de venta tienen cada SKU activo
 export async function GET(req: NextRequest) {
   try {
-    const sp   = req.nextUrl.searchParams
-    const pais = sp.get('pais') || ''
-    const ano  = parseInt(sp.get('ano') || '2026')
+    const sp     = req.nextUrl.searchParams
+    const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
+    const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
+    const ano    = parseInt(sp.get('ano') || '2026')
+
+    const inC = (col: string, vals: string[]) =>
+      `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const filters: string[] = [`ano = ${ano}`]
-    if (pais) filters.push(`pais = '${pais.replace(/'/g,"''")}'`)
+    if (paises.length) filters.push(inC('pais', paises))
+    if (cats.length)   filters.push(inC('categoria', cats))
     const where = 'WHERE ' + filters.join(' AND ')
 
     const r = await pool.query(`

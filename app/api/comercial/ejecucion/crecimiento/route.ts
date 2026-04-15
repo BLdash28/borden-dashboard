@@ -6,20 +6,23 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    const sp   = req.nextUrl.searchParams
-    const pais = sp.get('pais') || ''
-    const cat  = sp.get('categoria') || ''
+    const sp     = req.nextUrl.searchParams
+    const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
+    const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
+
+    const inC = (col: string, vals: string[]) =>
+      `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const filters: string[] = []
-    if (pais) filters.push(`pais = '${pais.replace(/'/g,"''")}'`)
-    if (cat)  filters.push(`categoria = '${cat.replace(/'/g,"''")}'`)
+    if (paises.length) filters.push(inC('pais', paises))
+    if (cats.length)   filters.push(inC('categoria', cats))
     const and = filters.length ? 'AND ' + filters.join(' AND ') : ''
 
     const r = await pool.query(`
       SELECT
         sku,
-        MAX(descripcion)                              AS descripcion,
-        MAX(categoria)                                AS categoria,
+        MAX(descripcion) AS descripcion,
+        MAX(categoria)   AS categoria,
         ROUND(SUM(CASE WHEN ano = 2024 THEN ventas_valor    ELSE 0 END)::numeric, 2) AS y2024,
         ROUND(SUM(CASE WHEN ano = 2025 THEN ventas_valor    ELSE 0 END)::numeric, 2) AS y2025,
         ROUND(SUM(CASE WHEN ano = 2026 THEN ventas_valor    ELSE 0 END)::numeric, 2) AS y2026,

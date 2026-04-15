@@ -1,8 +1,10 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { AlertTriangle, Download, RefreshCw } from 'lucide-react'
+import FiltroMulti from '@/components/ui/FiltroMulti'
 
 const PAISES = ['CR','GT','SV','NI','HN','CO']
+const PAISES_OPT = PAISES.map(p => ({ value: p }))
 
 interface Row {
   sku: string; descripcion: string; categoria: string
@@ -15,18 +17,18 @@ const URG_STYLES: Record<string, string> = {
 }
 
 export default function PuntoReorden() {
-  const [pais,    setPais]    = useState('')
-  const [umbral,  setUmbral]  = useState(14)
-  const [rows,    setRows]    = useState<Row[]>([])
-  const [criticos,setCriticos]= useState(0)
-  const [alertas, setAlertas] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const [paises,   setPaises]   = useState<string[]>([])
+  const [umbral,   setUmbral]   = useState(14)
+  const [rows,     setRows]     = useState<Row[]>([])
+  const [criticos, setCriticos] = useState(0)
+  const [alertas,  setAlertas]  = useState(0)
+  const [loading,  setLoading]  = useState(true)
 
-  const cargar = useCallback(async (p: string, u: number) => {
+  const cargar = useCallback(async (ps: string[], u: number) => {
     setLoading(true)
     try {
       const qs = new URLSearchParams({ umbral: String(u) })
-      if (p) qs.set('pais', p)
+      if (ps.length) qs.set('pais', ps.join(','))
       const res = await fetch('/api/comercial/ejecucion/punto-reorden?' + qs)
       if (!res.ok) throw new Error()
       const j = await res.json()
@@ -36,7 +38,7 @@ export default function PuntoReorden() {
     } catch { setRows([]) } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { cargar(pais, umbral) }, [cargar, pais, umbral])
+  useEffect(() => { cargar(paises, umbral) }, [cargar, paises, umbral])
 
   const descargarCSV = () => {
     const csv = ['SKU,Descripción,Categoría,Qty PDV,Venta/Día,DOH,Urgencia',
@@ -65,11 +67,7 @@ export default function PuntoReorden() {
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div className="flex items-center gap-3 flex-wrap">
-          <select value={pais} onChange={e => setPais(e.target.value)}
-            className="flex-1 min-w-[130px] border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-            <option value="">Todos los países</option>
-            {PAISES.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
+          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
           <div className="flex items-center gap-2">
             <label className="text-xs text-gray-500 whitespace-nowrap">Umbral DOH:</label>
             <select value={umbral} onChange={e => setUmbral(parseInt(e.target.value))}
@@ -77,7 +75,7 @@ export default function PuntoReorden() {
               {[7, 14, 21, 30].map(d => <option key={d} value={d}>{d} días</option>)}
             </select>
           </div>
-          <button onClick={() => cargar(pais, umbral)}
+          <button onClick={() => cargar(paises, umbral)}
             className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600 hover:bg-gray-200">
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </button>

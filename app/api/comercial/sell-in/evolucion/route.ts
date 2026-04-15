@@ -6,15 +6,18 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    const sp   = req.nextUrl.searchParams
-    const pais = sp.get('pais') || ''
-    const cat  = sp.get('categoria') || ''
-    const tipo = sp.get('tipo_negocio') || ''
+    const sp     = req.nextUrl.searchParams
+    const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
+    const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
+    const tipo   = sp.get('tipo_negocio') || ''
+
+    const inC = (col: string, vals: string[]) =>
+      `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const extraConds: string[] = []
-    if (pais) extraConds.push(`pais = '${pais.replace(/'/g,"''")}'`)
-    if (cat)  extraConds.push(`categoria = '${cat.replace(/'/g,"''")}'`)
-    if (tipo) extraConds.push(`tipo_negocio = '${tipo.replace(/'/g,"''")}'`)
+    if (paises.length) extraConds.push(inC('pais', paises))
+    if (cats.length)   extraConds.push(inC('categoria', cats))
+    if (tipo)          extraConds.push(`tipo_negocio = '${tipo.replace(/'/g,"''")}'`)
     const extra = extraConds.length ? 'AND ' + extraConds.join(' AND ') : ''
 
     const r = await pool.query(`

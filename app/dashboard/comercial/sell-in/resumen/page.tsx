@@ -5,11 +5,15 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
+import FiltroMulti from '@/components/ui/FiltroMulti'
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const PAISES = ['CR','GT','SV','NI','HN','CO']
 const CATS   = ['Quesos','Leches','Helados']
 const TIPOS  = ['REGULAR','LICENCIAMIENTO_HELADOS','LICENCIAMIENTO_COLOMBIA']
+
+const PAISES_OPT = PAISES.map(p => ({ value: p }))
+const CATS_OPT   = CATS.map(c => ({ value: c }))
 
 const fmt = (v: number) => {
   if (!isFinite(v)) return '$0'
@@ -41,22 +45,22 @@ function DeltaBadge({ delta, isPct = false }: { delta: number; isPct?: boolean }
 }
 
 export default function SellInResumen() {
-  const [ano,  setAno]  = useState(2026)
-  const [pais, setPais] = useState('')
-  const [cat,  setCat]  = useState('')
-  const [tipo, setTipo] = useState('')
+  const [ano,    setAno]    = useState(2026)
+  const [paises, setPaises] = useState<string[]>([])
+  const [cats,   setCats]   = useState<string[]>([])
+  const [tipo,   setTipo]   = useState('')
 
-  const [kpi,      setKpi]      = useState<KpiData | null>(null)
-  const [mensual,  setMensual]  = useState<any[]>([])
-  const [ytd,      setYtd]      = useState<any[]>([])
-  const [loading,  setLoading]  = useState(true)
+  const [kpi,     setKpi]     = useState<KpiData | null>(null)
+  const [mensual, setMensual] = useState<any[]>([])
+  const [ytd,     setYtd]     = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const cargar = useCallback(async (a: number, p: string, c: string, t: string) => {
+  const cargar = useCallback(async (a: number, ps: string[], cs: string[], t: string) => {
     setLoading(true)
     try {
       const qs = new URLSearchParams({ ano: String(a) })
-      if (p) qs.set('pais', p)
-      if (c) qs.set('categoria', c)
+      if (ps.length) qs.set('pais', ps.join(','))
+      if (cs.length) qs.set('categoria', cs.join(','))
       if (t) qs.set('tipo_negocio', t)
 
       const [kR, eR] = await Promise.all([
@@ -71,7 +75,7 @@ export default function SellInResumen() {
     } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { cargar(ano, pais, cat, tipo) }, [cargar, ano, pais, cat, tipo])
+  useEffect(() => { cargar(ano, paises, cats, tipo) }, [cargar, ano, paises, cats, tipo])
 
   // Transform ytd for recharts
   const ytdData = Array.from({ length: 12 }, (_, i) => {
@@ -97,7 +101,7 @@ export default function SellInResumen() {
           <h1 className="text-2xl font-bold text-gray-800">Resumen Ejecutivo</h1>
           <p className="text-sm text-gray-400 mt-0.5">Comparativo vs año anterior · Facturación propia</p>
         </div>
-        <button onClick={() => cargar(ano, pais, cat, tipo)}
+        <button onClick={() => cargar(ano, paises, cats, tipo)}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Actualizar
         </button>
@@ -117,22 +121,8 @@ export default function SellInResumen() {
               ))}
             </div>
           </div>
-          <div className="flex-1 min-w-[120px]">
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">País</p>
-            <select value={pais} onChange={e => setPais(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-              <option value="">Todos</option>
-              {PAISES.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          <div className="flex-1 min-w-[130px]">
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Categoría</p>
-            <select value={cat} onChange={e => setCat(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-              <option value="">Todas</option>
-              {CATS.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
+          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos" />
+          <FiltroMulti label="Categoría" options={CATS_OPT} value={cats} onChange={setCats} placeholder="Todas" />
           <div className="flex-1 min-w-[180px]">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Tipo Negocio</p>
             <select value={tipo} onChange={e => setTipo(e.target.value)}

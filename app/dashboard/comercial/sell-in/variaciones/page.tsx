@@ -1,10 +1,12 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { Download, RefreshCw, ChevronDown, ChevronRight } from 'lucide-react'
+import { Download, RefreshCw } from 'lucide-react'
+import FiltroMulti from '@/components/ui/FiltroMulti'
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const PAISES = ['CR','GT','SV','NI','HN','CO']
-const CATS   = ['Quesos','Leches','Helados']
+const PAISES_OPT = PAISES.map(p => ({ value: p }))
+const MESES_OPT  = Array.from({length:12},(_,i)=>i+1).map(m => ({ value: String(m), label: MESES[m] }))
 
 const fmt = (v: number) => {
   if (!isFinite(v) || v === 0) return '—'
@@ -39,33 +41,29 @@ function fmtVar(v: number | null) {
 
 export default function SellInVariaciones() {
   const [dim,    setDim]    = useState<DimKey>('cliente')
-  const [pais,   setPais]   = useState('')
+  const [paises, setPaises] = useState<string[]>([])
   const [meses,  setMeses]  = useState<string[]>([])
   const [rows,   setRows]   = useState<VarRow[]>([])
   const [totals, setTotals] = useState({ y2024: 0, y2025: 0, y2026: 0 })
   const [loading,setLoading]= useState(true)
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  const cargar = useCallback(async (d: DimKey, p: string, ms: string[]) => {
+  const cargar = useCallback(async (d: DimKey, ps: string[], ms: string[]) => {
     setLoading(true)
     try {
       const qs = new URLSearchParams({ dim: d })
-      if (p) qs.set('pais', p)
+      if (ps.length) qs.set('pais', ps.join(','))
       if (ms.length) qs.set('meses', ms.join(','))
       const res = await fetch('/api/comercial/sell-in/variaciones?' + qs)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const j = await res.json()
       setRows(j.rows ?? [])
       setTotals(j.totals ?? { y2024: 0, y2025: 0, y2026: 0 })
-    } catch (e) {
+    } catch {
       setRows([])
     } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { cargar(dim, pais, meses) }, [cargar, dim, pais])
-
-  const toggleExpand = (key: string) =>
-    setExpanded(prev => { const s = new Set(prev); s.has(key) ? s.delete(key) : s.add(key); return s })
+  useEffect(() => { cargar(dim, paises, meses) }, [cargar, dim, paises, meses])
 
   const descargarCSV = () => {
     const h = [dim === 'cliente' ? 'Cliente' : 'Categoría', '2024', 'Var 25/24 %', '2025', 'Var 26/25 %', '2026', 'Presupuesto']
@@ -104,34 +102,15 @@ export default function SellInVariaciones() {
           {/* Dimensión */}
           <div className="flex rounded-lg border border-gray-200 overflow-hidden">
             {(['cliente','categoria'] as DimKey[]).map(d => (
-              <button key={d} onClick={() => { setDim(d); cargar(d, pais, meses) }}
+              <button key={d} onClick={() => setDim(d)}
                 className={`px-4 py-2 text-sm font-medium transition-colors ${dim===d?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
                 {d === 'cliente' ? 'Por Cliente' : 'Por Categoría'}
               </button>
             ))}
           </div>
-          {/* País */}
-          <div className="flex-1 min-w-[120px]">
-            <select value={pais} onChange={e => { setPais(e.target.value); cargar(dim, e.target.value, meses) }}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-              <option value="">Todos los países</option>
-              {PAISES.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          {/* Meses */}
-          <div className="flex-1 min-w-[180px]">
-            <select value={meses.length === 1 ? meses[0] : ''} onChange={e => {
-              const v = e.target.value ? [e.target.value] : []
-              setMeses(v); cargar(dim, pais, v)
-            }}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-              <option value="">Todos los meses (YTD)</option>
-              {Array.from({length:12},(_,i)=>i+1).map(m => (
-                <option key={m} value={m}>{MESES[m]}</option>
-              ))}
-            </select>
-          </div>
-          <button onClick={() => cargar(dim, pais, meses)}
+          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
+          <FiltroMulti label="Meses" options={MESES_OPT} value={meses} onChange={setMeses} placeholder="Todos (YTD)" />
+          <button onClick={() => cargar(dim, paises, meses)}
             className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600 hover:bg-gray-200">
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </button>

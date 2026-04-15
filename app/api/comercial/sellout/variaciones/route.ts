@@ -6,15 +6,18 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    const sp   = req.nextUrl.searchParams
-    const dim  = sp.get('dim') || 'pais'   // pais | cadena | categoria | sku
-    const pais = sp.get('pais') || ''
-    const cad  = sp.get('cadena') || ''
+    const sp     = req.nextUrl.searchParams
+    const dim    = sp.get('dim') || 'pais'   // pais | cadena | categoria | sku
+    const paises = sp.get('pais') ? sp.get('pais')!.split(',').filter(Boolean) : []
+    const cad    = sp.get('cadena') || ''
     const mesesP = sp.get('meses') || ''
 
+    const inC = (col: string, vals: string[]) =>
+      `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
+
     const extra: string[] = []
-    if (pais) extra.push(`pais = '${pais.replace(/'/g,"''")}'`)
-    if (cad)  extra.push(`cadena = '${cad.replace(/'/g,"''")}'`)
+    if (paises.length) extra.push(inC('pais', paises))
+    if (cad)           extra.push(`cadena = '${cad.replace(/'/g,"''")}'`)
     if (mesesP) {
       const ms = mesesP.split(',').map(Number).filter(n => n >= 1 && n <= 12)
       if (ms.length) extra.push(`mes IN (${ms.join(',')})`)

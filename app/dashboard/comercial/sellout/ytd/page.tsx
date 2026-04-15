@@ -1,9 +1,12 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { Download, RefreshCw } from 'lucide-react'
+import FiltroMulti from '@/components/ui/FiltroMulti'
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const PAISES = ['CR','GT','SV','NI','HN','CO']
+const PAISES_OPT = PAISES.map(p => ({ value: p }))
+const MESES_OPT  = Array.from({length:12},(_,i)=>i+1).map(m => ({ value: String(m), label: MESES[m] }))
 
 const fmt = (v: number) => {
   if (!isFinite(v) || v === 0) return '—'
@@ -41,18 +44,18 @@ const DIM_LABELS: Record<DimKey, string> = {
 
 export default function SellOutYTD() {
   const [dim,    setDim]    = useState<DimKey>('pais')
-  const [pais,   setPais]   = useState('')
-  const [mes,    setMes]    = useState('')
+  const [paises, setPaises] = useState<string[]>([])
+  const [meses,  setMeses]  = useState<string[]>([])
   const [rows,   setRows]   = useState<VarRow[]>([])
   const [totals, setTotals] = useState({ y2024: 0, y2025: 0, y2026: 0 })
   const [loading,setLoading]= useState(true)
 
-  const cargar = useCallback(async (d: DimKey, p: string, m: string) => {
+  const cargar = useCallback(async (d: DimKey, ps: string[], ms: string[]) => {
     setLoading(true)
     try {
       const qs = new URLSearchParams({ dim: d })
-      if (p) qs.set('pais', p)
-      if (m) qs.set('meses', m)
+      if (ps.length) qs.set('pais', ps.join(','))
+      if (ms.length) qs.set('meses', ms.join(','))
       const res = await fetch('/api/comercial/sellout/variaciones?' + qs)
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const j = await res.json()
@@ -63,7 +66,7 @@ export default function SellOutYTD() {
     } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { cargar(dim, pais, mes) }, [cargar, dim, pais, mes])
+  useEffect(() => { cargar(dim, paises, meses) }, [cargar, dim, paises, meses])
 
   const descargarCSV = () => {
     const h = [DIM_LABELS[dim], '2024', 'Var 25/24 %', '2025', 'Var 26/25 %', '2026']
@@ -108,25 +111,9 @@ export default function SellOutYTD() {
               </button>
             ))}
           </div>
-          {/* País */}
-          <div className="flex-1 min-w-[130px]">
-            <select value={pais} onChange={e => setPais(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-              <option value="">Todos los países</option>
-              {PAISES.map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          {/* Mes */}
-          <div className="flex-1 min-w-[160px]">
-            <select value={mes} onChange={e => setMes(e.target.value)}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-              <option value="">Todos los meses (YTD)</option>
-              {Array.from({length:12},(_,i)=>i+1).map(m => (
-                <option key={m} value={m}>{MESES[m]}</option>
-              ))}
-            </select>
-          </div>
-          <button onClick={() => cargar(dim, pais, mes)}
+          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
+          <FiltroMulti label="Meses" options={MESES_OPT} value={meses} onChange={setMeses} placeholder="Todos (YTD)" />
+          <button onClick={() => cargar(dim, paises, meses)}
             className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600 hover:bg-gray-200">
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </button>

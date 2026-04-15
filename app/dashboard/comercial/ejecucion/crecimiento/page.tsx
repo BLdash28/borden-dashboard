@@ -1,9 +1,12 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
 import { TrendingUp, TrendingDown, Download, RefreshCw } from 'lucide-react'
+import FiltroMulti from '@/components/ui/FiltroMulti'
 
 const PAISES = ['CR','GT','SV','NI','HN','CO']
 const CATS   = ['Quesos','Leches','Helados']
+const PAISES_OPT = PAISES.map(p => ({ value: p }))
+const CATS_OPT   = CATS.map(c => ({ value: c }))
 
 const fmt = (v: number) => {
   if (!isFinite(v) || v === 0) return '—'
@@ -31,18 +34,18 @@ interface Row {
 type View = 'crecen' | 'caen'
 
 export default function CrecimientoSKU() {
-  const [pais, setPais] = useState('')
-  const [cat,  setCat]  = useState('')
-  const [view, setView] = useState<View>('crecen')
-  const [rows, setRows] = useState<Row[]>([])
+  const [paises, setPaises] = useState<string[]>([])
+  const [cats,   setCats]   = useState<string[]>([])
+  const [view,   setView]   = useState<View>('crecen')
+  const [rows,   setRows]   = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
 
-  const cargar = useCallback(async (p: string, c: string) => {
+  const cargar = useCallback(async (ps: string[], cs: string[]) => {
     setLoading(true)
     try {
       const qs = new URLSearchParams()
-      if (p) qs.set('pais', p)
-      if (c) qs.set('categoria', c)
+      if (ps.length) qs.set('pais', ps.join(','))
+      if (cs.length) qs.set('categoria', cs.join(','))
       const res = await fetch('/api/comercial/ejecucion/crecimiento?' + qs)
       if (!res.ok) throw new Error()
       const j = await res.json()
@@ -50,7 +53,7 @@ export default function CrecimientoSKU() {
     } catch { setRows([]) } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { cargar(pais, cat) }, [cargar, pais, cat])
+  useEffect(() => { cargar(paises, cats) }, [cargar, paises, cats])
 
   const sorted = [...rows].sort((a, b) =>
     view === 'crecen'
@@ -96,17 +99,9 @@ export default function CrecimientoSKU() {
               <TrendingDown size={13}/> Top Caída
             </button>
           </div>
-          <select value={pais} onChange={e => setPais(e.target.value)}
-            className="flex-1 min-w-[120px] border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-            <option value="">Todos los países</option>
-            {PAISES.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
-          <select value={cat} onChange={e => setCat(e.target.value)}
-            className="flex-1 min-w-[140px] border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-            <option value="">Todas las categorías</option>
-            {CATS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <button onClick={() => cargar(pais, cat)}
+          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
+          <FiltroMulti label="Categoría" options={CATS_OPT} value={cats} onChange={setCats} placeholder="Todas las categorías" />
+          <button onClick={() => cargar(paises, cats)}
             className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600 hover:bg-gray-200">
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </button>

@@ -6,14 +6,17 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    const sp   = req.nextUrl.searchParams
-    const pais = sp.get('pais') || ''
-    const cat  = sp.get('categoria') || ''
+    const sp     = req.nextUrl.searchParams
+    const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
+    const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
+
+    const inC = (col: string, vals: string[]) =>
+      `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const filters: string[] = []
-    if (pais) filters.push(`pais = '${pais.replace(/'/g,"''")}'`)
-    if (cat)  filters.push(`categoria = '${cat.replace(/'/g,"''")}'`)
-    const and = filters.length ? 'AND ' + filters.join(' AND ') : ''
+    if (paises.length) filters.push(inC('pais', paises))
+    if (cats.length)   filters.push(inC('categoria', cats))
+    const and   = filters.length ? 'AND ' + filters.join(' AND ') : ''
     const where = filters.length ? 'WHERE ' + filters.join(' AND ') : ''
 
     // Inventario PDV

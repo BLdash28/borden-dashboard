@@ -7,16 +7,19 @@ export const dynamic = 'force-dynamic'
 // SKUs cuyo inventario PDV es menor o igual a 14 días de venta (punto de reorden)
 export async function GET(req: NextRequest) {
   try {
-    const sp      = req.nextUrl.searchParams
-    const pais    = sp.get('pais') || ''
-    const umbral  = parseInt(sp.get('umbral') || '14')
+    const sp     = req.nextUrl.searchParams
+    const paises = sp.get('pais') ? sp.get('pais')!.split(',').filter(Boolean) : []
+    const umbral = parseInt(sp.get('umbral') || '14')
+
+    const inC = (col: string, vals: string[]) =>
+      `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const pdvFilters: string[] = []
-    if (pais) pdvFilters.push(`pais = '${pais.replace(/'/g,"''")}'`)
+    if (paises.length) pdvFilters.push(inC('pais', paises))
     const pdvWhere = pdvFilters.length ? 'WHERE ' + pdvFilters.join(' AND ') : ''
 
     const ventaFilters = [`ano IN (2025, 2026)`]
-    if (pais) ventaFilters.push(`pais = '${pais.replace(/'/g,"''")}'`)
+    if (paises.length) ventaFilters.push(inC('pais', paises))
     const ventaWhere = 'WHERE ' + ventaFilters.join(' AND ')
 
     const [pdvR, ventaR] = await Promise.all([

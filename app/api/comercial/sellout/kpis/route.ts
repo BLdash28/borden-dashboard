@@ -6,17 +6,20 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    const sp   = req.nextUrl.searchParams
-    const ano  = parseInt(sp.get('ano') || '2026')
-    const pais = sp.get('pais') || ''
-    const cat  = sp.get('categoria') || ''
-    const cad  = sp.get('cadena') || ''
+    const sp     = req.nextUrl.searchParams
+    const ano    = parseInt(sp.get('ano') || '2026')
+    const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
+    const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
+    const cad    = sp.get('cadena') || ''
+
+    const inC = (col: string, vals: string[]) =>
+      `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const buildWhere = (a: number) => {
       const c = [`ano = ${a}`]
-      if (pais) c.push(`pais = '${pais.replace(/'/g,"''")}'`)
-      if (cat)  c.push(`categoria = '${cat.replace(/'/g,"''")}'`)
-      if (cad)  c.push(`cadena = '${cad.replace(/'/g,"''")}'`)
+      if (paises.length) c.push(inC('pais', paises))
+      if (cats.length)   c.push(inC('categoria', cats))
+      if (cad)           c.push(`cadena = '${cad.replace(/'/g,"''")}'`)
       return 'WHERE ' + c.join(' AND ')
     }
 

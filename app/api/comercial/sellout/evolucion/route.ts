@@ -6,15 +6,18 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    const sp   = req.nextUrl.searchParams
-    const pais = sp.get('pais') || ''
-    const cat  = sp.get('categoria') || ''
-    const cad  = sp.get('cadena') || ''
+    const sp     = req.nextUrl.searchParams
+    const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
+    const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
+    const cad    = sp.get('cadena') || ''
+
+    const inC = (col: string, vals: string[]) =>
+      `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const extra: string[] = []
-    if (pais) extra.push(`pais = '${pais.replace(/'/g,"''")}'`)
-    if (cat)  extra.push(`categoria = '${cat.replace(/'/g,"''")}'`)
-    if (cad)  extra.push(`cadena = '${cad.replace(/'/g,"''")}'`)
+    if (paises.length) extra.push(inC('pais', paises))
+    if (cats.length)   extra.push(inC('categoria', cats))
+    if (cad)           extra.push(`cadena = '${cad.replace(/'/g,"''")}'`)
     const and = extra.length ? 'AND ' + extra.join(' AND ') : ''
 
     const r = await pool.query(`

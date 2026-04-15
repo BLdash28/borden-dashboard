@@ -6,17 +6,20 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    const sp = req.nextUrl.searchParams
-    const ano  = parseInt(sp.get('ano')  || '2026')
-    const pais = sp.get('pais') || ''
-    const cat  = sp.get('categoria') || ''
-    const tipo = sp.get('tipo_negocio') || ''
+    const sp     = req.nextUrl.searchParams
+    const ano    = parseInt(sp.get('ano') || '2026')
+    const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
+    const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
+    const tipo   = sp.get('tipo_negocio') || ''
+
+    const inC = (col: string, vals: string[]) =>
+      `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const buildWhere = (anoVal: number) => {
       const conds = [`ano = ${anoVal}`]
-      if (pais) conds.push(`pais = '${pais.replace(/'/g, "''")}'`)
-      if (cat)  conds.push(`categoria = '${cat.replace(/'/g, "''")}'`)
-      if (tipo) conds.push(`tipo_negocio = '${tipo.replace(/'/g, "''")}'`)
+      if (paises.length) conds.push(inC('pais', paises))
+      if (cats.length)   conds.push(inC('categoria', cats))
+      if (tipo)          conds.push(`tipo_negocio = '${tipo.replace(/'/g,"''")}'`)
       return 'WHERE ' + conds.join(' AND ')
     }
 

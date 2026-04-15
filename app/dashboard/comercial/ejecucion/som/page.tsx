@@ -2,8 +2,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { RefreshCw } from 'lucide-react'
 import { PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import FiltroMulti from '@/components/ui/FiltroMulti'
 
 const PAISES = ['CR','GT','SV','NI','HN','CO']
+const PAISES_OPT = PAISES.map(p => ({ value: p }))
 const COLORS = ['#f59e0b','#60a5fa','#34d399','#f87171','#a78bfa','#fb923c','#38bdf8']
 
 const fmt = (v: number) => {
@@ -17,16 +19,16 @@ interface SomRow { pais: string; total: number; categorias: Record<string, { val
 
 export default function SOMPage() {
   const [ano,        setAno]        = useState(2026)
-  const [pais,       setPais]       = useState('')
+  const [paises,     setPaises]     = useState<string[]>([])
   const [rows,       setRows]       = useState<SomRow[]>([])
   const [categorias, setCategorias] = useState<string[]>([])
   const [loading,    setLoading]    = useState(true)
 
-  const cargar = useCallback(async (a: number, p: string) => {
+  const cargar = useCallback(async (a: number, ps: string[]) => {
     setLoading(true)
     try {
       const qs = new URLSearchParams({ ano: String(a) })
-      if (p) qs.set('pais', p)
+      if (ps.length) qs.set('pais', ps.join(','))
       const res = await fetch('/api/comercial/ejecucion/som?' + qs)
       if (!res.ok) throw new Error()
       const j = await res.json()
@@ -35,7 +37,7 @@ export default function SOMPage() {
     } catch { setRows([]) } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { cargar(ano, pais) }, [cargar, ano, pais])
+  useEffect(() => { cargar(ano, paises) }, [cargar, ano, paises])
 
   // Pie chart data: total por categoría sumando todos los países
   const pieData = categorias.map(cat => ({
@@ -51,7 +53,7 @@ export default function SOMPage() {
           <h1 className="text-2xl font-bold text-gray-800">Share of Market</h1>
           <p className="text-sm text-gray-400 mt-0.5">Participación de venta por categoría y país · Sell-Out interno</p>
         </div>
-        <button onClick={() => cargar(ano, pais)}
+        <button onClick={() => cargar(ano, paises)}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Actualizar
         </button>
@@ -66,11 +68,7 @@ export default function SOMPage() {
                 className={`px-4 py-1.5 text-sm font-medium transition-colors ${ano===a?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>{a}</button>
             ))}
           </div>
-          <select value={pais} onChange={e => setPais(e.target.value)}
-            className="flex-1 min-w-[130px] border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-            <option value="">Todos los países</option>
-            {PAISES.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
+          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
         </div>
       </div>
 

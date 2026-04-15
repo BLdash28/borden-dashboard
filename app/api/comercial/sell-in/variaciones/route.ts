@@ -6,13 +6,16 @@ export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
-    const sp   = req.nextUrl.searchParams
-    const dim  = sp.get('dim') || 'cliente'   // cliente | categoria
-    const pais = sp.get('pais') || ''
+    const sp     = req.nextUrl.searchParams
+    const dim    = sp.get('dim') || 'cliente'   // cliente | categoria
+    const paises = sp.get('pais') ? sp.get('pais')!.split(',').filter(Boolean) : []
     const mesesP = sp.get('meses') || ''
 
+    const inC = (col: string, vals: string[]) =>
+      `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
+
     const extra: string[] = []
-    if (pais) extra.push(`pais = '${pais.replace(/'/g,"''")}'`)
+    if (paises.length) extra.push(inC('pais', paises))
     if (mesesP) {
       const ms = mesesP.split(',').map(Number).filter(n => n >= 1 && n <= 12)
       if (ms.length) extra.push(`mes IN (${ms.join(',')})`)
@@ -50,11 +53,10 @@ export async function GET(req: NextRequest) {
         y2026: v.y2026,
         var_2524: v.y2024 > 0 ? ((v.y2025 - v.y2024) / v.y2024) * 100 : null,
         var_2625: v.y2025 > 0 ? ((v.y2026 - v.y2025) / v.y2025) * 100 : null,
-        presupuesto: 0, // reservado para carga futura
+        presupuesto: 0,
       }))
       .sort((a, b) => b.y2026 - a.y2026)
 
-    // Totales
     const totals = rows.reduce((acc, r) => ({
       y2024: acc.y2024 + r.y2024,
       y2025: acc.y2025 + r.y2025,
