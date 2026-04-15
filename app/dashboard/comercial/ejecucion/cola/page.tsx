@@ -47,7 +47,7 @@ export default function LongTail() {
 
   const descargarCSV = () => {
     const csv = ['#,SKU,Descripción,Categoría,Venta,% Acumulado,Segmento',
-      ...display.map(r => `${r.rank},"${r.sku}","${r.descripcion}","${r.categoria}",${r.valor.toFixed(2)},${r.pct_acum}%,${r.es_cola?'Cola 50%':'Top 50%'}`)
+      ...display.map(r => `${r.rank},"${r.sku}","${r.descripcion}","${r.categoria}",${Number(r.valor||0).toFixed(2)},${Number(r.pct_acum||0).toFixed(1)}%,${r.es_cola?'Cola 50%':'Top 50%'}`)
     ].join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
@@ -99,10 +99,10 @@ export default function LongTail() {
       {resumen && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { label: 'Total SKUs',        value: String(resumen.total_skus) },
-            { label: 'SKUs Cola 50%',     value: String(resumen.skus_cola50) },
-            { label: '% SKUs en cola',    value: resumen.pct_cola.toFixed(1) + '%' },
-            { label: 'Venta Long Tail',   value: fmt(resumen.valor_cola) },
+            { label: 'Total SKUs',        value: String(resumen.total_skus ?? 0) },
+            { label: 'SKUs Cola 50%',     value: String(resumen.skus_cola50 ?? 0) },
+            { label: '% SKUs en cola',    value: (Number(resumen.pct_cola) || 0).toFixed(1) + '%' },
+            { label: 'Venta Long Tail',   value: fmt(Number(resumen.valor_cola) || 0) },
           ].map(k => (
             <div key={k.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">{k.label}</p>
@@ -144,9 +144,9 @@ export default function LongTail() {
                         <div className="flex items-center justify-end gap-2">
                           <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div className={`h-full rounded-full ${r.es_cola ? 'bg-gray-300' : 'bg-amber-400'}`}
-                              style={{ width: `${Math.min(r.pct_acum, 100)}%` }} />
+                              style={{ width: `${Math.min(Number(r.pct_acum) || 0, 100)}%` }} />
                           </div>
-                          <span className="text-gray-600 w-10 text-right">{r.pct_acum}%</span>
+                          <span className="text-gray-600 w-10 text-right">{Number(r.pct_acum || 0).toFixed(1)}%</span>
                         </div>
                       </td>
                       <td className="py-2 px-4 text-center">
