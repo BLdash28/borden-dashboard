@@ -21,13 +21,16 @@ export async function GET(req: NextRequest) {
     const r = await pool.query(`
       SELECT
         sku,
-        MAX(descripcion) AS descripcion,
-        MAX(categoria)   AS categoria,
-        ROUND(AVG(CASE WHEN ano = 2024 THEN precio_promedio END)::numeric, 4) AS precio_2024,
-        ROUND(AVG(CASE WHEN ano = 2025 THEN precio_promedio END)::numeric, 4) AS precio_2025,
-        ROUND(AVG(CASE WHEN ano = 2026 THEN precio_promedio END)::numeric, 4) AS precio_2026,
-        ROUND(SUM(CASE WHEN ano = 2026 THEN ventas_unidades ELSE 0 END)::numeric, 0) AS u2026,
-        ROUND(SUM(CASE WHEN ano = 2026 THEN ventas_valor    ELSE 0 END)::numeric, 2) AS v2026
+        MAX(descripcion)                                                                  AS descripcion,
+        MAX(categoria)                                                                    AS categoria,
+        MAX(NULLIF(subcategoria, ''))                                                     AS subcategoria,
+        MAX(NULLIF(codigo_barras, ''))                                                    AS codigo_barras,
+        ROUND(AVG(CASE WHEN ano = 2024 THEN precio_promedio END)::numeric, 4)             AS precio_2024,
+        ROUND(AVG(CASE WHEN ano = 2025 THEN precio_promedio END)::numeric, 4)             AS precio_2025,
+        ROUND(AVG(CASE WHEN ano = 2026 THEN precio_promedio END)::numeric, 4)             AS precio_2026,
+        ROUND(SUM(CASE WHEN ano = 2025 THEN ventas_unidades ELSE 0 END)::numeric, 0)     AS u2025,
+        ROUND(SUM(CASE WHEN ano = 2026 THEN ventas_unidades ELSE 0 END)::numeric, 0)     AS u2026,
+        ROUND(SUM(CASE WHEN ano = 2026 THEN ventas_valor    ELSE 0 END)::numeric, 2)     AS v2026
       FROM fact_sales_sellout
       WHERE ano IN (2024, 2025, 2026) ${and}
       GROUP BY sku
@@ -40,16 +43,32 @@ export async function GET(req: NextRequest) {
       const p24 = parseFloat(row.precio_2024) || null
       const p25 = parseFloat(row.precio_2025) || null
       const p26 = parseFloat(row.precio_2026) || null
+      const u25 = parseInt(row.u2025)
+      const u26 = parseInt(row.u2026)
+
+      const var_precio   = p25 && p26 ? ((p26 - p25) / p25) * 100 : null
+      const var_unidades = u25 > 0    ? ((u26 - u25) / u25) * 100 : null
+
+      // Elasticidad precio-demanda: ΔQ%/ΔP%  (significativa solo si |ΔP| > 0.1%)
+      const elasticidad = var_precio !== null && var_unidades !== null && Math.abs(var_precio) > 0.1
+        ? var_unidades / var_precio
+        : null
+
       return {
-        sku:         row.sku,
-        descripcion: row.descripcion,
-        categoria:   row.categoria,
-        precio_2024: p24,
-        precio_2025: p25,
-        precio_2026: p26,
-        var_precio:  p25 && p26 ? ((p26 - p25) / p25) * 100 : null,
-        u2026:       parseInt(row.u2026),
-        v2026:       parseFloat(row.v2026),
+        sku:          row.sku,
+        descripcion:  row.descripcion,
+        categoria:    row.categoria,
+        subcategoria: row.subcategoria ?? null,
+        codigo_barras:row.codigo_barras ?? null,
+        precio_2024:  p24,
+        precio_2025:  p25,
+        precio_2026:  p26,
+        var_precio,
+        var_unidades,
+        elasticidad,
+        u2025:        u25,
+        u2026:        u26,
+        v2026:        parseFloat(row.v2026),
       }
     })
 
