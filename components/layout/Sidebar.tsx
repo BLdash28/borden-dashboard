@@ -8,39 +8,46 @@ import {
   BarChart2, TrendingUp, ShoppingCart, ArrowUpRight, Target,
   Package, Globe2, Tag, Store, ShoppingBag,
   FileText, Users, LogOut, ChevronDown, ChevronRight, FileCheck, Settings, Shield,
-  Truck, Box, Megaphone, Share2, DollarSign, CreditCard, Scale, PieChart, Zap, MapPin
+  Truck, Box, Megaphone, Share2, DollarSign, CreditCard, Scale, PieChart, Zap, MapPin,
+  Activity, Layers, Search, AlertTriangle, List
 } from 'lucide-react'
 
 const MENUS: Record<string, { section: string; items: { href: string; icon: any; label: string }[] }[]> = {
   comercial: [
     {
-      section: 'Vistas',
+      section: 'Sell Out',
       items: [
-        { href: '/resumen',      icon: BarChart2,    label: 'Resumen Ejecutivo'   },
-        { href: '/ventas-pais',  icon: Globe2,       label: 'Ventas Diarias x País'},
-        { href: '/sellout',      icon: ShoppingCart, label: 'Ventas Sellout'      },
-        { href: '/crecimientos', icon: ArrowUpRight, label: 'Crecimientos YTD'    },
-        { href: '/cumplimiento', icon: Target,       label: 'Cumplimiento'        },
-        { href: '/doh',          icon: Package,      label: 'Inventarios DOH'     },
-        { href: '/coberturas',   icon: TrendingUp,   label: 'Coberturas'          },
-        { href: '/visto-colombia', icon: MapPin,      label: 'Colombia'            },
-        { href: '/sell-in',       icon: ShoppingCart, label: 'Ventas Sell In'     },
+        { href: '/resumen',           icon: BarChart2,    label: 'Resumen Ejecutivo' },
+        { href: '/sellout',           icon: ShoppingCart, label: 'Detalle por SKU'   },
+        { href: '/sellout/ytd',       icon: ArrowUpRight, label: 'YTD y Variaciones' },
       ],
     },
     {
-      section: 'Dimensiones',
+      section: 'Sell In',
       items: [
-        { href: '/productos',   icon: Package,    label: 'Productos'   },
-        { href: '/proyeccion',  icon: TrendingUp, label: 'Proyección'  },
-        { href: '/ofertas',     icon: Tag,        label: 'Ofertas'     },
+        { href: '/sell-in/resumen',     icon: BarChart2,    label: 'Resumen Ejecutivo'  },
+        { href: '/sell-in/variaciones', icon: ArrowUpRight, label: 'YTD y Variaciones'  },
+        { href: '/sell-in',             icon: ShoppingCart, label: 'Detalle por SKU'    },
+        { href: '/sell-in/licenciamiento', icon: Tag,       label: 'Licenciamiento'     },
       ],
     },
     {
-      section: 'Reportes',
+      section: 'Ejecución',
       items: [
-        { href: '/reportes', icon: FileText, label: 'Reportes' },
+        { href: '/ejecucion',                 icon: Activity,      label: 'Panel General'       },
+        { href: '/ejecucion/crecimiento',     icon: TrendingUp,    label: 'Crecimiento SKU'     },
+        { href: '/ejecucion/distribucion',    icon: Layers,        label: 'Distribución 75%'    },
+        { href: '/ejecucion/cobertura',       icon: MapPin,        label: 'Cobertura PDV'       },
+        { href: '/ejecucion/inventario',      icon: Package,       label: 'Inventario CEDI+PDV' },
+        { href: '/ejecucion/precio',          icon: Tag,           label: 'Precio / Elasticidad'},
+        { href: '/ejecucion/punto-reorden',   icon: AlertTriangle, label: 'Punto de Reorden'   },
+        { href: '/ejecucion/cola',            icon: List,          label: 'Long Tail 50%'       },
+        { href: '/ejecucion/som',             icon: PieChart,      label: 'Share of Market'     },
       ],
     },
+    // ── Archivadas (fuera de menú, archivos intactos) ──
+    // /ventas-pais /crecimientos /cumplimiento /doh /coberturas /visto-colombia
+    // /productos /proyeccion /ofertas /reportes
   ],
   mercadeo: [
     {
@@ -111,7 +118,7 @@ const MENUS: Record<string, { section: string; items: { href: string; icon: any;
 
 const DEPTS = ['comercial','mercadeo','operaciones','finanzas']
 const DEPT_LABELS: Record<string,string> = {
-  comercial:'Comercial', mercadeo:'Mercadeo', operaciones:'Operaciones', finanzas:'Finanzas'
+  comercial:'Ventas', mercadeo:'Mercadeo', operaciones:'Operaciones', finanzas:'Finanzas'
 }
 const DEPT_HOME: Record<string,string> = {
   comercial:'/resumen', mercadeo:'/tendencias', operaciones:'/registros-sanitarios', finanzas:'/resumen'
