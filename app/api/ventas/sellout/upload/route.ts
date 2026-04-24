@@ -19,9 +19,10 @@ export async function POST(req: NextRequest) {
   try {
     await requireAuth()
 
-    const formData = await req.formData()
-    const file     = formData.get('file') as File | null
-    const archivo  = (formData.get('archivo') as string || '').trim() || 'upload-manual'
+    const formData  = await req.formData()
+    const file      = formData.get('file') as File | null
+    const archivo   = (formData.get('archivo') as string || '').trim() || 'upload-manual'
+    const reemplazar = formData.get('reemplazar') === '1'
 
     if (!file) return NextResponse.json({ error: 'No se recibió archivo' }, { status: 400 })
 
@@ -107,7 +108,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No se encontraron filas válidas', detalles: errors }, { status: 400 })
     }
 
-    // Insertar en lotes de 500
+    // Borrar todo si se pide reemplazar
+    let eliminados = 0
+    if (reemplazar) {
+      const del = await pool.query('DELETE FROM fact_sales_sellout')
+      eliminados = del.rowCount ?? 0
+    }
+
+    // Insertar en lotes de 1000
     const BATCH = 1000
     let insertados = 0
     let omitidos   = 0
@@ -135,11 +143,12 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      ok:         true,
+      ok:          true,
       insertados,
-      omitidos:   errors.length,
+      eliminados,
+      omitidos:    errors.length,
       total_filas: rows.length,
-      errores:    errors.slice(0, 10), // max 10 errores en respuesta
+      errores:     errors.slice(0, 10),
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

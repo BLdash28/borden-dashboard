@@ -2,14 +2,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
-
-// ── Clientes ─────────────────────────────────────────────────────────────────
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
-
 import { pool as poolNeon } from '@/lib/db/pool'
+
+export const dynamic = 'force-dynamic'
 
 // ── Mapeo de códigos de cadena ────────────────────────────────────────────────
 const CADENA_MAP: Record<string, string> = {
@@ -49,6 +44,11 @@ async function fetchAll(query: any): Promise<any[]> {
 }
 
 export async function GET(req: NextRequest) {
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+
   const { searchParams } = new URL(req.url)
   const paisFilter   = parseMV(searchParams.get('paises'))
   const catFilter    = parseMV(searchParams.get('categorias'))

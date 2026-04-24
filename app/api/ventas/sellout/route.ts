@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     const subcategoriasP = searchParams.get('subcategorias')
     const clientesP      = searchParams.get('clientes')
     const skusP          = searchParams.get('skus')
-    const barcodesP      = searchParams.get('barcodes')
+    const buscarP        = searchParams.get('buscar') || ''
     const page           = parseInt(searchParams.get('page') || '1')
     const pageSize       = parseInt(searchParams.get('pageSize') || '500')
     const offset         = (page - 1) * pageSize
@@ -63,10 +63,9 @@ export async function GET(req: NextRequest) {
       params.push(...skusArr)
     }
 
-    const barcodesArr = barcodesP ? barcodesP.split(',').map(s => s.trim()).filter(Boolean) : []
-    if (barcodesArr.length > 0) {
-      conds.push(`codigo_barras IN (${barcodesArr.map(() => `$${idx++}`).join(', ')})`)
-      params.push(...barcodesArr)
+    if (buscarP) {
+      conds.push(`(codigo_barras ILIKE $${idx} OR sku ILIKE $${idx} OR descripcion ILIKE $${idx})`)
+      params.push(`%${buscarP}%`); idx++
     }
 
     const where = 'WHERE ' + conds.join(' AND ')
