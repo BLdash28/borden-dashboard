@@ -86,8 +86,8 @@ export default function SellInResumen() {
   })
 
   const kpiCards = kpi ? [
-    { label: 'Venta Neta',    value: fmt(kpi.ingresos.valor),            delta: kpi.ingresos.delta,   icon: '💰' },
-    { label: 'Unidades',      value: fmtN(kpi.unidades.valor),           delta: kpi.unidades.delta,   icon: '📦' },
+    { label: 'Venta Neta',    value: '$' + (kpi.ingresos.valor).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.ingresos.delta,   icon: '💰' },
+    { label: 'Unidades',      value: Math.round(kpi.unidades.valor).toLocaleString('en-US'), delta: kpi.unidades.delta,   icon: '📦' },
     { label: 'Margen USD',    value: fmt(kpi.margen.valor),              delta: kpi.margen.delta,     icon: '📊' },
     { label: '% Margen',      value: kpi.margen_pct.valor.toFixed(1)+'%',delta: kpi.margen_pct.delta, icon: '🎯', isPct: true },
   ] : []
