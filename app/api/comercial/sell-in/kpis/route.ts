@@ -25,22 +25,22 @@ export async function GET(req: NextRequest) {
 
     const [currR, prevR] = await Promise.all([
       pool.query(`SELECT
-          COALESCE(SUM(venta_neta),   0) AS ingresos,
+          COALESCE(SUM(venta_neta),        0) AS ingresos,
           COALESCE(SUM(cantidad_unidades), 0) AS unidades,
-          COALESCE(SUM(margen_valor), 0) AS margen,
-          CASE WHEN SUM(venta_neta) > 0
+          COALESCE(SUM(margen_valor),      0) AS margen,
+          COALESCE(CASE WHEN SUM(venta_neta) > 0
                THEN SUM(margen_valor) / SUM(venta_neta) * 100
-               ELSE 0 END AS margen_pct,
+               ELSE 0 END, 0)                AS margen_pct,
           COUNT(DISTINCT cliente_nombre) AS clientes,
           COUNT(DISTINCT sku)            AS skus
         FROM fact_sales_sellin ${buildWhere(ano)}`),
       pool.query(`SELECT
-          COALESCE(SUM(venta_neta),   0) AS ingresos,
+          COALESCE(SUM(venta_neta),        0) AS ingresos,
           COALESCE(SUM(cantidad_unidades), 0) AS unidades,
-          COALESCE(SUM(margen_valor), 0) AS margen,
-          CASE WHEN SUM(venta_neta) > 0
+          COALESCE(SUM(margen_valor),      0) AS margen,
+          COALESCE(CASE WHEN SUM(venta_neta) > 0
                THEN SUM(margen_valor) / SUM(venta_neta) * 100
-               ELSE 0 END AS margen_pct
+               ELSE 0 END, 0)                AS margen_pct
         FROM fact_sales_sellin ${buildWhere(ano - 1)}`),
     ])
 
