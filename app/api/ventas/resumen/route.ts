@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     // ── Periods listing (no per-user restrictions needed) ────────
     if (tipo === 'periodos') {
       const { data: periodos } = await withCache(
-        'periodos',
+        'periodos-v2',
         async () => {
           const r = await pool.query(
             'SELECT ano, mes, COUNT(DISTINCT pais) AS n_paises, COUNT(*) AS filas, ' +
@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
     const where = conds.join(' AND ')
 
     // ── Full response cache (5 min TTL) ─────────────────────────
-    const cacheKey = `resumen:${new URL(req.url).searchParams.toString()}`
+    const cacheKey = `resumen-mv2:${new URL(req.url).searchParams.toString()}`
     const { data: result } = await withCache(
       cacheKey,
       async () => {
