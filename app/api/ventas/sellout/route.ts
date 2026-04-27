@@ -70,44 +70,42 @@ export async function GET(req: NextRequest) {
 
     const where = 'WHERE ' + conds.join(' AND ')
 
-    // KPI totals
-    const kpiR = await pool.query(
-      `SELECT ROUND(SUM(ventas_valor)::numeric, 2) AS total_valor,
-              ROUND(SUM(ventas_unidades)::numeric, 0) AS total_unidades
-       FROM v_ventas ${where}`,
-      params
-    )
+    // KPI and count from MV (fast), rows from raw table
+    const [kpiR, countR, r] = await Promise.all([
+      pool.query(
+        `SELECT ROUND(SUM(ventas_valor)::numeric, 2) AS total_valor,
+                ROUND(SUM(ventas_unidades)::numeric, 0) AS total_unidades
+         FROM mv_sellout_mensual ${where}`,
+        params
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS total FROM fact_sales_sellout ${where}`,
+        params
+      ),
+      pool.query(
+        `SELECT ano,
+                mes,
+                dia,
+                pais,
+                cliente,
+                punto_venta,
+                codigo_barras,
+                sku,
+                descripcion,
+                subcategoria,
+                ROUND(ventas_unidades::numeric, 0) AS ventas_unidades,
+                ROUND(ventas_valor::numeric, 2)    AS ventas_valor
+         FROM fact_sales_sellout ${where}
+         ORDER BY ano DESC, mes DESC, dia DESC, ventas_valor DESC
+         LIMIT $${idx} OFFSET $${idx + 1}`,
+        [...params, pageSize, offset]
+      ),
+    ])
     const kpi = {
       total_valor:    parseFloat(kpiR.rows[0]?.total_valor ?? '0'),
       total_unidades: parseFloat(kpiR.rows[0]?.total_unidades ?? '0'),
     }
-
-    // Total count
-    const countR = await pool.query(
-      `SELECT COUNT(*) AS total FROM v_ventas ${where}`,
-      params
-    )
     const total = parseInt(countR.rows[0]?.total ?? '0')
-
-    // Raw rows with pagination
-    const r = await pool.query(
-      `SELECT ano,
-              mes,
-              dia,
-              pais,
-              cliente,
-              punto_venta,
-              codigo_barras,
-              sku,
-              descripcion,
-              subcategoria,
-              ROUND(ventas_unidades::numeric, 0) AS ventas_unidades,
-              ROUND(ventas_valor::numeric, 2)    AS ventas_valor
-       FROM v_ventas ${where}
-       ORDER BY ano DESC, mes DESC, dia DESC, ventas_valor DESC
-       LIMIT $${idx} OFFSET $${idx + 1}`,
-      [...params, pageSize, offset]
-    )
 
     return NextResponse.json({ rows: r.rows, kpi, total, page, pageSize })
   } catch (err) {

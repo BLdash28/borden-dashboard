@@ -150,7 +150,7 @@ export async function GET(req: NextRequest) {
             'ROUND(SUM(ventas_valor)::numeric,4)    AS ventas_valor, ' +
             'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades, ' +
             'COUNT(DISTINCT sku)                    AS num_skus ' +
-            'FROM v_ventas ' + where + ' ' +
+            'FROM mv_sellout_mensual ' + where + ' ' +
             `GROUP BY ${groupByExpr} ORDER BY ventas_valor DESC LIMIT 300`,
             params
           )
