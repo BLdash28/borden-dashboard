@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { UserPlus, Search, Shield, Pencil, Trash2, X, Eye, EyeOff, LayoutDashboard } from 'lucide-react'
+import { UserPlus, Search, Shield, Pencil, Trash2, X, Eye, EyeOff, LayoutDashboard, Link2 } from 'lucide-react'
 import { Btn } from '@/components/ui'
 import { toast } from 'sonner'
 
@@ -128,6 +128,21 @@ export default function UsuariosPage() {
       toast.success('Usuario eliminado'); closeModal(); loadUsers()
     } catch (e: any) { toast.error(e.message) }
     setSaving(false)
+  }
+
+  // ── Recovery link ───────────────────────────────────────────────────────────
+  const handleRecoveryLink = async (u: any) => {
+    try {
+      const res  = await fetch('/api/usuarios/recovery-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: u.email }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Error al generar enlace')
+      await navigator.clipboard.writeText(data.link)
+      toast.success(`Enlace copiado al portapapeles — compártelo con ${u.full_name}`)
+    } catch (e: any) { toast.error(e.message) }
   }
 
   // ── Toggle ──────────────────────────────────────────────────────────────────
@@ -272,6 +287,11 @@ export default function UsuariosPage() {
                           className="p-1.5 rounded-lg transition-all hover:bg-blue-500/10 hover:text-blue-500"
                           style={{color:'var(--t3)'}}>
                           <Pencil size={13} />
+                        </button>
+                        <button onClick={()=>handleRecoveryLink(u)} title="Copiar enlace de reseteo"
+                          className="p-1.5 rounded-lg transition-all hover:bg-amber-500/10 hover:text-amber-500"
+                          style={{color:'var(--t3)'}}>
+                          <Link2 size={13} />
                         </button>
                         <button onClick={()=>openDelete(u)} title="Eliminar"
                           className="p-1.5 rounded-lg transition-all hover:bg-red-500/10 hover:text-red-500"
