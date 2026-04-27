@@ -151,7 +151,19 @@ export async function GET(req: NextRequest) {
       async () => {
         // mv_sellout_mensual (17MB) para aggregates — skuQ usa JOIN dim_producto para codigo_barras
         const MV = 'mv_sellout_mensual'
-        const [kpiQ, timeQ, catQ, paisQ, skuQ, subcatQ, clienteQ, semanasQ] = await Promise.all([
+        // For modo='mes': single query on fact_sales_sellout gets both dia and semana breakdowns
+        const diaSemanasPromise = modo === 'mes'
+          ? pool.query(
+              `SELECT dia,
+                      EXTRACT(WEEK FROM make_date(ano::int, mes::int, GREATEST(dia::int,1)))::int AS semana,
+                      ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor,
+                      ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
+               FROM fact_sales_sellout WHERE ${where} AND dia > 0
+               GROUP BY dia, semana ORDER BY dia`, params)
+              .catch(() => ({ rows: [] as any[] }))
+          : Promise.resolve({ rows: [] as any[] })
+
+        const [kpiQ, timeQ, catQ, paisQ, skuQ, subcatQ, clienteQ, diaSemanasR] = await Promise.all([
           pool.query(
             `SELECT ROUND(SUM(ventas_valor)::numeric,2) AS total_valor,
                     ROUND(SUM(ventas_unidades)::numeric,0) AS total_unidades,
@@ -161,10 +173,7 @@ export async function GET(req: NextRequest) {
                     COUNT(*)                AS n_filas
              FROM ${MV} WHERE ${where}`, params),
           modo === 'mes'
-            ? pool.query(
-                `SELECT dia, ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor,
-                         ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
-                  FROM fact_sales_sellout WHERE ${where} AND dia > 0 GROUP BY dia ORDER BY dia`, params)
+            ? Promise.resolve({ rows: [] as any[] })
             : pool.query(
                 `SELECT ano, mes, ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor,
                          ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
@@ -198,22 +207,25 @@ export async function GET(req: NextRequest) {
                     ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
              FROM ${MV} WHERE ${where} AND cliente IS NOT NULL AND cliente != ''
              GROUP BY cliente ORDER BY ventas_valor DESC LIMIT 10`, params),
-          modo === 'mes'
-            ? pool.query(
-                `SELECT EXTRACT(WEEK FROM make_date(ano::int, mes::int, GREATEST(dia::int,1)))::int AS semana,
-                         ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor,
-                         ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
-                  FROM fact_sales_sellout WHERE ${where} AND dia > 0 GROUP BY semana ORDER BY semana`, params)
-            : Promise.resolve({ rows: [] }),
+          diaSemanasPromise,
         ])
+        // Derive dias and semanas from the combined query result
+        const diasRows    = diaSemanasR.rows.map((r: any) => ({ dia: r.dia, ventas_valor: r.ventas_valor, ventas_unidades: r.ventas_unidades }))
+        const semanasMap  = new Map<number, { ventas_valor: number; ventas_unidades: number }>()
+        for (const r of diaSemanasR.rows) {
+          const s = Number(r.semana)
+          const prev = semanasMap.get(s) ?? { ventas_valor: 0, ventas_unidades: 0 }
+          semanasMap.set(s, { ventas_valor: prev.ventas_valor + Number(r.ventas_valor), ventas_unidades: prev.ventas_unidades + Number(r.ventas_unidades) })
+        }
+        const semanasRows = Array.from(semanasMap.entries()).sort((a,b) => a[0]-b[0]).map(([semana, v]) => ({ semana, ...v }))
         return {
           ano:           anoQ,
           mes:           mesQ,
           modo:          modo === 'multi' ? 'ano' : modo,
           kpi:           kpiQ.rows[0],
-          dias:          modo === 'mes' ? timeQ.rows : [],
+          dias:          modo === 'mes' ? diasRows : [],
           meses:         modo !== 'mes' ? timeQ.rows : [],
-          semanas:       semanasQ.rows,
+          semanas:       semanasRows,
           categorias:    catQ.rows,
           paises:        paisQ.rows,
           top_skus:      skuQ.rows,

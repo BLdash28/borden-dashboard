@@ -21,7 +21,7 @@ export type AnalyticsQuery = z.infer<typeof AnalyticsQuerySchema>
 // Build a safe WHERE clause + values array from parsed query params.
 // Returns { where: string, vals: unknown[], nextIdx: number }
 export function buildAnalyticsWhere(q: AnalyticsQuery, restrictedPaises?: string[]) {
-  const conds: string[] = ['dia > 0']
+  const conds: string[] = ['1=1']
   const vals:  unknown[] = []
   let   idx = 1
 

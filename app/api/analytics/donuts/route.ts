@@ -4,6 +4,7 @@ import { handleApiError, AppError } from '@/lib/api/errors'
 import { requireAuth } from '@/lib/api/auth'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
 import { AnalyticsQuerySchema, buildAnalyticsWhere } from '@/lib/validation/analytics'
+import { withCache, cacheHeaders } from '@/lib/db/cache'
 
 const TOP_N = { categoria: 6, pais: 8, subcategoria: 6, cliente: 10 }
 
@@ -30,31 +31,40 @@ export async function GET(req: NextRequest) {
 
     const { where, vals } = buildAnalyticsWhere(parsed.data, allowed)
 
-    const donutQ = (dim: string, metric: string) =>
-      pool.query<{ label: string; value: string }>(
-        `SELECT ${dim} AS label, ROUND(${metric}::numeric, 2) AS value
-         FROM v_ventas
-         WHERE ${where} AND ${dim} IS NOT NULL AND ${dim} <> ''
-         GROUP BY ${dim}
-         ORDER BY value DESC`,
-        vals
-      )
+    const cacheKey = `donuts:${where}:${JSON.stringify(vals)}`
+    const TTL = 5 * 60 * 1000 // 5 min
 
-    const [catR, paisR, subR, clienteR] = await Promise.all([
-      donutQ('categoria',    'SUM(ventas_valor)'),
-      donutQ('pais',         'SUM(ventas_valor)'),
-      donutQ('subcategoria', 'SUM(ventas_unidades)'),
-      donutQ('cliente',      'SUM(ventas_valor)'),
-    ])
+    const { data, cached } = await withCache(cacheKey, async () => {
+      const donutQ = (dim: string, metric: string) =>
+        pool.query<{ label: string; value: string }>(
+          `SELECT ${dim} AS label, ROUND(${metric}::numeric, 2) AS value
+           FROM mv_sellout_mensual
+           WHERE ${where} AND ${dim} IS NOT NULL AND ${dim} <> ''
+           GROUP BY ${dim}
+           ORDER BY value DESC`,
+          vals
+        )
 
-    const parse = (rows: { label: string; value: string }[]) =>
-      rows.map(r => ({ label: r.label, value: parseFloat(r.value) }))
+      const [catR, paisR, subR, clienteR] = await Promise.all([
+        donutQ('categoria',    'SUM(ventas_valor)'),
+        donutQ('pais',         'SUM(ventas_valor)'),
+        donutQ('subcategoria', 'SUM(ventas_unidades)'),
+        donutQ('cliente',      'SUM(ventas_valor)'),
+      ])
 
-    return NextResponse.json({
-      categoria:    topNWithOthers(parse(catR.rows),      TOP_N.categoria),
-      pais:         topNWithOthers(parse(paisR.rows),     TOP_N.pais),
-      subcategoria: topNWithOthers(parse(subR.rows),      TOP_N.subcategoria),
-      cliente:      topNWithOthers(parse(clienteR.rows),  TOP_N.cliente),
+      const parse = (rows: { label: string; value: string }[]) =>
+        rows.map(r => ({ label: r.label, value: parseFloat(r.value) }))
+
+      return {
+        categoria:    topNWithOthers(parse(catR.rows),      TOP_N.categoria),
+        pais:         topNWithOthers(parse(paisR.rows),     TOP_N.pais),
+        subcategoria: topNWithOthers(parse(subR.rows),      TOP_N.subcategoria),
+        cliente:      topNWithOthers(parse(clienteR.rows),  TOP_N.cliente),
+      }
+    }, TTL)
+
+    return NextResponse.json(data, {
+      headers: { ...cacheHeaders(300), 'X-Cache': cached ? 'HIT' : 'MISS' },
     })
   } catch (err) {
     return handleApiError(err)

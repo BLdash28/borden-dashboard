@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { requireAuth } from '@/lib/api/auth'
+import { withCache, cacheHeaders } from '@/lib/db/cache'
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,84 +16,93 @@ export async function GET(req: NextRequest) {
     const subcatsArr  = sp.get('subcategorias') ? sp.get('subcategorias')!.split(',').map(s => s.trim()).filter(Boolean) : []
     const clientesArr = sp.get('clientes')      ? sp.get('clientes')!.split(',').map(s => s.trim()).filter(Boolean)      : []
 
-    // ── Determine current period ───────────────────────────────────────────
-    let anoActual: number
-    let mesActual: number
+    const cacheKey = `cumplimiento:${anoP}:${mesP}:${sp.get('paises')}:${sp.get('categorias')}:${sp.get('subcategorias')}:${sp.get('clientes')}`
+    const TTL = 5 * 60 * 1000 // 5 min
 
-    if (anoP && mesP) {
-      anoActual = anoP
-      mesActual = mesP
-    } else {
-      const best = await pool.query(
-        'SELECT ano, mes FROM v_ventas WHERE ano > 2000 ' +
-        'GROUP BY ano, mes HAVING COUNT(*) > 10 ORDER BY ano DESC, mes DESC LIMIT 1'
-      )
-      anoActual = Number(best.rows[0]?.ano ?? new Date().getFullYear())
-      mesActual = Number(best.rows[0]?.mes ?? (new Date().getMonth() + 1))
-    }
+    const { data, cached } = await withCache(cacheKey, async () => {
+      // ── Determine current period ───────────────────────────────────────────
+      let anoActual: number
+      let mesActual: number
 
-    // ── Build WHERE (current period only) ─────────────────────────────────
-    // $1 = mesActual, $2 = anoActual
-    const conds: string[] = ['mes = $1', 'ano = $2']
-    const params: unknown[] = [mesActual, anoActual]
-    let idx = 3
+      if (anoP && mesP) {
+        anoActual = anoP
+        mesActual = mesP
+      } else {
+        const best = await pool.query(
+          'SELECT ano, mes FROM mv_sellout_mensual WHERE ano > 2000 ' +
+          'GROUP BY ano, mes HAVING COUNT(*) > 10 ORDER BY ano DESC, mes DESC LIMIT 1'
+        )
+        anoActual = Number(best.rows[0]?.ano ?? new Date().getFullYear())
+        mesActual = Number(best.rows[0]?.mes ?? (new Date().getMonth() + 1))
+      }
 
-    if (paisesArr.length === 1) {
-      conds.push(`pais = $${idx++}`); params.push(paisesArr[0])
-    } else if (paisesArr.length > 1) {
-      conds.push(`pais IN (${paisesArr.map(() => `$${idx++}`).join(',')})`); params.push(...paisesArr)
-    }
+      // ── Build WHERE (current period only) ─────────────────────────────────
+      // $1 = mesActual, $2 = anoActual
+      const conds: string[] = ['mes = $1', 'ano = $2']
+      const params: unknown[] = [mesActual, anoActual]
+      let idx = 3
 
-    if (catsArr.length === 1) {
-      conds.push(`categoria = $${idx++}`); params.push(catsArr[0])
-    } else if (catsArr.length > 1) {
-      conds.push(`categoria IN (${catsArr.map(() => `$${idx++}`).join(',')})`); params.push(...catsArr)
-    }
+      if (paisesArr.length === 1) {
+        conds.push(`pais = $${idx++}`); params.push(paisesArr[0])
+      } else if (paisesArr.length > 1) {
+        conds.push(`pais IN (${paisesArr.map(() => `$${idx++}`).join(',')})`); params.push(...paisesArr)
+      }
 
-    if (subcatsArr.length === 1) {
-      conds.push(`subcategoria = $${idx++}`); params.push(subcatsArr[0])
-    } else if (subcatsArr.length > 1) {
-      conds.push(`subcategoria IN (${subcatsArr.map(() => `$${idx++}`).join(',')})`); params.push(...subcatsArr)
-    }
+      if (catsArr.length === 1) {
+        conds.push(`categoria = $${idx++}`); params.push(catsArr[0])
+      } else if (catsArr.length > 1) {
+        conds.push(`categoria IN (${catsArr.map(() => `$${idx++}`).join(',')})`); params.push(...catsArr)
+      }
 
-    if (clientesArr.length === 1) {
-      conds.push(`cliente = $${idx++}`); params.push(clientesArr[0])
-    } else if (clientesArr.length > 1) {
-      conds.push(`cliente IN (${clientesArr.map(() => `$${idx++}`).join(',')})`); params.push(...clientesArr)
-    }
+      if (subcatsArr.length === 1) {
+        conds.push(`subcategoria = $${idx++}`); params.push(subcatsArr[0])
+      } else if (subcatsArr.length > 1) {
+        conds.push(`subcategoria IN (${subcatsArr.map(() => `$${idx++}`).join(',')})`); params.push(...subcatsArr)
+      }
 
-    const where = conds.join(' AND ')
+      if (clientesArr.length === 1) {
+        conds.push(`cliente = $${idx++}`); params.push(clientesArr[0])
+      } else if (clientesArr.length > 1) {
+        conds.push(`cliente IN (${clientesArr.map(() => `$${idx++}`).join(',')})`); params.push(...clientesArr)
+      }
 
-    // ── Run queries in parallel ────────────────────────────────────────────
-    const [detalleQ, porPaisQ] = await Promise.all([
-      pool.query(`
-        SELECT
-          pais, cliente, categoria,
-          SUM(ventas_unidades)::numeric                    AS unidades_actual,
-          ROUND(SUM(ventas_valor)::numeric, 2)             AS valor_actual
-        FROM v_ventas
-        WHERE ${where}
-        GROUP BY pais, cliente, categoria
-        ORDER BY valor_actual DESC
-      `, params),
+      const where = conds.join(' AND ')
 
-      pool.query(`
-        SELECT
-          pais,
-          SUM(ventas_unidades)::numeric                    AS unidades_actual,
-          ROUND(SUM(ventas_valor)::numeric, 2)             AS valor_actual
-        FROM v_ventas
-        WHERE ${where}
-        GROUP BY pais
-        ORDER BY valor_actual DESC
-      `, params),
-    ])
+      // ── Run queries in parallel ────────────────────────────────────────────
+      const [detalleQ, porPaisQ] = await Promise.all([
+        pool.query(`
+          SELECT
+            pais, cliente, categoria,
+            SUM(ventas_unidades)::numeric                    AS unidades_actual,
+            ROUND(SUM(ventas_valor)::numeric, 2)             AS valor_actual
+          FROM mv_sellout_mensual
+          WHERE ${where}
+          GROUP BY pais, cliente, categoria
+          ORDER BY valor_actual DESC
+        `, params),
 
-    return NextResponse.json({
-      ano_actual: anoActual,
-      mes_actual: mesActual,
-      por_pais:   porPaisQ.rows,
-      detalle:    detalleQ.rows,
+        pool.query(`
+          SELECT
+            pais,
+            SUM(ventas_unidades)::numeric                    AS unidades_actual,
+            ROUND(SUM(ventas_valor)::numeric, 2)             AS valor_actual
+          FROM mv_sellout_mensual
+          WHERE ${where}
+          GROUP BY pais
+          ORDER BY valor_actual DESC
+        `, params),
+      ])
+
+      return {
+        ano_actual: anoActual,
+        mes_actual: mesActual,
+        por_pais:   porPaisQ.rows,
+        detalle:    detalleQ.rows,
+      }
+    }, TTL)
+
+    return NextResponse.json(data, {
+      headers: { ...cacheHeaders(300), 'X-Cache': cached ? 'HIT' : 'MISS' },
     })
   } catch (err) {
     console.error('[cumplimiento]', err)

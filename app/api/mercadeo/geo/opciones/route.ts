@@ -4,8 +4,7 @@
 // GET ?nivel=tienda&pais=CR&cadena=WALMART
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
-
-export const dynamic = 'force-dynamic'
+import { withCache, cacheHeaders } from '@/lib/db/cache'
 
 export async function GET(req: NextRequest) {
   const sp     = req.nextUrl.searchParams
@@ -16,35 +15,44 @@ export async function GET(req: NextRequest) {
   const mesP   = sp.get('mes')
 
   try {
-    const conds: string[] = ['ano > 2000']
-    const params: any[]   = []
-    let idx = 1
+    const cacheKey = `geo-opciones:${nivel}:${pais}:${cadena}:${anoP}:${mesP}`
+    const TTL = 5 * 60 * 1000 // 5 min
 
-    if (anoP) { conds.push(`ano = $${idx++}`); params.push(parseInt(anoP)) }
-    if (mesP) { conds.push(`mes = $${idx++}`); params.push(parseInt(mesP)) }
+    const { data, cached } = await withCache(cacheKey, async () => {
+      const conds: string[] = ['ano > 2000']
+      const params: any[]   = []
+      let idx = 1
 
-    let col: string
-    if (nivel === 'pais') {
-      col = 'pais'
-    } else if (nivel === 'cadena') {
-      col = 'cadena'
-      if (pais) { conds.push(`pais = $${idx++}`); params.push(pais) }
-    } else {
-      col = 'punto_venta'
-      if (pais)   { conds.push(`pais = $${idx++}`);   params.push(pais) }
-      if (cadena) { conds.push(`cadena = $${idx++}`); params.push(cadena) }
-    }
+      if (anoP) { conds.push(`ano = $${idx++}`); params.push(parseInt(anoP)) }
+      if (mesP) { conds.push(`mes = $${idx++}`); params.push(parseInt(mesP)) }
 
-    const where = 'WHERE ' + conds.join(' AND ')
+      let col: string
+      if (nivel === 'pais') {
+        col = 'pais'
+      } else if (nivel === 'cadena') {
+        col = 'cadena'
+        if (pais) { conds.push(`pais = $${idx++}`); params.push(pais) }
+      } else {
+        col = 'punto_venta'
+        if (pais)   { conds.push(`pais = $${idx++}`);   params.push(pais) }
+        if (cadena) { conds.push(`cadena = $${idx++}`); params.push(cadena) }
+      }
 
-    const r = await pool.query(
-      `SELECT DISTINCT ${col} AS valor
-       FROM v_ventas ${where}
-       ORDER BY ${col}`,
-      params
-    )
+      const where = 'WHERE ' + conds.join(' AND ')
 
-    return NextResponse.json({ opciones: r.rows.map((row: any) => row.valor).filter(Boolean) })
+      const r = await pool.query(
+        `SELECT DISTINCT ${col} AS valor
+         FROM mv_sellout_mensual ${where}
+         ORDER BY ${col}`,
+        params
+      )
+
+      return { opciones: r.rows.map((row: any) => row.valor).filter(Boolean) }
+    }, TTL)
+
+    return NextResponse.json(data, {
+      headers: { ...cacheHeaders(300), 'X-Cache': cached ? 'HIT' : 'MISS' },
+    })
   } catch (err: any) {
     console.error('[geo/opciones]', err)
     return NextResponse.json({ error: err.message }, { status: 500 })
