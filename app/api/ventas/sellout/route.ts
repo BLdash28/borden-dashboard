@@ -17,7 +17,8 @@ export async function GET(req: NextRequest) {
     const pageSize       = parseInt(searchParams.get('pageSize') || '500')
     const offset         = (page - 1) * pageSize
 
-    const conds: string[] = ['dia > 0']
+    const conds: string[] = []      // for mv_sellout_mensual (no dia column)
+    const rawConds: string[] = ['dia > 0']  // for fact_sales_sellout
     const params: unknown[] = []
     let idx = 1
 
@@ -68,7 +69,10 @@ export async function GET(req: NextRequest) {
       params.push(`%${buscarP}%`); idx++
     }
 
-    const where = 'WHERE ' + conds.join(' AND ')
+    // sync rawConds with conds (same filters, just rawConds pre-has 'dia > 0')
+    rawConds.push(...conds)
+    const where    = conds.length    ? 'WHERE ' + conds.join(' AND ')    : ''
+    const rawWhere = 'WHERE ' + rawConds.join(' AND ')
 
     // KPI and count from MV (fast), rows from raw table
     const [kpiR, countR, r] = await Promise.all([
@@ -79,7 +83,7 @@ export async function GET(req: NextRequest) {
         params
       ),
       pool.query(
-        `SELECT COUNT(*) AS total FROM fact_sales_sellout ${where}`,
+        `SELECT COUNT(*) AS total FROM fact_sales_sellout ${rawWhere}`,
         params
       ),
       pool.query(
@@ -95,7 +99,7 @@ export async function GET(req: NextRequest) {
                 subcategoria,
                 ROUND(ventas_unidades::numeric, 0) AS ventas_unidades,
                 ROUND(ventas_valor::numeric, 2)    AS ventas_valor
-         FROM fact_sales_sellout ${where}
+         FROM fact_sales_sellout ${rawWhere}
          ORDER BY ano DESC, mes DESC, dia DESC, ventas_valor DESC
          LIMIT $${idx} OFFSET $${idx + 1}`,
         [...params, pageSize, offset]
