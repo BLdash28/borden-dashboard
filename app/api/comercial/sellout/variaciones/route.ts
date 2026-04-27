@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 export async function GET(req: NextRequest) {
   try {
@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
         ano,
         ROUND(SUM(ventas_valor)::numeric,    2)  AS valor,
         ROUND(SUM(ventas_unidades)::numeric,  0)  AS unidades
-      FROM fact_sales_sellout
+      FROM mv_sellout_mensual
       WHERE ano IN (2024, 2025, 2026) ${and}
       GROUP BY ${dimCol}, ano
       ORDER BY ${dimCol}, ano

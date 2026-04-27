@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // SKUs cuyo inventario PDV es menor o igual a 14 días de venta (punto de reorden)
 export async function GET(req: NextRequest) {
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       `),
       pool.query(`
         SELECT sku, ROUND((SUM(ventas_unidades) / 90.0)::numeric, 4) AS venta_dia
-        FROM fact_sales_sellout ${ventaWhere}
+        FROM mv_sellout_mensual ${ventaWhere}
         GROUP BY sku
       `),
     ])

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // Long Tail 50%: SKUs que suman el último 50% de la venta (la cola larga)
 export async function GET(req: NextRequest) {
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       WITH ventas AS (
         SELECT sku, MAX(descripcion) AS descripcion, MAX(categoria) AS categoria,
                SUM(ventas_valor) AS valor
-        FROM fact_sales_sellout ${where}
+        FROM mv_sellout_mensual ${where}
         GROUP BY sku
       ),
       total AS (SELECT SUM(valor) AS total FROM ventas),

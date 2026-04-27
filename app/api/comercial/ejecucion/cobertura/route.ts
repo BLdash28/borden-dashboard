@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // Cobertura PDV: cuántos puntos de venta tienen cada SKU activo
 export async function GET(req: NextRequest) {
@@ -29,14 +29,14 @@ export async function GET(req: NextRequest) {
         COUNT(DISTINCT pais)               AS paises,
         ROUND(SUM(ventas_valor)::numeric, 2) AS valor,
         ROUND(AVG(precio_promedio)::numeric, 4) AS precio_prom
-      FROM fact_sales_sellout ${where}
+      FROM mv_sellout_mensual ${where}
       GROUP BY sku
       ORDER BY pdvs_activos DESC, valor DESC
       LIMIT 200
     `)
 
     const total_pdvs = r.rows.length > 0
-      ? (await pool.query(`SELECT COUNT(DISTINCT punto_venta) AS n FROM fact_sales_sellout ${where}`)).rows[0].n
+      ? (await pool.query(`SELECT COUNT(DISTINCT punto_venta) AS n FROM mv_sellout_mensual ${where}`)).rows[0].n
       : 0
 
     const rows = r.rows.map(row => ({

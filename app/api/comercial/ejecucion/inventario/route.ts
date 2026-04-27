@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 export async function GET(req: NextRequest) {
   try {
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
       SELECT
         sku,
         ROUND((SUM(ventas_unidades) / 90.0)::numeric, 4) AS venta_dia
-      FROM fact_sales_sellout
+      FROM mv_sellout_mensual
       WHERE ano IN (2025, 2026) ${and}
         AND (ano * 100 + mes) >= (
           EXTRACT(YEAR FROM NOW())::int * 100 + EXTRACT(MONTH FROM NOW())::int - 3

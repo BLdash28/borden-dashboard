@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 export async function GET(req: NextRequest) {
   try {
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
         ROUND(SUM(CASE WHEN ano = 2026 THEN ventas_valor    ELSE 0 END)::numeric, 2) AS y2026,
         ROUND(SUM(CASE WHEN ano = 2025 THEN ventas_unidades ELSE 0 END)::numeric, 0) AS u2025,
         ROUND(SUM(CASE WHEN ano = 2026 THEN ventas_unidades ELSE 0 END)::numeric, 0) AS u2026
-      FROM fact_sales_sellout
+      FROM mv_sellout_mensual
       WHERE ano IN (2024, 2025, 2026) ${and}
       GROUP BY sku
       HAVING SUM(CASE WHEN ano = 2026 THEN ventas_valor ELSE 0 END) > 0

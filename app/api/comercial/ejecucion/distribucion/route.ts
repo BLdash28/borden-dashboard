@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // Distribución 75%: SKUs que concentran el 75% de la venta por país
 export async function GET(req: NextRequest) {
@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
           MAX(descripcion) AS descripcion,
           MAX(categoria)   AS categoria,
           SUM(ventas_valor) AS valor
-        FROM fact_sales_sellout ${where}
+        FROM mv_sellout_mensual ${where}
         GROUP BY sku
         ORDER BY valor DESC
       ),

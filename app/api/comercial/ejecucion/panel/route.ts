@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // Panel General de Ejecución: métricas resumen de todos los módulos
 export async function GET(req: NextRequest) {
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
           COUNT(DISTINCT pais)        AS paises,
           ROUND(SUM(ventas_valor)::numeric, 2)    AS valor_total,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades_total
-        FROM fact_sales_sellout WHERE ano = ${ano}
+        FROM mv_sellout_mensual WHERE ano = ${ano}
       `),
       // Inventario PDV total
       pool.query(`
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
       pool.query(`
         WITH venta AS (
           SELECT sku, SUM(ventas_unidades)/90.0 AS venta_dia
-          FROM fact_sales_sellout WHERE ano IN (2025,2026) GROUP BY sku
+          FROM mv_sellout_mensual WHERE ano IN (2025,2026) GROUP BY sku
         )
         SELECT COUNT(*) AS cnt
         FROM inventario_pdv i
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
       // Long tail: skus en la cola del 50%
       pool.query(`
         WITH v AS (
-          SELECT sku, SUM(ventas_valor) AS valor FROM fact_sales_sellout
+          SELECT sku, SUM(ventas_valor) AS valor FROM mv_sellout_mensual
           WHERE ano = ${ano} GROUP BY sku
         ),
         t AS (SELECT SUM(valor) AS total FROM v),

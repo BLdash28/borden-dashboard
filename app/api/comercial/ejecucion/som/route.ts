@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 // Share of Market por categoría y país (sell-out)
 export async function GET(req: NextRequest) {
@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
         SELECT pais, categoria,
                SUM(ventas_valor)    AS valor,
                SUM(ventas_unidades) AS unidades
-        FROM fact_sales_sellout ${where}
+        FROM mv_sellout_mensual ${where}
         GROUP BY pais, categoria
       ),
       total_pais AS (

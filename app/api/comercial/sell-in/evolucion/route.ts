@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,10 +24,10 @@ export async function GET(req: NextRequest) {
       SELECT
         ano,
         mes,
-        ROUND(SUM(venta_neta)::numeric, 2)        AS ingresos,
-        ROUND(SUM(cantidad_unidades)::numeric, 0) AS unidades,
-        ROUND(SUM(margen_valor)::numeric, 2)       AS margen
-      FROM fact_sales_sellin
+        ROUND(SUM(ingresos)::numeric, 2)  AS ingresos,
+        ROUND(SUM(unidades)::numeric, 0)  AS unidades,
+        ROUND(SUM(margen_valor)::numeric, 2) AS margen
+      FROM v_sellin
       WHERE ano IN (2024, 2025, 2026) ${extra}
       GROUP BY ano, mes
       ORDER BY ano, mes
