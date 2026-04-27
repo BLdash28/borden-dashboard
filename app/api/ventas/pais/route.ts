@@ -3,6 +3,7 @@ import { pool } from '@/lib/db/pool'
 import { handleApiError, AppError } from '@/lib/api/errors'
 import { requireAuth } from '@/lib/api/auth'
 import { VentasPaisQuerySchema, parsePaisList } from '@/lib/validation/ventas'
+import { withCache, cacheHeaders } from '@/lib/db/cache'
 
 export async function GET(req: NextRequest) {
   try {
@@ -18,88 +19,115 @@ export async function GET(req: NextRequest) {
             categorias: catsP, subcategorias: subcatsP, clientes: clientesP } = parsed.data
     const modo = mesQ ? 'mes' : anoQ ? 'ano' : 'todos'
 
-    const conds: string[] = ['dia > 0']
-    const params: unknown[] = []
+    // mvConds: for mv_sellout_mensual (no dia column)
+    // rawConds: for fact_sales_sellout (has dia)
+    const mvConds: string[]  = []
+    const rawConds: string[] = ['dia > 0']
+    const params: unknown[]  = []
     let idx = 1
 
-    if (anoQ) { conds.push(`ano = $${idx++}`); params.push(anoQ) }
-    if (mesQ) { conds.push(`mes = $${idx++}`); params.push(mesQ) }
+    if (anoQ) {
+      mvConds.push(`ano = $${idx}`); rawConds.push(`ano = $${idx}`); idx++
+      params.push(anoQ)
+    }
+    if (mesQ) {
+      mvConds.push(`mes = $${idx}`); rawConds.push(`mes = $${idx}`); idx++
+      params.push(mesQ)
+    }
 
     const paisList = parsePaisList(pais)
     if (paisList.length === 1) {
-      conds.push(`pais = $${idx++}`)
+      mvConds.push(`pais = $${idx}`); rawConds.push(`pais = $${idx}`); idx++
       params.push(paisList[0])
     } else if (paisList.length > 1) {
       const ph = paisList.map(() => `$${idx++}`).join(', ')
-      conds.push(`pais IN (${ph})`)
+      mvConds.push(`pais IN (${ph})`); rawConds.push(`pais IN (${ph})`)
       params.push(...paisList)
     }
 
-    // Multi-select categorías
     const catsArr = catsP ? catsP.split(',').map(s => s.trim()).filter(Boolean) : []
     if (catsArr.length > 0) {
-      conds.push(`categoria IN (${catsArr.map(() => `$${idx++}`).join(', ')})`)
+      const ph = catsArr.map(() => `$${idx++}`).join(', ')
+      mvConds.push(`categoria IN (${ph})`); rawConds.push(`categoria IN (${ph})`)
       params.push(...catsArr)
     } else if (categoria && categoria !== 'Todas') {
-      conds.push(`categoria ILIKE $${idx++}`)
+      mvConds.push(`categoria ILIKE $${idx}`); rawConds.push(`categoria ILIKE $${idx}`); idx++
       params.push('%' + categoria + '%')
     }
 
-    // Multi-select subcategorías
     const subcatsArr = subcatsP ? subcatsP.split(',').map(s => s.trim()).filter(Boolean) : []
     if (subcatsArr.length > 0) {
-      conds.push(`subcategoria IN (${subcatsArr.map(() => `$${idx++}`).join(', ')})`)
+      const ph = subcatsArr.map(() => `$${idx++}`).join(', ')
+      mvConds.push(`subcategoria IN (${ph})`); rawConds.push(`subcategoria IN (${ph})`)
       params.push(...subcatsArr)
     }
 
-    // Multi-select clientes
     const clientesArr = clientesP ? clientesP.split(',').map(s => s.trim()).filter(Boolean) : []
     if (clientesArr.length > 0) {
-      conds.push(`(${clientesArr.map(() => `cliente ILIKE $${idx++}`).join(' OR ')})`)
+      const clause = `(${clientesArr.map(() => `cliente ILIKE $${idx++}`).join(' OR ')})`
+      mvConds.push(clause); rawConds.push(clause)
       params.push(...clientesArr.map(c => `%${c}%`))
     } else if (cliente && cliente !== 'Todos') {
-      conds.push(`cliente ILIKE $${idx++}`)
+      mvConds.push(`cliente ILIKE $${idx}`); rawConds.push(`cliente ILIKE $${idx}`); idx++
       params.push('%' + cliente + '%')
     }
 
-    const where = 'WHERE ' + conds.join(' AND ')
+    const mvWhere  = mvConds.length  ? 'WHERE ' + mvConds.join(' AND ')  : ''
+    const rawWhere = 'WHERE ' + rawConds.join(' AND ')
 
-    // ── SKU drill-down ──────────────────────────────────────────
-    if (tipo === 'skus') {
-      const r = await pool.query(
-        `SELECT descripcion, codigo_barras, sku,
-                ROUND(SUM(ventas_valor)::numeric, 2)    AS ventas_valor,
-                ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
-         FROM v_ventas ${where}
-         GROUP BY descripcion, codigo_barras, sku
-         ORDER BY ventas_valor DESC
-         LIMIT 15`,
-        params
-      )
-      return NextResponse.json({ rows: r.rows })
-    }
+    const cacheKey = `pais-v2:${new URL(req.url).searchParams.toString()}`
 
-    // ── Time-series ─────────────────────────────────────────────
-    let selectGroup: string
-    let orderBy: string
-    if (modo === 'mes') {
-      selectGroup = 'pais, dia';       orderBy = 'pais, dia'
-    } else if (modo === 'ano') {
-      selectGroup = 'pais, mes, dia';  orderBy = 'pais, mes, dia'
-    } else {
-      selectGroup = 'pais, ano, mes';  orderBy = 'pais, ano, mes'
-    }
+    const { data } = await withCache(cacheKey, async () => {
+      // SKU drill-down — needs codigo_barras and dia → fact_sales_sellout
+      if (tipo === 'skus') {
+        const r = await pool.query(
+          `SELECT descripcion, codigo_barras, sku,
+                  ROUND(SUM(ventas_valor)::numeric, 2)    AS ventas_valor,
+                  ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
+           FROM fact_sales_sellout ${rawWhere}
+           GROUP BY descripcion, codigo_barras, sku
+           ORDER BY ventas_valor DESC LIMIT 15`,
+          params
+        )
+        return { rows: r.rows }
+      }
 
-    const r = await pool.query(
-      `SELECT ${selectGroup},
-              ROUND(SUM(ventas_valor)::numeric, 4)    AS ventas_valor,
-              ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
-       FROM v_ventas ${where}
-       GROUP BY ${selectGroup} ORDER BY ${orderBy}`,
-      params
-    )
+      // Time-series: mode='todos' → mv_sellout_mensual (no dia needed, fast)
+      // mode='ano'/'mes' → fact_sales_sellout (needs dia column)
+      let r
+      if (modo === 'todos') {
+        r = await pool.query(
+          `SELECT pais, ano, mes,
+                  ROUND(SUM(ventas_valor)::numeric, 4)    AS ventas_valor,
+                  ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
+           FROM mv_sellout_mensual ${mvWhere}
+           GROUP BY pais, ano, mes ORDER BY pais, ano, mes`,
+          params
+        )
+      } else if (modo === 'ano') {
+        r = await pool.query(
+          `SELECT pais, mes, dia,
+                  ROUND(SUM(ventas_valor)::numeric, 4)    AS ventas_valor,
+                  ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
+           FROM fact_sales_sellout ${rawWhere}
+           GROUP BY pais, mes, dia ORDER BY pais, mes, dia`,
+          params
+        )
+      } else {
+        r = await pool.query(
+          `SELECT pais, dia,
+                  ROUND(SUM(ventas_valor)::numeric, 4)    AS ventas_valor,
+                  ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
+           FROM fact_sales_sellout ${rawWhere}
+           GROUP BY pais, dia ORDER BY pais, dia`,
+          params
+        )
+      }
 
-    return NextResponse.json({ rows: r.rows, ano: anoQ ?? null, mes: mesQ ?? null, modo })
+      return { rows: r.rows, ano: anoQ ?? null, mes: mesQ ?? null, modo }
+    }, 5 * 60_000)
+
+    return NextResponse.json(data, { headers: cacheHeaders(300) })
 
   } catch (err) {
     return handleApiError(err)
