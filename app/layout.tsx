@@ -7,6 +7,7 @@ import { SpeedInsights } from '@vercel/speed-insights/next'
 export const metadata: Metadata = {
   title: 'BL Food · Dashboard BI',
   description: 'Business Intelligence Dashboard — BL Foods Corporation',
+  icons: { icon: '/borden-logo.png', shortcut: '/borden-logo.png' },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
