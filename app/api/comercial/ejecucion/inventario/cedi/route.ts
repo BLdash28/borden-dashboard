@@ -21,32 +21,48 @@ export async function GET(req: NextRequest) {
     const result = await pool.query(`
       WITH ultima AS (
         SELECT MAX(fecha) AS fecha FROM inventario_cedi
+      ),
+      base AS (
+        SELECT
+          c.upc,
+          dp.sku,
+          dp.codigo_barras,
+          dp.descripcion    AS dp_desc,
+          dp.categoria,
+          dp.subcategoria,
+          c.descripcion     AS raw_desc,
+          c.pais,
+          c.inv_mano_cajas,
+          c.inv_orden_cajas,
+          c.fecha
+        FROM inventario_cedi c
+        JOIN ultima u ON c.fecha = u.fecha
+        LEFT JOIN dim_producto dp
+          ON c.upc = LPAD(LEFT(dp.codigo_barras, LENGTH(dp.codigo_barras) - 1), 13, '0')
       )
       SELECT
-        c.upc,
-        MAX(dp.codigo_barras)                                                        AS codigo_barras,
-        MAX(dp.sku)                                                                  AS sku,
-        COALESCE(MAX(NULLIF(dp.descripcion,'')), MAX(NULLIF(c.descripcion,'')))      AS descripcion,
-        MAX(dp.categoria)                                                            AS categoria,
-        MAX(dp.subcategoria)                                                         AS subcategoria,
-        c.pais,
-        SUM(c.inv_mano_cajas)                                                        AS inv_mano_cajas,
-        SUM(c.inv_orden_cajas)                                                       AS inv_orden_cajas,
-        MAX(c.fecha)                                                                 AS fecha
-      FROM inventario_cedi c
-      JOIN ultima u ON c.fecha = u.fecha
-      LEFT JOIN dim_producto dp
-        ON c.upc = LPAD(LEFT(dp.codigo_barras, LENGTH(dp.codigo_barras) - 1), 13, '0')
+        COALESCE(MAX(sku), MAX(upc))                                   AS id,
+        MAX(upc)                                                        AS upc,
+        MAX(codigo_barras)                                              AS codigo_barras,
+        MAX(sku)                                                        AS sku,
+        COALESCE(MAX(NULLIF(dp_desc,'')), MAX(NULLIF(raw_desc,'')))    AS descripcion,
+        MAX(categoria)                                                  AS categoria,
+        MAX(subcategoria)                                               AS subcategoria,
+        pais,
+        SUM(inv_mano_cajas)                                             AS inv_mano_cajas,
+        SUM(inv_orden_cajas)                                            AS inv_orden_cajas,
+        MAX(fecha)                                                      AS fecha
+      FROM base
       ${where}
-      GROUP BY c.upc, c.pais
-      HAVING SUM(c.inv_mano_cajas) > 0
+      GROUP BY COALESCE(sku, upc), pais
+      HAVING SUM(inv_mano_cajas) > 0
       ORDER BY inv_mano_cajas DESC
       LIMIT 300
     `)
 
     const rows = result.rows.map(r => ({
       upc:            r.upc,
-      codigo_barras:  r.codigo_barras ?? null,
+      codigo_barras:  r.codigo_barras ?? r.upc,
       sku:            r.sku ?? null,
       descripcion:    r.descripcion ?? null,
       categoria:      r.categoria ?? null,
