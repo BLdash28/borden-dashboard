@@ -199,10 +199,10 @@ export default function InventarioTiendas() {
         if (!res.ok) throw new Error()
         const { rows: expRows } = await res.json()
         const csv = [
-          'Código Barras\tSKU\tDescripción\tCategoría\tSubcategoría\tPaís\tTienda #\tTienda\tInv Mano\tVenta/Día\tDOH\tEstado',
+          'Código Barras\tSKU\tDescripción\tCategoría\tSubcategoría\tPaís\tCadena\tTienda #\tTienda\tInv Mano\tVenta/Día\tDOH\tEstado',
           ...expRows.map((r: Record<string, unknown>) =>
             `${r.codigo_barras}\t${r.sku}\t${r.descripcion}\t${r.categoria}\t${r.subcategoria}\t` +
-            `${r.pais}\t${r.tienda_nbr}\t${r.tienda_nombre}\t${r.inv_mano}\t${r.venta_dia}\t${r.doh??''}\t${r.semaforo}`
+            `${r.pais}\t${r.financial_rpt}\t${r.tienda_nbr}\t${r.tienda_nombre}\t${r.inv_mano}\t${r.venta_dia}\t${r.doh??''}\t${r.semaforo}`
           )
         ].join('\n')
         const a = document.createElement('a')
