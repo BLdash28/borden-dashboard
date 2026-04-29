@@ -186,19 +186,31 @@ export default function InventarioTiendas() {
     return acc
   }, {} as Record<string, number>)
 
-  const descargarCSV = () => {
+  const [exporting, setExporting] = useState(false)
+
+  const descargarCSV = async () => {
     if (tab === 'tiendas') {
-      const csv = [
-        'Código Barras,SKU,Descripción,Categoría,Subcategoría,Inv Mano,Tiendas,Venta/Día,DOH,Semáforo',
-        ...display.map(r =>
-          `"${r.codigo_barras??r.upc}","${r.sku??''}","${r.descripcion??''}","${r.categoria??''}","${r.subcategoria??''}",` +
-          `${r.inv_mano},${r.tiendas},${r.venta_dia.toFixed(2)},${r.doh?.toFixed(1)??'—'},${r.semaforo}`
-        )
-      ].join('\n')
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8;' }))
-      a.download = `inventario_tiendas_${new Date().toISOString().slice(0,10)}.csv`
-      a.click()
+      setExporting(true)
+      try {
+        const qs = new URLSearchParams()
+        if (paises.length) qs.set('pais', paises.join(','))
+        if (cats.length)   qs.set('categoria', cats.join(','))
+        const res = await fetch('/api/comercial/ejecucion/inventario/export?' + qs)
+        if (!res.ok) throw new Error()
+        const { rows: expRows } = await res.json()
+        const csv = [
+          'Código Barras\tSKU\tDescripción\tCategoría\tSubcategoría\tPaís\tTienda #\tTienda\tInv Mano\tVenta/Día\tDOH\tEstado',
+          ...expRows.map((r: Record<string, unknown>) =>
+            `${r.codigo_barras}\t${r.sku}\t${r.descripcion}\t${r.categoria}\t${r.subcategoria}\t` +
+            `${r.pais}\t${r.tienda_nbr}\t${r.tienda_nombre}\t${r.inv_mano}\t${r.venta_dia}\t${r.doh??''}\t${r.semaforo}`
+          )
+        ].join('\n')
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8;' }))
+        a.download = `inventario_tiendas_${new Date().toISOString().slice(0,10)}.csv`
+        a.click()
+      } finally { setExporting(false) }
+      return
     } else {
       const csv = [
         'Código Barras,SKU,Descripción,Categoría,Subcategoría,País,Inv Mano (cajas),Inv Orden (cajas)',
@@ -229,9 +241,10 @@ export default function InventarioTiendas() {
               : 'Stock en centros de distribución (CEDI) por país'}
           </p>
         </div>
-        <button onClick={descargarCSV} disabled={(tab === 'tiendas' ? display : cediDisplay).length === 0}
+        <button onClick={descargarCSV} disabled={(tab === 'tiendas' ? display : cediDisplay).length === 0 || exporting}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm disabled:opacity-40">
-          <Download size={14} /> Exportar CSV
+          <Download size={14} className={exporting ? 'animate-pulse' : ''} />
+          {exporting ? 'Generando...' : 'Exportar CSV'}
         </button>
       </div>
 
