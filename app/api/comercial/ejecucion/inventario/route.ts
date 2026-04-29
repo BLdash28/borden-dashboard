@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const revalidate = 300
+export const revalidate = 0
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,63 +14,75 @@ export async function GET(req: NextRequest) {
       `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const filters: string[] = []
-    if (paises.length) filters.push(inC('pais', paises))
-    if (cats.length)   filters.push(inC('categoria', cats))
-    const and   = filters.length ? 'AND ' + filters.join(' AND ') : ''
-    const where = filters.length ? 'WHERE ' + filters.join(' AND ') : ''
+    if (paises.length) filters.push(inC('t.pais', paises))
+    if (cats.length)   filters.push(inC('dp.categoria', cats))
+    const where  = filters.length ? 'WHERE ' + filters.join(' AND ') : ''
+    const catAnd = cats.length ? 'AND ' + inC('categoria', cats) : ''
 
-    // Inventario PDV
-    const pdvR = await pool.query(`
+    // Inventario agrupado por UPC con match a dim_producto
+    const invR = await pool.query(`
+      WITH ultima AS (
+        SELECT MAX(fecha) AS fecha FROM inventario_tiendas
+      )
       SELECT
-        sku,
-        MAX(descripcion) AS descripcion,
-        MAX(categoria)   AS categoria,
-        SUM(qty)         AS qty_pdv,
-        COUNT(DISTINCT punto_venta) AS pdvs
-      FROM inventario_pdv ${where}
-      GROUP BY sku
-      ORDER BY qty_pdv DESC
+        t.upc,
+        MAX(dp.sku)                                                          AS sku,
+        COALESCE(MAX(NULLIF(dp.descripcion,'')), MAX(NULLIF(t.descripcion,''))) AS descripcion,
+        MAX(dp.categoria)     AS categoria,
+        MAX(dp.subcategoria)  AS subcategoria,
+        MAX(dp.codigo_barras) AS codigo_barras,
+        SUM(t.inv_mano)       AS inv_mano,
+        COUNT(DISTINCT t.tienda_nbr) AS tiendas,
+        MAX(t.fecha)         AS fecha
+      FROM inventario_tiendas t
+      JOIN ultima u ON t.fecha = u.fecha
+      LEFT JOIN dim_producto dp
+        ON t.upc = LPAD(LEFT(dp.codigo_barras, LENGTH(dp.codigo_barras) - 1), 13, '0')
+      ${where}
+      GROUP BY t.upc
+      HAVING SUM(t.inv_mano) > 0
+      ORDER BY inv_mano DESC
       LIMIT 200
     `)
 
-    // Promedio de venta diaria últimos 90 días (sell-out) para DOH
+    // Venta diaria últimos 90 días por SKU para DOH
+    const catSubquery = cats.length
+      ? `AND fs.sku IN (SELECT sku FROM dim_producto WHERE ${inC('categoria', cats)})`
+      : ''
     const ventaR = await pool.query(`
       SELECT
-        sku,
-        ROUND((SUM(ventas_unidades) / 90.0)::numeric, 4) AS venta_dia
-      FROM mv_sellout_mensual
-      WHERE ano IN (2025, 2026) ${and}
-        AND (ano * 100 + mes) >= (
-          EXTRACT(YEAR FROM NOW())::int * 100 + EXTRACT(MONTH FROM NOW())::int - 3
-        )
-      GROUP BY sku
+        fs.sku,
+        ROUND((SUM(fs.ventas_unidades) / 90.0)::numeric, 4) AS venta_dia
+      FROM fact_sales_sellout fs
+      WHERE MAKE_DATE(fs.ano::int, fs.mes::int, fs.dia::int) >= CURRENT_DATE - INTERVAL '90 days'
+        ${catSubquery}
+      GROUP BY fs.sku
     `)
 
     const ventaMap: Record<string, number> = {}
     for (const r of ventaR.rows) ventaMap[r.sku] = parseFloat(r.venta_dia)
 
-    const rows = pdvR.rows.map(row => {
-      const qty      = parseInt(row.qty_pdv)
-      const ventaDia = ventaMap[row.sku] ?? 0
-      const doh      = ventaDia > 0 ? qty / ventaDia : null
+    const rows = invR.rows.map(row => {
+      const inv      = parseFloat(row.inv_mano) || 0
+      const ventaDia = row.sku ? (ventaMap[row.sku] ?? 0) : 0
+      const doh      = ventaDia > 0 ? inv / ventaDia : null
       return {
-        sku:         row.sku,
-        descripcion: row.descripcion,
-        categoria:   row.categoria,
-        qty_pdv:     qty,
-        pdvs:        parseInt(row.pdvs),
-        venta_dia:   ventaDia,
+        upc:           row.upc,
+        codigo_barras: row.codigo_barras ?? null,
+        sku:           row.sku ?? null,
+        descripcion:   row.descripcion ?? null,
+        categoria:     row.categoria ?? null,
+        subcategoria:  row.subcategoria ?? null,
+        inv_mano:     inv,
+        tiendas:      parseInt(row.tiendas),
+        venta_dia:    ventaDia,
+        fecha:        row.fecha,
         doh,
-        semaforo:    doh === null ? 'sin_datos' : doh <= 7 ? 'rojo' : doh <= 21 ? 'amarillo' : doh <= 60 ? 'verde' : 'azul',
+        semaforo:     doh === null ? 'sin_datos' : doh <= 7 ? 'rojo' : doh <= 21 ? 'amarillo' : doh <= 60 ? 'verde' : 'azul',
       }
     })
 
-    const totals = {
-      qty_pdv: rows.reduce((s, r) => s + r.qty_pdv, 0),
-      pdvs:    rows.reduce((s, r) => s + r.pdvs, 0),
-    }
-
-    return NextResponse.json({ rows, totals })
+    return NextResponse.json({ rows })
   } catch (err) {
     return handleApiError(err)
   }
