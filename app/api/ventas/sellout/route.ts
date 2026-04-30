@@ -17,83 +17,68 @@ export async function GET(req: NextRequest) {
     const pageSize       = parseInt(searchParams.get('pageSize') || '500')
     const offset         = (page - 1) * pageSize
 
-    // mvConds: filters safe for mv_sellout_mensual (no dia, no codigo_barras)
-    const mvConds:  string[] = []
-    // rawConds: filters for fact_sales_sellout (has dia, codigo_barras)
-    const rawConds: string[] = ['dia > 0']
+    const conds: string[] = ['dia > 0']
     const params: unknown[] = []
     let idx = 1
 
     const anosArr = anosStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
     if (anosArr.length > 0) {
-      const c = `ano IN (${anosArr.map(() => `$${idx++}`).join(', ')})`
-      mvConds.push(c); rawConds.push(c)
+      conds.push(`ano IN (${anosArr.map(() => `$${idx++}`).join(', ')})`)
       params.push(...anosArr)
     }
 
     const mesesArr = mesesStr.split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n))
     if (mesesArr.length > 0) {
-      const c = `mes IN (${mesesArr.map(() => `$${idx++}`).join(', ')})`
-      mvConds.push(c); rawConds.push(c)
+      conds.push(`mes IN (${mesesArr.map(() => `$${idx++}`).join(', ')})`)
       params.push(...mesesArr)
     }
 
     const paisesArr = paisesP ? paisesP.split(',').map(s => s.trim()).filter(Boolean) : []
     if (paisesArr.length > 0) {
-      const c = `pais IN (${paisesArr.map(() => `$${idx++}`).join(', ')})`
-      mvConds.push(c); rawConds.push(c)
+      conds.push(`pais IN (${paisesArr.map(() => `$${idx++}`).join(', ')})`)
       params.push(...paisesArr)
     }
 
     const catsArr = categoriasP ? categoriasP.split(',').map(s => s.trim()).filter(Boolean) : []
     if (catsArr.length > 0) {
-      const c = `categoria IN (${catsArr.map(() => `$${idx++}`).join(', ')})`
-      mvConds.push(c); rawConds.push(c)
+      conds.push(`categoria IN (${catsArr.map(() => `$${idx++}`).join(', ')})`)
       params.push(...catsArr)
     }
 
     const subcatsArr = subcategoriasP ? subcategoriasP.split(',').map(s => s.trim()).filter(Boolean) : []
     if (subcatsArr.length > 0) {
-      const c = `subcategoria IN (${subcatsArr.map(() => `$${idx++}`).join(', ')})`
-      mvConds.push(c); rawConds.push(c)
+      conds.push(`subcategoria IN (${subcatsArr.map(() => `$${idx++}`).join(', ')})`)
       params.push(...subcatsArr)
     }
 
     const clientesArr = clientesP ? clientesP.split(',').map(s => s.trim()).filter(Boolean) : []
     if (clientesArr.length > 0) {
-      const c = `cliente IN (${clientesArr.map(() => `$${idx++}`).join(', ')})`
-      mvConds.push(c); rawConds.push(c)
+      conds.push(`cliente IN (${clientesArr.map(() => `$${idx++}`).join(', ')})`)
       params.push(...clientesArr)
     }
 
     const skusArr = skusP ? skusP.split(',').map(s => s.trim()).filter(Boolean) : []
     if (skusArr.length > 0) {
-      const c = `sku IN (${skusArr.map(() => `$${idx++}`).join(', ')})`
-      mvConds.push(c); rawConds.push(c)
+      conds.push(`sku IN (${skusArr.map(() => `$${idx++}`).join(', ')})`)
       params.push(...skusArr)
     }
 
     if (buscarP) {
-      // codigo_barras only exists in fact_sales_sellout, not in MV — add to rawConds only
-      rawConds.push(`(codigo_barras ILIKE $${idx} OR sku ILIKE $${idx} OR descripcion ILIKE $${idx})`)
-      // For MV fallback search, use sku + descripcion only
-      mvConds.push(`(sku ILIKE $${idx} OR descripcion ILIKE $${idx})`)
+      conds.push(`(codigo_barras ILIKE $${idx} OR sku ILIKE $${idx} OR descripcion ILIKE $${idx})`)
       params.push(`%${buscarP}%`); idx++
     }
 
-    const mvWhere  = mvConds.length  ? 'WHERE ' + mvConds.join(' AND ')  : ''
-    const rawWhere = 'WHERE ' + rawConds.join(' AND ')
+    const where = 'WHERE ' + conds.join(' AND ')
 
-    // KPI and count from MV (fast), rows from raw table
     const [kpiR, countR, r] = await Promise.all([
       pool.query(
         `SELECT ROUND(SUM(ventas_valor)::numeric, 2) AS total_valor,
                 ROUND(SUM(ventas_unidades)::numeric, 0) AS total_unidades
-         FROM mv_sellout_mensual ${mvWhere}`,
+         FROM fact_sales_sellout ${where}`,
         params
       ),
       pool.query(
-        `SELECT COUNT(*) AS total FROM fact_sales_sellout ${rawWhere}`,
+        `SELECT COUNT(*) AS total FROM fact_sales_sellout ${where}`,
         params
       ),
       pool.query(
@@ -109,12 +94,13 @@ export async function GET(req: NextRequest) {
                 subcategoria,
                 ROUND(ventas_unidades::numeric, 0) AS ventas_unidades,
                 ROUND(ventas_valor::numeric, 2)    AS ventas_valor
-         FROM fact_sales_sellout ${rawWhere}
+         FROM fact_sales_sellout ${where}
          ORDER BY ano DESC, mes DESC, dia DESC, ventas_valor DESC
          LIMIT $${idx} OFFSET $${idx + 1}`,
         [...params, pageSize, offset]
       ),
     ])
+
     const kpi = {
       total_valor:    parseFloat(kpiR.rows[0]?.total_valor ?? '0'),
       total_unidades: parseFloat(kpiR.rows[0]?.total_unidades ?? '0'),
