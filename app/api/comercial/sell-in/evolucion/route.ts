@@ -55,8 +55,12 @@ export async function GET(req: NextRequest) {
       ORDER BY ano, mes
     `)
 
-    // Proyecciones 2026 por mes (nivel empresa, categoria IS NULL)
-    const pConds: string[] = ['ano = 2026', 'categoria IS NULL']
+    // Proyecciones 2026 por mes — misma lógica que /dashboard/comercial/proyeccion
+    const pConds: string[] = [
+      'ano = 2026',
+      'categoria IS NULL',
+      `empresa IN ('LICENCIAMIENTO', 'BL FOODS')`,
+    ]
     if (tipo) {
       const emp = tipo.startsWith('LICENCIAMIENTO') ? 'LICENCIAMIENTO' : 'BL FOODS'
       pConds.push(`empresa = '${emp}'`)
