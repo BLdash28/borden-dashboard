@@ -115,7 +115,7 @@ export default function SellInResumen() {
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Año</p>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {[2024, 2025, 2026].map(a => (
+              {[2025, 2026].map(a => (
                 <button key={a} onClick={() => setAno(a)}
                   className={`px-4 py-1.5 text-sm font-medium transition-colors ${ano===a?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
                   {a}
