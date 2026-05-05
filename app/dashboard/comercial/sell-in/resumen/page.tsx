@@ -152,7 +152,7 @@ export default function SellInResumen() {
                 </div>
                 <p className="text-2xl font-bold text-gray-800 mb-2">{k.value}</p>
                 <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
-                  <DeltaBadge delta={k.delta} isPct={k.isPct} />
+                  <DeltaBadge delta={k.delta} />
                   <span>vs {ano - 1}</span>
                 </div>
               </div>
