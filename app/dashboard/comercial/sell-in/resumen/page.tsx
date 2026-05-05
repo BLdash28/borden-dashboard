@@ -81,7 +81,7 @@ export default function SellInResumen() {
   const ytdData = Array.from({ length: 12 }, (_, i) => {
     const m = i + 1
     const row: any = { mes: MESES[m] }
-    ytd.forEach(s => { row[String(s.ano)] = s.vals[i] ?? 0 })
+    ytd.forEach(s => { row[String(s.ano)] = s.vals[i] ?? null })
     return row
   })
 
@@ -191,7 +191,7 @@ export default function SellInResumen() {
 
       {/* Gráfico de líneas: YTD acumulado */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-1">YTD Acumulado — Venta Neta</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-1">Venta Acumulada</h3>
         <p className="text-xs text-gray-400 mb-4">Suma corrida mes a mes</p>
         {loading
           ? <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
@@ -205,7 +205,7 @@ export default function SellInResumen() {
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 {([2024, 2025, 2026] as const).map(a => (
                   <Line key={a} type="monotone" dataKey={String(a)} name={String(a)}
-                    stroke={COLORS[a]} strokeWidth={2} dot={false} />
+                    stroke={COLORS[a]} strokeWidth={2} dot={false} connectNulls={false} />
                 ))}
               </LineChart>
             </ResponsiveContainer>

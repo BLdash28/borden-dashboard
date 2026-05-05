@@ -15,20 +15,22 @@ import {
 const MENUS: Record<string, { section: string; items: { href: string; icon: any; label: string }[] }[]> = {
   comercial: [
     {
-      section: 'Sell Out',
-      items: [
-        { href: '/resumen',           icon: BarChart2,    label: 'Resumen Ejecutivo' },
-        { href: '/sellout',           icon: ShoppingCart, label: 'Detalle por SKU'   },
-        { href: '/sellout/ytd',       icon: ArrowUpRight, label: 'YTD y Variaciones' },
-      ],
-    },
-    {
       section: 'Sell In',
       items: [
         { href: '/sell-in/resumen',     icon: BarChart2,    label: 'Resumen Ejecutivo'  },
+        { href: '/proyeccion',          icon: TrendingUp,   label: 'Proyección'         },
         { href: '/sell-in/variaciones', icon: ArrowUpRight, label: 'YTD y Variaciones'  },
         { href: '/sell-in',             icon: ShoppingCart, label: 'Detalle por SKU'    },
         { href: '/sell-in/licenciamiento', icon: Tag,       label: 'Licenciamiento'     },
+      ],
+    },
+    {
+      section: 'Sell Out',
+      items: [
+        { href: '/resumen',              icon: BarChart2,    label: 'Resumen Ejecutivo' },
+        { href: '/sellout/tendencias',   icon: TrendingUp,   label: 'Tendencias'        },
+        { href: '/sellout',              icon: ShoppingCart, label: 'Detalle por SKU'   },
+        { href: '/sellout/ytd',          icon: ArrowUpRight, label: 'YTD y Variaciones' },
       ],
     },
     {
@@ -43,11 +45,12 @@ const MENUS: Record<string, { section: string; items: { href: string; icon: any;
         { href: '/ejecucion/punto-reorden',   icon: AlertTriangle, label: 'Punto de Reorden'   },
         { href: '/ejecucion/cola',            icon: List,          label: 'Long Tail 50%'       },
         { href: '/ejecucion/som',             icon: PieChart,      label: 'Share of Market'     },
+        { href: '/ejecucion/forecast',        icon: TrendingUp,    label: 'Forecast'            },
       ],
     },
     // ── Archivadas (fuera de menú, archivos intactos) ──
     // /ventas-pais /crecimientos /cumplimiento /doh /coberturas /visto-colombia
-    // /productos /proyeccion /ofertas /reportes
+    // /productos /ofertas /reportes
   ],
   mercadeo: [
     {

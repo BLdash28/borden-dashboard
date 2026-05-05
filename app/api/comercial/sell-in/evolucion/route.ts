@@ -20,16 +20,38 @@ export async function GET(req: NextRequest) {
     if (tipo)          extraConds.push(`tipo_negocio = '${tipo.replace(/'/g,"''")}'`)
     const extra = extraConds.length ? 'AND ' + extraConds.join(' AND ') : ''
 
+    // ventas_sell_in no tiene tipo_negocio — si hay filtro de tipo solo usamos fact_sales_sellin
+    const extraViejo = (() => {
+      const c: string[] = []
+      if (paises.length) c.push(inC('pais', paises))
+      if (cats.length)   c.push(inC('categoria', cats))
+      return c.length ? 'AND ' + c.join(' AND ') : ''
+    })()
+
     const r = await pool.query(`
-      SELECT
-        ano,
-        mes,
-        ROUND(SUM(ingresos)::numeric, 2)  AS ingresos,
-        ROUND(SUM(unidades)::numeric, 0)  AS unidades,
-        ROUND(SUM(margen_valor)::numeric, 2) AS margen
-      FROM v_sellin
+      -- fact_sales_sellin: fuente principal (2026+)
+      SELECT ano, mes,
+        ROUND(SUM(venta_neta)::numeric, 2)       AS ingresos,
+        ROUND(SUM(cantidad_unidades)::numeric, 0) AS unidades,
+        ROUND(SUM(margen_valor)::numeric, 2)      AS margen
+      FROM fact_sales_sellin
       WHERE ano IN (2024, 2025, 2026) ${extra}
       GROUP BY ano, mes
+
+      UNION ALL
+
+      -- ventas_sell_in: solo años/meses no cubiertos por fact_sales_sellin
+      SELECT ano, mes,
+        ROUND(SUM(ingresos)::numeric, 2) AS ingresos,
+        ROUND(SUM(unidades)::numeric, 0) AS unidades,
+        0                                AS margen
+      FROM ventas_sell_in
+      WHERE ano IN (2024, 2025, 2026) ${extraViejo}
+        AND (ano, mes) NOT IN (
+          SELECT DISTINCT ano, mes FROM fact_sales_sellin
+        )
+      GROUP BY ano, mes
+
       ORDER BY ano, mes
     `)
 
@@ -42,13 +64,23 @@ export async function GET(req: NextRequest) {
       if (byMes[m]) byMes[m][row.ano] = parseFloat(row.ingresos)
     }
 
-    // YTD acumulado por año
-    const ytd: Record<string, number[]> = { 2024: [], 2025: [], 2026: [] }
+    // Último mes con datos en 2026
+    const ultimoMes2026 = Math.max(0, ...r.rows
+      .filter(row => parseInt(row.ano) === 2026 && parseFloat(row.ingresos) > 0)
+      .map(row => parseInt(row.mes))
+    )
+
+    // YTD acumulado por año — 2026 se corta en el último mes reportado
+    const ytd: Record<string, (number | null)[]> = { 2024: [], 2025: [], 2026: [] }
     for (const ano of [2024, 2025, 2026] as const) {
       let acc = 0
       for (let m = 1; m <= 12; m++) {
-        acc += byMes[m][ano] ?? 0
-        ytd[ano].push(acc)
+        if (ano === 2026 && m > ultimoMes2026) {
+          ytd[ano].push(null)
+        } else {
+          acc += byMes[m][ano] ?? 0
+          ytd[ano].push(acc)
+        }
       }
     }
 

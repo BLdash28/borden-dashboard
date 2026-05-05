@@ -8,29 +8,25 @@ const MES: Record<number, string> = {
   7:'Jul', 8:'Ago', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dic',
 }
 
+const inNums = (col: string, vals: number[]) =>
+  `${col} IN (${vals.join(',')})`
+
+const inStrs = (col: string, vals: string[]) =>
+  `${col} IN (${vals.map(v => `'${v.replace(/'/g, "''")}'`).join(',')})`
+
 export async function GET(req: NextRequest) {
   try {
-    const sp      = req.nextUrl.searchParams
-    const ano     = sp.get('ano')     || ''
-    const mes     = sp.get('mes')     || ''
-    const empresa = sp.get('empresa') || ''
+    const sp = req.nextUrl.searchParams
 
-    const modo: 'mes' | 'ano' | 'todos' =
-      ano && mes ? 'mes' : ano ? 'ano' : 'todos'
+    const anosArr  = (sp.get('ano')     || '').split(',').map(Number).filter(Boolean)
+    const mesesArr = (sp.get('mes')     || '').split(',').map(Number).filter(Boolean)
+    const empArr   = (sp.get('empresa') || '').split(',').filter(Boolean)
 
-    // ── Proyecciones (nivel empresa, sin desglose de categoría) ─
-    const pWhere: string[] = ['categoria IS NULL']
-    const pParams: unknown[] = []
-    let pi = 1
-
-    if (empresa) {
-      pWhere.push(`empresa = $${pi++}`)
-      pParams.push(empresa)
-    } else {
-      pWhere.push(`empresa IN ('LICENCIAMIENTO', 'BL FOODS')`)
-    }
-    if (ano) { pWhere.push(`ano = $${pi++}`); pParams.push(Number(ano)) }
-    if (mes) { pWhere.push(`mes = $${pi++}`); pParams.push(Number(mes)) }
+    // ── Proyecciones nivel empresa (categoria IS NULL) ────────────
+    const pWhere: string[] = ['categoria IS NULL', `empresa IN ('LICENCIAMIENTO', 'BL FOODS')`]
+    if (anosArr.length)  pWhere.push(inNums('ano', anosArr))
+    if (mesesArr.length) pWhere.push(inNums('mes', mesesArr))
+    if (empArr.length)   pWhere.push(inStrs('empresa', empArr))
 
     const { rows: projRows } = await pool.query<{
       ano: string; mes: string; empresa: string; valor_usd: string
@@ -39,48 +35,47 @@ export async function GET(req: NextRequest) {
       FROM proyecciones
       WHERE ${pWhere.join(' AND ')}
       ORDER BY mes ASC, empresa ASC
-    `, pParams)
+    `)
 
-    // ── Ventas reales (BL FOODS — fact_sales_sellout) ────────────
-    const rWhere: string[] = ["categoria IN ('Leches', 'Quesos')"]
-    const rParams: unknown[] = []
-    let ri = 1
-    if (ano) { rWhere.push(`ano = $${ri++}`); rParams.push(Number(ano)) }
-    if (mes) { rWhere.push(`mes = $${ri++}`); rParams.push(Number(mes)) }
+    // ── Ventas reales desde fact_sales_sellin ─────────────────────
+    const rWhere: string[] = []
+    if (anosArr.length)  rWhere.push(inNums('ano', anosArr))
+    if (mesesArr.length) rWhere.push(inNums('mes', mesesArr))
+    const rWhereSql = rWhere.length ? 'WHERE ' + rWhere.join(' AND ') : ''
 
     const { rows: realRows } = await pool.query<{
-      ano: string; mes: string; pais: string; categoria: string; valor_real: string
+      ano: string; mes: string; pais: string; categoria: string
+      empresa: string; valor_real: string
     }>(`
-      SELECT ano, mes, pais, categoria, SUM(ventas_valor) AS valor_real
-      FROM fact_sales_sellout
-      WHERE ${rWhere.join(' AND ')}
-      GROUP BY ano, mes, pais, categoria
-    `, rParams)
+      SELECT
+        ano, mes, pais, categoria,
+        CASE WHEN tipo_negocio LIKE 'LICENCIAMIENTO%' THEN 'LICENCIAMIENTO' ELSE 'BL FOODS' END AS empresa,
+        SUM(venta_neta) AS valor_real
+      FROM fact_sales_sellin
+      ${rWhereSql}
+      GROUP BY ano, mes, pais, categoria, empresa
+    `)
 
-    // realMap total: "<ano>-<mes>" → valor_real
-    // realByPaisCat: "<ano>-<mes>-<pais>-<cat>" → valor_real
-    const realMap: Record<string, number> = {}
-    const realByPaisCat: Record<string, number> = {}
+    // Mapas de real: por empresa-mes y por empresa-mes-pais-cat
+    const realByEmpresa:  Record<string, number> = {}
+    const realByPaisCat:  Record<string, number> = {}
     for (const r of realRows) {
-      const key = `${r.ano}-${r.mes}`
-      realMap[key] = (realMap[key] || 0) + (Number(r.valor_real) || 0)
-      realByPaisCat[`${r.ano}-${r.mes}-${r.pais}-${r.categoria}`] = Number(r.valor_real) || 0
+      const eKey = `${r.ano}-${r.mes}-${r.empresa}`
+      realByEmpresa[eKey] = (realByEmpresa[eKey] ?? 0) + Number(r.valor_real)
+      realByPaisCat[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}`] = Number(r.valor_real)
     }
 
-    // ── Años disponibles ─────────────────────────────────────────
+    // ── Años disponibles ──────────────────────────────────────────
     const { rows: anosRows } = await pool.query<{ ano: number }>(
       'SELECT DISTINCT ano FROM proyecciones ORDER BY ano'
     )
     const anos = anosRows.map(r => r.ano)
 
-    // ── Cat-rows (LICENCIAMIENTO + BL FOODS breakdown) ────────────
-    const cWhere: string[] = ['categoria IS NOT NULL']
-    const cParams: unknown[] = []
-    let ci = 1
-    if (empresa) { cWhere.push(`empresa = $${ci++}`); cParams.push(empresa) }
-    else         { cWhere.push(`empresa IN ('LICENCIAMIENTO', 'BL FOODS')`) }
-    if (ano) { cWhere.push(`ano = $${ci++}`); cParams.push(Number(ano)) }
-    if (mes) { cWhere.push(`mes = $${ci++}`); cParams.push(Number(mes)) }
+    // ── Cat-rows (desglose por categoría / país / cliente) ────────
+    const cWhere: string[] = ['categoria IS NOT NULL', `empresa IN ('LICENCIAMIENTO', 'BL FOODS')`]
+    if (anosArr.length)  cWhere.push(inNums('ano', anosArr))
+    if (mesesArr.length) cWhere.push(inNums('mes', mesesArr))
+    if (empArr.length)   cWhere.push(inStrs('empresa', empArr))
 
     const { rows: catDbRows } = await pool.query<{
       id: string; ano: string; mes: string; empresa: string
@@ -91,12 +86,20 @@ export async function GET(req: NextRequest) {
       FROM proyecciones
       WHERE ${cWhere.join(' AND ')}
       ORDER BY mes ASC, empresa ASC, categoria ASC, pais ASC, cliente ASC
-    `, cParams)
+    `)
+
+    // Mapa de real_usd manual por empresa-mes (suma)
+    const manualRealMap: Record<string, number> = {}
+    for (const c of catDbRows) {
+      if (c.real_usd === null) continue
+      const k = `${c.ano}-${c.mes}-${c.empresa}`
+      manualRealMap[k] = (manualRealMap[k] ?? 0) + Number(c.real_usd)
+    }
 
     const catRows = catDbRows.map(r => {
-      // real_usd manual tiene prioridad; si es null, buscar en fact_sales_sellout por pais+categoria
-      const selloutReal = realByPaisCat[`${r.ano}-${r.mes}-${r.pais}-${r.categoria}`] ?? null
-      const real_usd    = r.real_usd !== null ? Number(r.real_usd) : selloutReal
+      // Manual tiene prioridad; si null, usar fact_sales_sellin por pais+categoria
+      const sellinReal = realByPaisCat[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}`] ?? null
+      const real_usd   = r.real_usd !== null ? Number(r.real_usd) : sellinReal
       return {
         id:               Number(r.id),
         ano:              Number(r.ano),
@@ -111,32 +114,18 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // ── Mapa de real_usd manual por empresa+mes (suma de cat rows) ───
-    const manualRealMap: Record<string, number> = {}
-    for (const c of catDbRows) {
-      if (c.real_usd === null) continue
-      const k = `${c.ano}-${c.mes}-${c.empresa}`
-      manualRealMap[k] = (manualRealMap[k] ?? 0) + Number(c.real_usd)
-    }
-
-    // ── Combinar empresa-level rows ───────────────────────────────
+    // ── Combinar filas empresa-level ──────────────────────────────
     const rows = projRows.map(r => {
-      const key              = `${r.ano}-${r.mes}`
       const empresaKey       = `${r.ano}-${r.mes}-${r.empresa}`
       const valor_proyectado = Number(r.valor_usd)
-      // BL FOODS: sellout real; LICENCIAMIENTO: suma manual de cat rows
-      const valor_real =
-        r.empresa === 'BL FOODS'
-          ? (realMap[key] ?? 0) || (manualRealMap[empresaKey] ?? 0)
-          : (manualRealMap[empresaKey] ?? 0)
+      const valor_real       = (realByEmpresa[empresaKey] ?? 0) || (manualRealMap[empresaKey] ?? 0)
       const diferencia       = valor_real - valor_proyectado
       const pct_cumplimiento = valor_proyectado > 0
         ? Math.round(valor_real / valor_proyectado * 1000) / 10
         : null
-
       return {
-        ano:              Number(r.ano),
-        mes:              Number(r.mes),
+        ano:  Number(r.ano),
+        mes:  Number(r.mes),
         mes_label:        MES[Number(r.mes)] ?? String(r.mes),
         empresa:          r.empresa,
         valor_proyectado,
@@ -146,7 +135,7 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    return NextResponse.json({ modo, anos, rows, catRows })
+    return NextResponse.json({ anos, rows, catRows })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('proyeccion error:', msg)

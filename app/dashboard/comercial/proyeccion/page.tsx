@@ -1,7 +1,7 @@
 'use client'
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { ChevronRight, Pencil } from 'lucide-react'
-import MultiSelect from '@/components/dashboard/MultiSelect'
+import FiltroMulti from '@/components/ui/FiltroMulti'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
@@ -97,10 +97,15 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 // ── Página principal ───────────────────────────────────────────────────────────
+const EMPRESAS_OPT = [
+  { value: 'BL FOODS' },
+  { value: 'LICENCIAMIENTO' },
+]
+
 export default function ProyeccionPage() {
-  const [fAno,       setFAno]       = useState('')
-  const [fMes,       setFMes]       = useState('')
-  const [fEmpresa,   setFEmpresa]   = useState('')
+  const [fAnos,      setFAnos]      = useState<string[]>([])
+  const [fMeses,     setFMeses]     = useState<string[]>([])
+  const [fEmpresas,  setFEmpresas]  = useState<string[]>([])
   const [fCategoria, setFCategoria] = useState<string[]>([])
   const [fPais,      setFPais]      = useState<string[]>([])
   const [fCliente,   setFCliente]   = useState<string[]>([])
@@ -119,18 +124,18 @@ export default function ProyeccionPage() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Cascading resets
-  useEffect(() => { setFMes('') },                             [fAno])
-  useEffect(() => { setFCategoria([]); setFPais([]); setFCliente([]) }, [fEmpresa])
-  useEffect(() => { setFPais([]); setFCliente([]) },           [fCategoria])
-  useEffect(() => { setFCliente([]) },                         [fPais])
+  useEffect(() => { setFMeses([]) },                               [fAnos])
+  useEffect(() => { setFCategoria([]); setFPais([]); setFCliente([]) }, [fEmpresas])
+  useEffect(() => { setFPais([]); setFCliente([]) },               [fCategoria])
+  useEffect(() => { setFCliente([]) },                             [fPais])
 
   const fetchData = useCallback(async () => {
     setLoading(true); setError('')
     try {
       const p = new URLSearchParams()
-      if (fAno)     p.set('ano',     fAno)
-      if (fMes)     p.set('mes',     fMes)
-      if (fEmpresa) p.set('empresa', fEmpresa)
+      if (fAnos.length)     p.set('ano',     fAnos.join(','))
+      if (fMeses.length)    p.set('mes',     fMeses.join(','))
+      if (fEmpresas.length) p.set('empresa', fEmpresas.join(','))
 
       const res  = await fetch(`/api/ventas/proyeccion?${p}`)
       const data = await res.json()
@@ -144,31 +149,50 @@ export default function ProyeccionPage() {
     } finally {
       setLoading(false)
     }
-  }, [fAno, fMes, fEmpresa])
+  }, [fAnos, fMeses, fEmpresas])
 
   useEffect(() => { fetchData() }, [fetchData])
 
   // ── Opciones de filtros jerárquicos ──────────────────────────────────────────
+  const optAnos = useMemo(() =>
+    anos.map(a => ({ value: String(a) }))
+  , [anos])
+
+  const optMeses = useMemo(() => {
+    const mesSet = new Set(rows
+      .filter(r => !fAnos.length || fAnos.includes(String(r.ano)))
+      .map(r => r.mes))
+    return Array.from(mesSet).sort((a, b) => a - b)
+      .map(m => ({ value: String(m), label: MES_LABELS[m] }))
+  }, [rows, fAnos])
+
   const optCategorias = useMemo(() =>
-    [...new Set(catRows.map(r => r.categoria))].sort()
-  , [catRows])
+    [...new Set(catRows
+      .filter(r => !fEmpresas.length || fEmpresas.includes(r.empresa))
+      .map(r => r.categoria)
+    )].sort().map(c => ({ value: c }))
+  , [catRows, fEmpresas])
 
   const optPaises = useMemo(() =>
     [...new Set(catRows
-      .filter(r => !fCategoria.length || fCategoria.includes(r.categoria))
+      .filter(r =>
+        (!fEmpresas.length  || fEmpresas.includes(r.empresa)) &&
+        (!fCategoria.length || fCategoria.includes(r.categoria))
+      )
       .map(r => r.pais)
-    )].filter(Boolean).sort()
-  , [catRows, fCategoria])
+    )].filter(Boolean).sort().map(p => ({ value: p }))
+  , [catRows, fEmpresas, fCategoria])
 
   const optClientes = useMemo(() =>
     [...new Set(catRows
       .filter(r =>
+        (!fEmpresas.length  || fEmpresas.includes(r.empresa)) &&
         (!fCategoria.length || fCategoria.includes(r.categoria)) &&
         (!fPais.length      || fPais.includes(r.pais))
       )
       .map(r => r.cliente)
-    )].filter(Boolean).sort()
-  , [catRows, fCategoria, fPais])
+    )].filter(Boolean).sort().map(c => ({ value: c }))
+  , [catRows, fEmpresas, fCategoria, fPais])
 
   // ¿Hay filtro de sub-categoría activo?
   const activeSubFilter = fCategoria.length > 0 || fPais.length > 0 || fCliente.length > 0
@@ -210,11 +234,6 @@ export default function ProyeccionPage() {
     }
   }
 
-  const mesesDisponibles = useMemo(() => {
-    const s = new Set(rows.map(r => r.mes))
-    return Array.from(s).sort((a, b) => a - b)
-  }, [rows])
-
   const kpis = useMemo(() => {
     const proy = rows.reduce((s, r) => s + r.valor_proyectado, 0)
     const real = rows.reduce((s, r) => s + r.valor_real,       0)
@@ -236,9 +255,9 @@ export default function ProyeccionPage() {
   }, [rows])
 
   const titulo =
-    !fAno        ? 'Toda la historia' :
-    !fMes        ? `Año ${fAno} completo` :
-    `${MES_LABELS[Number(fMes)]} ${fAno}`
+    !fAnos.length  ? 'Toda la historia' :
+    !fMeses.length ? fAnos.join(', ') :
+    fMeses.map(m => `${MES_LABELS[Number(m)]}`).join(', ') + ' ' + fAnos.join('/')
 
   return (
     <div className="p-6 space-y-6">
@@ -249,84 +268,15 @@ export default function ProyeccionPage() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-wrap gap-3 items-end">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">Año</label>
-          <select
-            value={fAno}
-            onChange={e => setFAno(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[90px] focus:outline-none focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="">Todos</option>
-            {anos.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">Mes</label>
-          <select
-            value={fMes}
-            onChange={e => setFMes(e.target.value)}
-            disabled={!fAno}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[110px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="">Todos</option>
-            {mesesDisponibles.map(m => (
-              <option key={m} value={m}>{MES_LABELS[m]}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">Empresa</label>
-          <select
-            value={fEmpresa}
-            onChange={e => setFEmpresa(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[160px] focus:outline-none focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="">Todas</option>
-            <option value="LICENCIAMIENTO">LICENCIAMIENTO</option>
-            <option value="BL FOODS">BL FOODS</option>
-          </select>
-        </div>
-
-        {/* Separador */}
-        <div className="h-8 w-px bg-gray-200 self-end mb-1 hidden sm:block" />
-
-        {/* Categoría */}
-        <div className="min-w-[130px]">
-          <MultiSelect
-            label="Categoría"
-            options={optCategorias.map(c => ({ value: c, label: c }))}
-            value={fCategoria}
-            onChange={setFCategoria}
-            placeholder="Todas"
-            selectAllLabel="Todas"
-          />
-        </div>
-
-        {/* País */}
-        <div className="min-w-[120px]">
-          <MultiSelect
-            label="País"
-            options={optPaises.map(p => ({ value: p, label: p }))}
-            value={fPais}
-            onChange={setFPais}
-            placeholder="Todos"
-            selectAllLabel="Todos"
-          />
-        </div>
-
-        {/* Cliente */}
-        <div className="min-w-[160px]">
-          <MultiSelect
-            label="Cliente"
-            options={optClientes.map(c => ({ value: c, label: c }))}
-            value={fCliente}
-            onChange={setFCliente}
-            placeholder="Todos"
-            selectAllLabel="Todos"
-          />
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <FiltroMulti label="Año"      options={optAnos}      value={fAnos}      onChange={setFAnos}      placeholder="Todos"  />
+          <FiltroMulti label="Mes"      options={optMeses}     value={fMeses}     onChange={setFMeses}     placeholder="Todos"  />
+          <FiltroMulti label="Empresa"  options={EMPRESAS_OPT} value={fEmpresas}  onChange={setFEmpresas}  placeholder="Todas"  />
+          <div className="h-6 w-px bg-gray-200 hidden sm:block" />
+          <FiltroMulti label="Categoría" options={optCategorias} value={fCategoria} onChange={setFCategoria} placeholder="Todas"  />
+          <FiltroMulti label="País"      options={optPaises}     value={fPais}      onChange={setFPais}      placeholder="Todos"  />
+          <FiltroMulti label="Cliente"   options={optClientes}   value={fCliente}   onChange={setFCliente}   placeholder="Todos"  />
         </div>
       </div>
 
