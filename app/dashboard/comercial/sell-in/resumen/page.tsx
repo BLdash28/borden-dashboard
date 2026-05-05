@@ -27,7 +27,7 @@ const fmtN = (v: number) => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e
 
 interface Kpi { valor: number; delta: number }
 interface KpiData {
-  ingresos: Kpi; unidades: Kpi; margen: Kpi; margen_pct: Kpi
+  ingresos: Kpi; cajas: Kpi
   clientes: number; skus: number
 }
 
@@ -88,10 +88,8 @@ export default function SellInResumen() {
   })
 
   const kpiCards = kpi ? [
-    { label: 'Venta Neta',    value: '$' + (kpi.ingresos.valor).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.ingresos.delta,   icon: '💰' },
-    { label: 'Unidades',      value: Math.round(kpi.unidades.valor).toLocaleString('en-US'), delta: kpi.unidades.delta,   icon: '📦' },
-    { label: 'Margen USD',    value: fmt(kpi.margen.valor),              delta: kpi.margen.delta,     icon: '📊' },
-    { label: '% Margen',      value: kpi.margen_pct.valor.toFixed(1)+'%',delta: kpi.margen_pct.delta, icon: '🎯', isPct: true },
+    { label: 'Venta Neta', value: '$' + kpi.ingresos.valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.ingresos.delta, icon: '💰' },
+    { label: 'Cajas',      value: Math.round(kpi.cajas.valor).toLocaleString('en-US'), delta: kpi.cajas.delta, icon: '📦' },
   ] : []
 
   return (
@@ -137,9 +135,9 @@ export default function SellInResumen() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4">
         {loading
-          ? Array(4).fill(0).map((_,i) => (
+          ? Array(2).fill(0).map((_,i) => (
               <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 animate-pulse">
                 <div className="h-3 bg-gray-100 rounded w-2/3 mb-3"/>
                 <div className="h-7 bg-gray-100 rounded w-1/2 mb-2"/>

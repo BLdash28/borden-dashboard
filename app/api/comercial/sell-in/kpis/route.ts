@@ -25,22 +25,14 @@ export async function GET(req: NextRequest) {
 
     const [currR, prevR] = await Promise.all([
       pool.query(`SELECT
-          COALESCE(SUM(venta_neta),        0) AS ingresos,
-          COALESCE(SUM(cantidad_unidades), 0) AS unidades,
-          COALESCE(SUM(margen_valor),      0) AS margen,
-          COALESCE(CASE WHEN SUM(venta_neta) > 0
-               THEN SUM(margen_valor) / SUM(venta_neta) * 100
-               ELSE 0 END, 0)                AS margen_pct,
-          COUNT(DISTINCT cliente_nombre) AS clientes,
-          COUNT(DISTINCT sku)            AS skus
+          COALESCE(SUM(venta_neta),     0) AS ingresos,
+          COALESCE(SUM(cantidad_cajas), 0) AS cajas,
+          COUNT(DISTINCT cliente_nombre)   AS clientes,
+          COUNT(DISTINCT sku)              AS skus
         FROM fact_sales_sellin ${buildWhere(ano)}`),
       pool.query(`SELECT
-          COALESCE(SUM(venta_neta),        0) AS ingresos,
-          COALESCE(SUM(cantidad_unidades), 0) AS unidades,
-          COALESCE(SUM(margen_valor),      0) AS margen,
-          COALESCE(CASE WHEN SUM(venta_neta) > 0
-               THEN SUM(margen_valor) / SUM(venta_neta) * 100
-               ELSE 0 END, 0)                AS margen_pct
+          COALESCE(SUM(venta_neta),     0) AS ingresos,
+          COALESCE(SUM(cantidad_cajas), 0) AS cajas
         FROM fact_sales_sellin ${buildWhere(ano - 1)}`),
     ])
 
@@ -53,12 +45,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ano,
       kpis: {
-        ingresos:   { valor: parseFloat(cur.ingresos),   delta: delta(parseFloat(cur.ingresos),   parseFloat(prev.ingresos)) },
-        unidades:   { valor: parseFloat(cur.unidades),   delta: delta(parseFloat(cur.unidades),   parseFloat(prev.unidades)) },
-        margen:     { valor: parseFloat(cur.margen),     delta: delta(parseFloat(cur.margen),     parseFloat(prev.margen)) },
-        margen_pct: { valor: parseFloat(cur.margen_pct), delta: parseFloat(cur.margen_pct) - parseFloat(prev.margen_pct) },
-        clientes:   parseInt(cur.clientes),
-        skus:       parseInt(cur.skus),
+        ingresos: { valor: parseFloat(cur.ingresos), delta: delta(parseFloat(cur.ingresos), parseFloat(prev.ingresos)) },
+        cajas:    { valor: parseFloat(cur.cajas),    delta: delta(parseFloat(cur.cajas),    parseFloat(prev.cajas)) },
+        clientes: parseInt(cur.clientes),
+        skus:     parseInt(cur.skus),
       },
     })
   } catch (err) {
