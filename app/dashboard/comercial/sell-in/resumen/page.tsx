@@ -21,6 +21,8 @@ const fmt = (v: number) => {
   if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'K'
   return '$' + v.toFixed(2)
 }
+const fmtFull = (v: number) =>
+  '$' + (isFinite(v) ? v : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtN = (v: number) => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v.toFixed(0)
 
 interface Kpi { valor: number; delta: number }
@@ -178,7 +180,7 @@ export default function SellInResumen() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="mes" tickFormatter={m => MESES[m]} tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize: 11 }} width={52} />
-                <Tooltip formatter={(v: number) => fmt(v)} labelFormatter={m => MESES[Number(m)]} />
+                <Tooltip formatter={(v: number) => fmtFull(v)} labelFormatter={m => MESES[Number(m)]} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 {([2024, 2025, 2026] as const).map(a => (
                   <Bar key={a} dataKey={a} name={String(a)} fill={COLORS[a]} radius={[3,3,0,0]} maxBarSize={22} />
@@ -201,7 +203,7 @@ export default function SellInResumen() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize: 11 }} width={52} />
-                <Tooltip formatter={(v: number) => fmt(v)} />
+                <Tooltip formatter={(v: number) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 {([2024, 2025, 2026] as const).map(a => (
                   <Line key={a} type="monotone" dataKey={String(a)} name={String(a)}
