@@ -55,13 +55,30 @@ export async function GET(req: NextRequest) {
       ORDER BY ano, mes
     `)
 
-    // Estructurar: { mes: 1..12, 2024: x, 2025: x, 2026: x }
+    // Proyecciones 2026 por mes (nivel empresa, categoria IS NULL)
+    const pConds: string[] = ['ano = 2026', 'categoria IS NULL']
+    if (tipo) {
+      const emp = tipo.startsWith('LICENCIAMIENTO') ? 'LICENCIAMIENTO' : 'BL FOODS'
+      pConds.push(`empresa = '${emp}'`)
+    }
+    const pR = await pool.query(`
+      SELECT mes, ROUND(SUM(valor_usd)::numeric, 2) AS proyeccion
+      FROM proyecciones
+      WHERE ${pConds.join(' AND ')}
+      GROUP BY mes
+      ORDER BY mes
+    `)
+    const proyByMes: Record<number, number> = {}
+    for (const row of pR.rows) proyByMes[parseInt(row.mes)] = parseFloat(row.proyeccion)
+
+    // Estructurar: { mes: 1..12, 2025: x, proyeccion: x, 2026: x }
     const byMes: Record<number, Record<string, number>> = {}
-    for (let m = 1; m <= 12; m++) byMes[m] = { mes: m, 2024: 0, 2025: 0, 2026: 0 }
+    for (let m = 1; m <= 12; m++) byMes[m] = { mes: m, 2025: 0, proyeccion: proyByMes[m] ?? 0, 2026: 0 }
 
     for (const row of r.rows) {
       const m = parseInt(row.mes)
-      if (byMes[m]) byMes[m][row.ano] = parseFloat(row.ingresos)
+      if (byMes[m] && (row.ano === '2025' || parseInt(row.ano) === 2025)) byMes[m][2025] = parseFloat(row.ingresos)
+      if (byMes[m] && (row.ano === '2026' || parseInt(row.ano) === 2026)) byMes[m][2026] = parseFloat(row.ingresos)
     }
 
     // Último mes con datos en 2026
@@ -70,23 +87,23 @@ export async function GET(req: NextRequest) {
       .map(row => parseInt(row.mes))
     )
 
-    // YTD acumulado por año — 2026 se corta en el último mes reportado
-    const ytd: Record<string, (number | null)[]> = { 2024: [], 2025: [], 2026: [] }
-    for (const ano of [2024, 2025, 2026] as const) {
+    // YTD acumulado — 2026 se corta en el último mes reportado
+    const ytd: Record<string, (number | null)[]> = { 2025: [], proyeccion: [], 2026: [] }
+    for (const key of ['2025', 'proyeccion', '2026'] as const) {
       let acc = 0
       for (let m = 1; m <= 12; m++) {
-        if (ano === 2026 && m > ultimoMes2026) {
-          ytd[ano].push(null)
+        if (key === '2026' && m > ultimoMes2026) {
+          ytd[key].push(null)
         } else {
-          acc += byMes[m][ano] ?? 0
-          ytd[ano].push(acc)
+          acc += byMes[m][key] ?? 0
+          ytd[key].push(acc)
         }
       }
     }
 
     return NextResponse.json({
       mensual: Object.values(byMes),
-      ytd: Object.entries(ytd).map(([ano, vals]) => ({ ano: parseInt(ano), vals })),
+      ytd: Object.entries(ytd).map(([ano, vals]) => ({ ano, vals })),
     })
   } catch (err) {
     return handleApiError(err)
