@@ -95,7 +95,7 @@ const EMPTY_FORM = {
   destinatarios: [] as Destinatario[],
   formato:       'excel',
   frecuencia:    'diario',
-  dia_semana:    1 as number | null,
+  dias_semana:   [1] as number[],
   dia_mes:       1 as number | null,
   hora_envio:    '08:00',
   filtros:       { pais: [] as string[], categoria: [] as string[], periodo: '' },
@@ -106,20 +106,20 @@ const EMPTY_FORM = {
 
 function buildCron(
   frecuencia: string,
-  diaSemana: number | null,
+  diasSemana: number[],
   diaMes: number | null,
   horaEnvio: string,
 ): string {
   const [hh, mm] = (horaEnvio || '08:00').split(':')
   if (frecuencia === 'diario')  return `${mm} ${hh} * * *`
-  if (frecuencia === 'semanal') return `${mm} ${hh} * * ${diaSemana ?? 1}`
+  if (frecuencia === 'semanal') return `${mm} ${hh} * * ${(diasSemana.length ? diasSemana : [1]).sort().join(',')}`
   if (frecuencia === 'mensual') return `${mm} ${hh} ${diaMes ?? 1} * *`
   return ''
 }
 
 function cronHuman(
   frecuencia: string,
-  diaSemana: number | null,
+  diasSemana: number[],
   diaMes: number | null,
   horaEnvio: string,
 ): string {
@@ -127,8 +127,11 @@ function cronHuman(
   if (frecuencia === 'diario')
     return `Todos los días a las ${hora}`
   if (frecuencia === 'semanal') {
-    const dia = DIAS_SEMANA.find(d => d.value === (diaSemana ?? 1))?.label ?? 'Lunes'
-    return `Cada ${dia} a las ${hora}`
+    const dias = (diasSemana.length ? diasSemana : [1])
+      .sort()
+      .map(v => DIAS_SEMANA.find(d => d.value === v)?.label ?? String(v))
+      .join(', ')
+    return `Cada ${dias} a las ${hora}`
   }
   if (frecuencia === 'mensual')
     return `El día ${diaMes ?? 1} de cada mes a las ${hora}`
@@ -246,7 +249,7 @@ export default function ReporteriaPage() {
       destinatarios: r.destinatarios ?? [],
       formato:       r.formato ?? 'excel',
       frecuencia:    r.frecuencia,
-      dia_semana:    r.dia_semana,
+      dias_semana:   r.dia_semana != null ? [r.dia_semana] : [1],
       dia_mes:       r.dia_mes,
       hora_envio:    r.hora_envio ?? '08:00',
       filtros: {
@@ -298,8 +301,8 @@ export default function ReporteriaPage() {
     if (!form.nombre.trim()) { toast.error('El nombre es requerido'); return }
     if (form.canales.length === 0) { toast.error('Selecciona al menos un canal'); return }
 
-    const cronExpr = buildCron(form.frecuencia, form.dia_semana, form.dia_mes, form.hora_envio)
-    const payload = { ...form, cron_expresion: cronExpr }
+    const cronExpr = buildCron(form.frecuencia, form.dias_semana, form.dia_mes, form.hora_envio)
+    const payload = { ...form, cron_expresion: cronExpr, dia_semana: form.dias_semana[0] ?? 1 }
 
     setSaving(true)
     try {
@@ -365,8 +368,8 @@ export default function ReporteriaPage() {
   }
 
   // ── Computed cron display ───────────────────────────────────────────────────
-  const cronExpr   = buildCron(form.frecuencia, form.dia_semana, form.dia_mes, form.hora_envio)
-  const cronText   = cronHuman(form.frecuencia, form.dia_semana, form.dia_mes, form.hora_envio)
+  const cronExpr   = buildCron(form.frecuencia, form.dias_semana, form.dia_mes, form.hora_envio)
+  const cronText   = cronHuman(form.frecuencia, form.dias_semana, form.dia_mes, form.hora_envio)
 
   // ── Render guards ───────────────────────────────────────────────────────────
   if (authorized === null) {
@@ -766,21 +769,34 @@ export default function ReporteriaPage() {
                     </div>
                   </div>
 
-                  {/* Día semana */}
+                  {/* Días semana — multi-select */}
                   {form.frecuencia === 'semanal' && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">Día de la semana</label>
-                      <div className="relative">
-                        <select
-                          value={form.dia_semana ?? 1}
-                          onChange={e => setField('dia_semana', Number(e.target.value))}
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-amber-400"
-                        >
-                          {DIAS_SEMANA.map(d => (
-                            <option key={d.value} value={d.value}>{d.label}</option>
-                          ))}
-                        </select>
-                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <div className="col-span-2">
+                      <label className="block text-xs font-medium text-gray-600 mb-2">Días de la semana</label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {DIAS_SEMANA.map(d => {
+                          const active = form.dias_semana.includes(d.value)
+                          return (
+                            <button
+                              key={d.value}
+                              type="button"
+                              onClick={() => {
+                                const next = active
+                                  ? form.dias_semana.filter(v => v !== d.value)
+                                  : [...form.dias_semana, d.value]
+                                setField('dias_semana', next.length ? next : [d.value])
+                              }}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium border transition-all"
+                              style={{
+                                background:  active ? 'rgba(200,135,58,.1)' : '#fff',
+                                borderColor: active ? '#c8873a' : '#e5e7eb',
+                                color:       active ? '#c8873a' : '#6b7280',
+                              }}
+                            >
+                              {d.label}
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
                   )}
