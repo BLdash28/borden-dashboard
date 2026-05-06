@@ -169,7 +169,7 @@ export default function SellInResumen() {
 
       {/* Gráfico de barras: mensual por año */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Venta Neta Mensual — 2025 / Proyección / 2026</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">Proyección 2026</h3>
         {loading
           ? <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
           : (
@@ -181,7 +181,7 @@ export default function SellInResumen() {
                 <Tooltip formatter={(v: number) => fmtFull(v)} labelFormatter={m => MESES[Number(m)]} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey={2025}          name="2025"       fill={COLORS[2025]}       radius={[3,3,0,0]} maxBarSize={22} />
-                <Bar dataKey="proyeccion"    name="Proyección" fill={COLORS.proyeccion}  radius={[3,3,0,0]} maxBarSize={22} />
+                <Bar dataKey="proyeccion"    name="Proyección 2026" fill={COLORS.proyeccion}  radius={[3,3,0,0]} maxBarSize={22} />
                 <Bar dataKey={2026}          name="2026"       fill={COLORS[2026]}       radius={[3,3,0,0]} maxBarSize={22} />
               </BarChart>
             </ResponsiveContainer>
@@ -204,7 +204,7 @@ export default function SellInResumen() {
                 <Tooltip formatter={(v: number) => fmtFull(v)} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Line type="monotone" dataKey="2025"       name="2025"       stroke={COLORS[2025]}      strokeWidth={2} dot={false} connectNulls={false} />
-                <Line type="monotone" dataKey="proyeccion" name="Proyección" stroke={COLORS.proyeccion} strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="5 3" />
+                <Line type="monotone" dataKey="proyeccion" name="Proyección 2026" stroke={COLORS.proyeccion} strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="5 3" />
                 <Line type="monotone" dataKey="2026"       name="2026"       stroke={COLORS[2026]}      strokeWidth={2} dot={false} connectNulls={false} />
               </LineChart>
             </ResponsiveContainer>
