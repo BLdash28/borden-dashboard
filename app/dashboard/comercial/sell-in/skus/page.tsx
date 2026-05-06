@@ -17,12 +17,12 @@ interface SkuRow {
   descripcion: string
   categoria:   string
   pais:        string
-  unidades:    number
+  cajas:       number
   ingresos:    number
   margen_valor:number
   margen_pct:  number
   precio_prom: number
-  y_prev:      number  // same filters but previous year
+  y_prev:      number
 }
 
 export default function SellInSkus() {
@@ -43,7 +43,7 @@ export default function SellInSkus() {
   const [page,    setPage]    = useState(1)
   const [loading,          setLoading]          = useState(true)
   const [downloadingCSV,   setDownloadingCSV]   = useState(false)
-  const [sortKey, setSortKey] = useState<'ingresos'|'unidades'|'margen_pct'>('ingresos')
+  const [sortKey, setSortKey] = useState<'ingresos'|'cajas'|'margen_pct'>('ingresos')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
   const PAGE_SIZE = 500
   const initDone = useRef(false)
@@ -85,17 +85,17 @@ export default function SellInSkus() {
         const key = r.sku + '|' + r.pais
         if (!skuMap[key]) skuMap[key] = {
           sku: r.sku, descripcion: r.descripcion||'', categoria: r.categoria||'',
-          pais: r.pais, unidades: 0, ingresos: 0, margen_valor: 0, margen_pct: 0,
+          pais: r.pais, cajas: 0, ingresos: 0, margen_valor: 0, margen_pct: 0,
           precio_prom: 0, y_prev: 0,
         }
-        skuMap[key].unidades    += toNum(r.unidades)
+        skuMap[key].cajas       += toNum(r.cajas)
         skuMap[key].ingresos    += toNum(r.ingresos)
         skuMap[key].margen_valor+= toNum(r.margen_valor??0)
       })
       // Calc derived
       Object.values(skuMap).forEach(s=>{
         s.margen_pct  = s.ingresos > 0 ? (s.margen_valor / s.ingresos) * 100 : 0
-        s.precio_prom = s.unidades > 0 ? s.ingresos / s.unidades : 0
+        s.precio_prom = s.cajas > 0 ? s.ingresos / s.cajas : 0
       })
       setRows(Object.values(skuMap))
     }).finally(()=>setLoading(false))
@@ -143,15 +143,15 @@ export default function SellInSkus() {
         const key = r.sku + '|' + r.pais
         if (!skuMap[key]) skuMap[key] = {
           sku: r.sku, descripcion: r.descripcion || '', categoria: r.categoria || '',
-          pais: r.pais, unidades: 0, ingresos: 0, margen_valor: 0, margen_pct: 0, precio_prom: 0, y_prev: 0,
+          pais: r.pais, cajas: 0, ingresos: 0, margen_valor: 0, margen_pct: 0, precio_prom: 0, y_prev: 0,
         }
-        skuMap[key].unidades     += toNum(r.unidades)
+        skuMap[key].cajas        += toNum(r.cajas)
         skuMap[key].ingresos     += toNum(r.ingresos)
         skuMap[key].margen_valor += toNum(r.margen_valor ?? 0)
       })
       Object.values(skuMap).forEach(s => {
         s.margen_pct  = s.ingresos > 0 ? (s.margen_valor / s.ingresos) * 100 : 0
-        s.precio_prom = s.unidades > 0 ? s.ingresos / s.unidades : 0
+        s.precio_prom = s.cajas > 0 ? s.ingresos / s.cajas : 0
       })
 
       const allSorted = Object.values(skuMap).sort((a, b) => {
@@ -160,10 +160,10 @@ export default function SellInSkus() {
       })
       const gt = allSorted.reduce((s, r) => s + r.ingresos, 0) || 1
 
-      const h = ['País','SKU','Producto','Categoría','Unidades','USD','Precio Prom.','Margen USD','Margen %','% del Total']
+      const h = ['País','SKU','Producto','Categoría','Cajas','Valor','Precio Prom.','Margen Valor','Margen %','% del Total']
       const csv = [h.join(','), ...allSorted.map(r => [
         r.pais, r.sku, `"${r.descripcion.replace(/"/g,'""')}"`, r.categoria,
-        r.unidades.toFixed(0), r.ingresos.toFixed(2), r.precio_prom.toFixed(4),
+        r.cajas.toFixed(0), r.ingresos.toFixed(2), r.precio_prom.toFixed(4),
         r.margen_valor.toFixed(2), r.margen_pct.toFixed(2) + '%',
         (r.ingresos / gt * 100).toFixed(2) + '%',
       ].join(','))].join('\n')
@@ -265,17 +265,17 @@ export default function SellInSkus() {
                       <th className="text-left py-2 pr-3">SKU</th>
                       <th className="text-left py-2 pr-3">Producto</th>
                       <th className="text-left py-2 pr-3">Cat.</th>
-                      <th className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600" onClick={()=>toggleSort('unidades')}>
-                        Unidades{arrow('unidades')}
+                      <th className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600" onClick={()=>toggleSort('cajas')}>
+                        Cajas{arrow('cajas')}
                       </th>
                       <th className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600" onClick={()=>toggleSort('ingresos')}>
-                        USD{arrow('ingresos')}
+                        Valor{arrow('ingresos')}
                       </th>
                       <th className="text-right py-2 pr-3">P. Prom.</th>
                       <th className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600" onClick={()=>toggleSort('margen_pct')}>
                         Margen %{arrow('margen_pct')}
                       </th>
-                      <th className="text-right py-2 pr-3">Margen $</th>
+                      <th className="text-right py-2 pr-3">Margen Valor</th>
                       <th className="text-right py-2">% Total</th>
                     </tr>
                   </thead>
@@ -286,7 +286,7 @@ export default function SellInSkus() {
                         <td className="py-1.5 pr-3 font-mono text-gray-500">{r.sku}</td>
                         <td className="py-1.5 pr-3 text-gray-700 max-w-[160px] truncate">{r.descripcion}</td>
                         <td className="py-1.5 pr-3 text-gray-500">{r.categoria}</td>
-                        <td className="py-1.5 pr-3 text-right text-gray-700">{r.unidades.toLocaleString()}</td>
+                        <td className="py-1.5 pr-3 text-right text-gray-700">{r.cajas.toLocaleString()}</td>
                         <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>
                         <td className="py-1.5 pr-3 text-right text-gray-500">{fmt(r.precio_prom)}</td>
                         <td className={`py-1.5 pr-3 text-right font-bold ${margenColor(r.margen_pct)}`}>

@@ -107,8 +107,8 @@ export async function GET(req: NextRequest) {
          CASE WHEN SUM(ingresos) > 0
               THEN ROUND((SUM(margen_valor)/SUM(ingresos))::numeric, 4)
               ELSE 0 END                      AS margen_pct,
-         CASE WHEN SUM(unidades) > 0
-              THEN ROUND((SUM(ingresos)/SUM(unidades))::numeric, 4)
+         CASE WHEN SUM(cajas) > 0
+              THEN ROUND((SUM(ingresos)/SUM(cajas))::numeric, 4)
               ELSE 0 END                      AS precio_promedio
        FROM v_sellin ${where}
        GROUP BY pais, cliente, canal, tipo_negocio, sku, descripcion, categoria, subcategoria
