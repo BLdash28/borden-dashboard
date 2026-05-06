@@ -51,19 +51,19 @@ function DeltaBadge({ delta, isPct = false }: { delta: number; isPct?: boolean }
 }
 
 function MonthDividers(props: any) {
-  const axis = props.xAxisMap?.[0]
-  if (!axis?.scale) return null
-  const { scale } = axis
-  const domain: number[] = scale.domain?.() ?? []
-  const bw: number = scale.bandwidth?.() ?? 0
+  const xAxis = props.xAxisMap?.[0]
+  const yAxis = props.yAxisMap?.[0]
+  if (!xAxis?.scale) return null
+  const domain: number[] = xAxis.scale.domain?.() ?? []
+  const bw: number       = xAxis.scale.bandwidth?.() ?? 0
   const mt = props.margin?.top ?? 0
-  const mb = props.margin?.bottom ?? 0
-  const plotH = (props.height ?? 0) - mt - mb
+  // y2 = pixel position of value 0 on the Y axis (the $0K line)
+  const y2 = yAxis?.scale ? yAxis.scale(0) : (props.height ?? 0) - (props.margin?.bottom ?? 0)
   return (
     <g>
       {domain.slice(0, -1).map((val: number) => {
-        const x = (scale(val) ?? 0) + bw
-        return <line key={val} x1={x} x2={x} y1={mt} y2={mt + plotH} stroke="#e2e8f0" strokeWidth={1} />
+        const x = (xAxis.scale(val) ?? 0) + bw
+        return <line key={val} x1={x} x2={x} y1={mt} y2={y2} stroke="#e2e8f0" strokeWidth={1} />
       })}
     </g>
   )
