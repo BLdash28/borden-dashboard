@@ -13,27 +13,21 @@ export async function GET(req: NextRequest) {
     const dim    = sp.get('dim') || 'cliente'
     const paises = sp.get('pais') ? sp.get('pais')!.split(',').filter(Boolean) : []
 
-    // Determinar meses de los últimos 90 días (en 2026)
-    const today       = new Date()
-    const ninetyAgo   = new Date(); ninetyAgo.setDate(today.getDate() - 90)
-    const meses: number[] = []
-    const walker = new Date(ninetyAgo.getFullYear(), ninetyAgo.getMonth(), 1)
-    while (walker <= today) {
-      // Solo incluir meses dentro del año en curso (2026)
-      if (walker.getFullYear() === today.getFullYear()) {
-        meses.push(walker.getMonth() + 1)
-      }
-      walker.setMonth(walker.getMonth() + 1)
-    }
-    if (meses.length === 0) meses.push(today.getMonth() + 1)
+    // YTD: Ene → último mes cerrado del año actual
+    // getMonth() es 0-indexado: en Mayo retorna 4, lo que equivale al mes 4 (Abril) en la BD
+    const ultimoMesCerrado = new Date().getMonth()
 
+    if (ultimoMesCerrado === 0) {
+      return NextResponse.json({ rows: [], totals: { total2025: 0, total2026: 0, meses: {} }, meses: [], dim })
+    }
+
+    const meses = Array.from({ length: ultimoMesCerrado }, (_, i) => i + 1)
     const mesSql   = `mes IN (${meses.join(',')})`
     const paisCond = paises.length ? 'AND ' + inC('pais', paises) : ''
 
     const dimColNew = dim === 'categoria' ? 'categoria' : 'cliente_nombre'
     const dimColOld = dim === 'categoria' ? 'categoria' : 'cliente'
 
-    // Query combinada: fact_sales_sellin (2026) + ventas_sell_in (2025, solo meses no cubiertos por 2026)
     const r = await pool.query(`
       SELECT dim, ano, mes, ROUND(SUM(ingresos)::numeric, 2) AS ingresos
       FROM (
@@ -46,9 +40,6 @@ export async function GET(req: NextRequest) {
         SELECT ${dimColOld} AS dim, 2025 AS ano, mes, ingresos
         FROM ventas_sell_in
         WHERE ano = 2025 AND ${mesSql} ${paisCond}
-          AND mes NOT IN (
-            SELECT DISTINCT mes FROM fact_sales_sellin WHERE ano = 2026
-          )
       ) sub
       WHERE dim IS NOT NULL AND dim <> ''
       GROUP BY dim, ano, mes

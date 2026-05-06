@@ -105,7 +105,11 @@ export default function SellInVariaciones() {
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Sell In</p>
           <h1 className="text-2xl font-bold text-gray-800">YTD y Variaciones</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Últimos 90 días · 2025 vs 2026</p>
+          <p className="text-sm text-gray-400 mt-0.5">
+            {meses.length > 0
+              ? `${MESES_LABEL[meses[0]]} – ${MESES_LABEL[meses[meses.length - 1]]} · 2025 vs 2026`
+              : '2025 vs 2026'}
+          </p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => cargar(dim, paises)}
