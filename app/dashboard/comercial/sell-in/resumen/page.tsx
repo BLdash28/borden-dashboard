@@ -102,8 +102,8 @@ export default function SellInResumen() {
   })
 
   const kpiCards = kpi ? [
-    { label: 'Venta Neta', value: '$' + kpi.ingresos.valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.ingresos.delta, icon: '💰' },
-    { label: 'Cajas',      value: Math.round(kpi.cajas.valor).toLocaleString('en-US'), delta: kpi.cajas.delta, icon: '📦' },
+    { label: 'Venta Neta YTD', value: '$' + kpi.ingresos.valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.ingresos.delta, icon: '💰' },
+    { label: 'Cajas YTD',      value: Math.round(kpi.cajas.valor).toLocaleString('en-US'), delta: kpi.cajas.delta, icon: '📦' },
   ] : []
 
   return (
@@ -115,7 +115,7 @@ export default function SellInResumen() {
           <h1 className="text-2xl font-bold text-gray-800">Resumen Ejecutivo</h1>
           <p className="text-sm text-gray-400 mt-0.5">Comparativo vs año anterior · Facturación propia</p>
         </div>
-        <button onClick={() => cargar(ano, paises, cats, tipo)}
+        <button onClick={() => cargar(ano, paises, cats, tipos)}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Actualizar
         </button>
@@ -211,11 +211,31 @@ export default function SellInResumen() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize: 11 }} width={52} />
-                <Tooltip formatter={(v: number) => fmtFull(v)} />
+                <Tooltip content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null
+                  const v2025 = payload.find(p => p.dataKey === '2025')?.value as number | null
+                  const v2026 = payload.find(p => p.dataKey === '2026')?.value as number | null
+                  const pct = v2025 && v2026 && v2025 > 0 ? ((v2026 - v2025) / v2025) * 100 : null
+                  return (
+                    <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs">
+                      <p className="font-semibold text-gray-700 mb-1">{label}</p>
+                      {payload.map((p: any) => (
+                        <p key={p.dataKey} style={{ color: p.stroke }} className="leading-5">
+                          {p.name}: {p.value != null ? fmtFull(p.value) : '—'}
+                          {p.dataKey === '2026' && pct != null && (
+                            <span className={`ml-1.5 font-semibold ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                              ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}% vs 2025)
+                            </span>
+                          )}
+                        </p>
+                      ))}
+                    </div>
+                  )
+                }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="2025"       name="2025"       stroke={COLORS[2025]}      strokeWidth={2} dot={false} connectNulls={false} />
-                <Line type="monotone" dataKey="proyeccion" name="Proyección 2026" stroke={COLORS.proyeccion} strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="5 3" />
-                <Line type="monotone" dataKey="2026"       name="2026"       stroke={COLORS[2026]}      strokeWidth={2} dot={false} connectNulls={false} />
+                <Line type="monotone" dataKey="2025"       name="2025"            stroke={COLORS[2025]}      strokeWidth={2} dot={false} connectNulls={false} />
+                <Line type="monotone" dataKey="proyeccion" name="Proyección 2026"  stroke={COLORS.proyeccion} strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="5 3" />
+                <Line type="monotone" dataKey="2026"       name="2026"            stroke={COLORS[2026]}      strokeWidth={2} dot={false} connectNulls={false} />
               </LineChart>
             </ResponsiveContainer>
           )
