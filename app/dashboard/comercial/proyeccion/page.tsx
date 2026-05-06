@@ -194,47 +194,41 @@ function ProyeccionInner() {
     Array.from({ length: 12 }, (_, i) => i + 1)
   , [])
 
-  const filteredCatRows = useMemo(() =>
-    catRows.filter(c =>
-      (!fCategoria.length || fCategoria.includes(c.categoria)) &&
-      (!fPais.length      || fPais.includes(c.pais))           &&
-      (!fCliente.length   || fCliente.includes(c.cliente))
-    )
-  , [catRows, fCategoria, fPais, fCliente])
+  // Cálculo directo sin useMemo para evitar cualquier problema de stale cache
+  const filteredCatRows = catRows.filter(c =>
+    (!fCategoria.length || fCategoria.includes(c.categoria)) &&
+    (!fPais.length      || fPais.includes(c.pais))           &&
+    (!fCliente.length   || fCliente.includes(c.cliente))
+  )
 
-  // KPIs siempre desde filteredCatRows:
-  // - Sin sub-filtro: filteredCatRows === catRows completo (suma = total empresa)
-  // - Con sub-filtro: sólo las filas que coinciden con Categoría/País/Cliente
-  const kpis = useMemo(() => {
-    let proy = 0, real = 0, ultimoMes = 0
-    for (const r of filteredCatRows) {
-      proy += r.valor_proyectado
-      real += r.real_usd ?? 0
-      if ((r.real_usd ?? 0) > 0) ultimoMes = Math.max(ultimoMes, r.mes)
-    }
-    const dif = real - proy
-    const pct = proy > 0 ? Math.round(real / proy * 1000) / 10 : null
+  let _proy = 0, _real = 0, _ultimoMes = 0
+  for (const r of filteredCatRows) {
+    _proy += r.valor_proyectado
+    _real += r.real_usd ?? 0
+    if ((r.real_usd ?? 0) > 0) _ultimoMes = Math.max(_ultimoMes, r.mes)
+  }
+  let _proyYTD = 0
+  for (const r of filteredCatRows) {
+    if (r.mes <= _ultimoMes) _proyYTD += r.valor_proyectado
+  }
+  const kpis = {
+    proy:      _proy,
+    real:      _real,
+    dif:       _real - _proy,
+    pct:       _proy > 0 ? Math.round(_real / _proy * 1000) / 10 : null,
+    facing:    _proy > 0 && _ultimoMes > 0 ? Math.round(_proyYTD / _proy * 1000) / 10 : null,
+    ultimoMes: _ultimoMes,
+  }
 
-    let proyYTD = 0
-    for (const r of filteredCatRows) {
-      if (r.mes <= ultimoMes) proyYTD += r.valor_proyectado
-    }
-    const facing = proy > 0 && ultimoMes > 0 ? Math.round(proyYTD / proy * 1000) / 10 : null
-
-    return { proy, real, dif, pct, facing, ultimoMes }
-  }, [filteredCatRows])
-
-  const chartData = useMemo(() => {
-    const map: Record<number, { mes_label: string; proyectado: number; real: number }> = {}
-    for (const r of filteredCatRows) {
-      if (!map[r.mes]) map[r.mes] = { mes_label: MES_LABELS[r.mes] ?? String(r.mes), proyectado: 0, real: 0 }
-      map[r.mes].proyectado += r.valor_proyectado
-      map[r.mes].real       += r.real_usd ?? 0
-    }
-    return Object.entries(map)
-      .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([, v]) => v)
-  }, [filteredCatRows])
+  const chartDataMap: Record<number, { mes_label: string; proyectado: number; real: number }> = {}
+  for (const r of filteredCatRows) {
+    if (!chartDataMap[r.mes]) chartDataMap[r.mes] = { mes_label: MES_LABELS[r.mes] ?? String(r.mes), proyectado: 0, real: 0 }
+    chartDataMap[r.mes].proyectado += r.valor_proyectado
+    chartDataMap[r.mes].real       += r.real_usd ?? 0
+  }
+  const chartData = Object.entries(chartDataMap)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([, v]) => v)
 
   const titulo =
     !fAno.length        ? 'Toda la historia' :
