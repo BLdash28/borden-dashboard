@@ -115,15 +115,15 @@ function ProyeccionInner() {
   const [fPais,      setFPais]      = useState<string[]>(() => parse('pais'))
   const [fCliente,   setFCliente]   = useState<string[]>(() => parse('cliente'))
 
-  const [anos,     setAnos]     = useState<number[]>([])
-  const [rows,     setRows]     = useState<Row[]>([])
-  const [catRows,  setCatRows]  = useState<CatRow[]>([])
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [loading,  setLoading]  = useState(false)
-  const [error,    setError]    = useState('')
+  const [anos,        setAnos]        = useState<number[]>([])
+  const [rows,        setRows]        = useState<Row[]>([])
+  const [catRows,     setCatRows]     = useState<CatRow[]>([])  // filtrados por todos los filtros
+  const [catRowsAll,  setCatRowsAll]  = useState<CatRow[]>([])  // sin sub-filtros, para opciones dropdown
+  const [expanded,    setExpanded]    = useState<Set<string>>(new Set())
+  const [loading,     setLoading]     = useState(false)
+  const [error,       setError]       = useState('')
 
-
-  // Sincronizar filtros → URL para que persistan al recargar
+  // Sincronizar filtros → URL
   useEffect(() => {
     const p = new URLSearchParams()
     if (fAno.length)       p.set('ano',       fAno.join(','))
@@ -137,22 +137,22 @@ function ProyeccionInner() {
 
   // Cascading resets
   useEffect(() => { setFCategoria([]); setFPais([]); setFCliente([]) }, [fEmpresa])
-  useEffect(() => { setFPais([]); setFCliente([]) },           [fCategoria])
-  useEffect(() => { setFCliente([]) },                         [fPais])
+  useEffect(() => { setFPais([]); setFCliente([]) }, [fCategoria])
+  useEffect(() => { setFCliente([]) },               [fPais])
 
-  const fetchData = useCallback(async () => {
+  // Fetch base (ano/mes/empresa): actualiza rows, catRowsAll y catRows cuando no hay sub-filtro
+  const fetchBase = useCallback(async () => {
     setLoading(true); setError('')
     try {
       const p = new URLSearchParams()
       if (fAno.length)     p.set('ano',     fAno.join(','))
       if (fMes.length)     p.set('mes',     fMes.join(','))
       if (fEmpresa.length) p.set('empresa', fEmpresa.join(','))
-
       const res  = await fetch(`/api/ventas/proyeccion?${p}`)
       const data = await res.json()
       if (data.error) throw new Error(data.error)
-
       setRows(data.rows ?? [])
+      setCatRowsAll(data.catRows ?? [])
       setCatRows(data.catRows ?? [])
       if (data.anos?.length) setAnos(data.anos)
     } catch (e: unknown) {
@@ -162,31 +162,56 @@ function ProyeccionInner() {
     }
   }, [fAno, fMes, fEmpresa])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => { fetchBase() }, [fetchBase])
 
-  // ── Opciones de filtros jerárquicos ──────────────────────────────────────────
+  // Fetch filtrado (categoria/pais/cliente): re-fetch con sub-filtros activos
+  const fetchFiltered = useCallback(async () => {
+    if (!fCategoria.length && !fPais.length && !fCliente.length) {
+      // Sin sub-filtro: restaurar catRows desde catRowsAll
+      setCatRows(catRowsAll)
+      return
+    }
+    try {
+      const p = new URLSearchParams()
+      if (fAno.length)       p.set('ano',       fAno.join(','))
+      if (fMes.length)       p.set('mes',       fMes.join(','))
+      if (fEmpresa.length)   p.set('empresa',   fEmpresa.join(','))
+      if (fCategoria.length) p.set('categoria', fCategoria.join(','))
+      if (fPais.length)      p.set('pais',      fPais.join(','))
+      if (fCliente.length)   p.set('cliente',   fCliente.join(','))
+      const res  = await fetch(`/api/ventas/proyeccion?${p}`)
+      const data = await res.json()
+      if (data.error) throw new Error(data.error)
+      setCatRows(data.catRows ?? [])
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Error al cargar datos')
+    }
+  }, [fAno, fMes, fEmpresa, fCategoria, fPais, fCliente, catRowsAll])
+
+  useEffect(() => { fetchFiltered() }, [fCategoria, fPais, fCliente]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Opciones de filtros jerárquicos (desde catRowsAll, sin sub-filtro) ────────
   const optCategorias = useMemo(() =>
-    [...new Set(catRows.map(r => r.categoria))].sort()
-  , [catRows])
+    [...new Set(catRowsAll.map(r => r.categoria))].filter(Boolean).sort()
+  , [catRowsAll])
 
   const optPaises = useMemo(() =>
-    [...new Set(catRows
+    [...new Set(catRowsAll
       .filter(r => !fCategoria.length || fCategoria.includes(r.categoria))
       .map(r => r.pais)
     )].filter(Boolean).sort()
-  , [catRows, fCategoria])
+  , [catRowsAll, fCategoria])
 
   const optClientes = useMemo(() =>
-    [...new Set(catRows
+    [...new Set(catRowsAll
       .filter(r =>
         (!fCategoria.length || fCategoria.includes(r.categoria)) &&
         (!fPais.length      || fPais.includes(r.pais))
       )
       .map(r => r.cliente)
     )].filter(Boolean).sort()
-  , [catRows, fCategoria, fPais])
+  , [catRowsAll, fCategoria, fPais])
 
-  // ¿Hay filtro de sub-categoría activo?
   const activeSubFilter = fCategoria.length > 0 || fPais.length > 0 || fCliente.length > 0
 
 
@@ -194,21 +219,16 @@ function ProyeccionInner() {
     Array.from({ length: 12 }, (_, i) => i + 1)
   , [])
 
-  // Cálculo directo sin useMemo para evitar cualquier problema de stale cache
-  const filteredCatRows = catRows.filter(c =>
-    (!fCategoria.length || fCategoria.includes(c.categoria)) &&
-    (!fPais.length      || fPais.includes(c.pais))           &&
-    (!fCliente.length   || fCliente.includes(c.cliente))
-  )
-
+  // catRows ya viene filtrado del API (por categoria/pais/cliente)
+  // Solo sumamos directamente sin filtro adicional client-side
   let _proy = 0, _real = 0, _ultimoMes = 0
-  for (const r of filteredCatRows) {
+  for (const r of catRows) {
     _proy += r.valor_proyectado
     _real += r.real_usd ?? 0
     if ((r.real_usd ?? 0) > 0) _ultimoMes = Math.max(_ultimoMes, r.mes)
   }
   let _proyYTD = 0
-  for (const r of filteredCatRows) {
+  for (const r of catRows) {
     if (r.mes <= _ultimoMes) _proyYTD += r.valor_proyectado
   }
   const kpis = {
@@ -221,7 +241,7 @@ function ProyeccionInner() {
   }
 
   const chartDataMap: Record<number, { mes_label: string; proyectado: number; real: number }> = {}
-  for (const r of filteredCatRows) {
+  for (const r of catRows) {
     if (!chartDataMap[r.mes]) chartDataMap[r.mes] = { mes_label: MES_LABELS[r.mes] ?? String(r.mes), proyectado: 0, real: 0 }
     chartDataMap[r.mes].proyectado += r.valor_proyectado
     chartDataMap[r.mes].real       += r.real_usd ?? 0
@@ -398,12 +418,9 @@ function ProyeccionInner() {
                   const expandKey = `${r.ano}-${r.mes}-${r.empresa}`
                   const hasCats   = r.empresa === 'LICENCIAMIENTO' || r.empresa === 'BL FOODS'
 
-                  // Sub-rows filtrados por los filtros jerárquicos
+                  // catRows ya viene filtrado del API — solo filtrar por empresa+mes
                   const subRows = catRows.filter(c =>
-                    c.ano === r.ano && c.mes === r.mes && c.empresa === r.empresa &&
-                    (!fCategoria.length || fCategoria.includes(c.categoria)) &&
-                    (!fPais.length      || fPais.includes(c.pais))           &&
-                    (!fCliente.length   || fCliente.includes(c.cliente))
+                    c.ano === r.ano && c.mes === r.mes && c.empresa === r.empresa
                   )
 
                   // Si hay filtro activo y esta fila no tiene sub-rows → ocultar
