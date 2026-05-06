@@ -10,27 +10,26 @@ const MES: Record<number, string> = {
 
 export async function GET(req: NextRequest) {
   try {
-    const sp      = req.nextUrl.searchParams
-    const ano     = sp.get('ano')     || ''
-    const mes     = sp.get('mes')     || ''
-    const empresa = sp.get('empresa') || ''
+    const sp         = req.nextUrl.searchParams
+    const anosParam  = sp.get('ano')     ? sp.get('ano')!.split(',').map(Number).filter(Boolean)  : []
+    const mesesParam = sp.get('mes')     ? sp.get('mes')!.split(',').map(Number).filter(Boolean)  : []
+    const empresas   = sp.get('empresa') ? sp.get('empresa')!.split(',').filter(Boolean)           : []
 
-    const modo: 'mes' | 'ano' | 'todos' =
-      ano && mes ? 'mes' : ano ? 'ano' : 'todos'
+    const inNums = (col: string, vals: number[]) => `${col} IN (${vals.join(',')})`
 
-    // ── Proyecciones (nivel empresa, sin desglose de categoría) ─
+    // ── Proyecciones nivel empresa ────────────────────────────────
     const pWhere: string[] = ['categoria IS NULL']
     const pParams: unknown[] = []
     let pi = 1
 
-    if (empresa) {
-      pWhere.push(`empresa = $${pi++}`)
-      pParams.push(empresa)
+    if (empresas.length) {
+      pWhere.push(`empresa IN (${empresas.map(() => `$${pi++}`).join(',')})`)
+      pParams.push(...empresas)
     } else {
       pWhere.push(`empresa IN ('LICENCIAMIENTO', 'BL FOODS')`)
     }
-    if (ano) { pWhere.push(`ano = $${pi++}`); pParams.push(Number(ano)) }
-    if (mes) { pWhere.push(`mes = $${pi++}`); pParams.push(Number(mes)) }
+    if (anosParam.length)  pWhere.push(inNums('ano', anosParam))
+    if (mesesParam.length) pWhere.push(inNums('mes', mesesParam))
 
     const { rows: projRows } = await pool.query<{
       ano: string; mes: string; empresa: string; valor_usd: string
@@ -41,30 +40,36 @@ export async function GET(req: NextRequest) {
       ORDER BY mes ASC, empresa ASC
     `, pParams)
 
-    // ── Ventas reales (BL FOODS — fact_sales_sellout) ────────────
-    const rWhere: string[] = ["categoria IN ('Leches', 'Quesos')"]
-    const rParams: unknown[] = []
-    let ri = 1
-    if (ano) { rWhere.push(`ano = $${ri++}`); rParams.push(Number(ano)) }
-    if (mes) { rWhere.push(`mes = $${ri++}`); rParams.push(Number(mes)) }
+    // ── Ventas reales (fact_sales_sellin — todas las categorías) ─
+    const rWhere: string[] = ['venta_neta > 0']
+    if (anosParam.length)  rWhere.push(inNums('ano', anosParam))
+    if (mesesParam.length) rWhere.push(inNums('mes', mesesParam))
 
     const { rows: realRows } = await pool.query<{
-      ano: string; mes: string; pais: string; categoria: string; valor_real: string
+      ano: string; mes: string; pais: string; categoria: string; cliente_nombre: string; empresa: string; valor_real: string
     }>(`
-      SELECT ano, mes, pais, categoria, SUM(ventas_valor) AS valor_real
-      FROM fact_sales_sellout
+      SELECT
+        ano, mes, pais, categoria, cliente_nombre,
+        CASE WHEN tipo_negocio = 'REGULAR' THEN 'BL FOODS' ELSE 'LICENCIAMIENTO' END AS empresa,
+        SUM(venta_neta) AS valor_real
+      FROM fact_sales_sellin
       WHERE ${rWhere.join(' AND ')}
-      GROUP BY ano, mes, pais, categoria
-    `, rParams)
+      GROUP BY ano, mes, pais, categoria, cliente_nombre,
+        CASE WHEN tipo_negocio = 'REGULAR' THEN 'BL FOODS' ELSE 'LICENCIAMIENTO' END
+    `)
 
-    // realMap total: "<ano>-<mes>" → valor_real
-    // realByPaisCat: "<ano>-<mes>-<pais>-<cat>" → valor_real
-    const realMap: Record<string, number> = {}
+    // realByEmpresa: total sellin por empresa+mes (empresa-level real)
+    // realByKey: por empresa+pais+categoria+cliente para catRows
+    // realByPaisCat: por empresa+pais+categoria (para sintéticos sin cliente específico)
+    const realByEmpresa: Record<string, number> = {}
+    const realByKey: Record<string, number> = {}
     const realByPaisCat: Record<string, number> = {}
     for (const r of realRows) {
-      const key = `${r.ano}-${r.mes}`
-      realMap[key] = (realMap[key] || 0) + (Number(r.valor_real) || 0)
-      realByPaisCat[`${r.ano}-${r.mes}-${r.pais}-${r.categoria}`] = Number(r.valor_real) || 0
+      const empKey = `${r.ano}-${r.mes}-${r.empresa}`
+      realByEmpresa[empKey] = (realByEmpresa[empKey] || 0) + (Number(r.valor_real) || 0)
+      realByKey[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}-${r.cliente_nombre}`] = Number(r.valor_real) || 0
+      const pcKey = `${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}`
+      realByPaisCat[pcKey] = (realByPaisCat[pcKey] || 0) + (Number(r.valor_real) || 0)
     }
 
     // ── Años disponibles ─────────────────────────────────────────
@@ -73,14 +78,18 @@ export async function GET(req: NextRequest) {
     )
     const anos = anosRows.map(r => r.ano)
 
-    // ── Cat-rows (LICENCIAMIENTO + BL FOODS breakdown) ────────────
+    // ── Cat-rows detalle ─────────────────────────────────────────
     const cWhere: string[] = ['categoria IS NOT NULL']
     const cParams: unknown[] = []
     let ci = 1
-    if (empresa) { cWhere.push(`empresa = $${ci++}`); cParams.push(empresa) }
-    else         { cWhere.push(`empresa IN ('LICENCIAMIENTO', 'BL FOODS')`) }
-    if (ano) { cWhere.push(`ano = $${ci++}`); cParams.push(Number(ano)) }
-    if (mes) { cWhere.push(`mes = $${ci++}`); cParams.push(Number(mes)) }
+    if (empresas.length) {
+      cWhere.push(`empresa IN (${empresas.map(() => `$${ci++}`).join(',')})`)
+      cParams.push(...empresas)
+    } else {
+      cWhere.push(`empresa IN ('LICENCIAMIENTO', 'BL FOODS')`)
+    }
+    if (anosParam.length)  cWhere.push(inNums('ano', anosParam))
+    if (mesesParam.length) cWhere.push(inNums('mes', mesesParam))
 
     const { rows: catDbRows } = await pool.query<{
       id: string; ano: string; mes: string; empresa: string
@@ -94,9 +103,10 @@ export async function GET(req: NextRequest) {
     `, cParams)
 
     const catRows = catDbRows.map(r => {
-      // real_usd manual tiene prioridad; si es null, buscar en fact_sales_sellout por pais+categoria
-      const selloutReal = realByPaisCat[`${r.ano}-${r.mes}-${r.pais}-${r.categoria}`] ?? null
-      const real_usd    = r.real_usd !== null ? Number(r.real_usd) : selloutReal
+      // buscar por cliente exacto; si no hay, sumar todo pais+categoria
+      const byCliente = realByKey[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}-${r.cliente}`]
+      const sellinReal = byCliente ?? realByPaisCat[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}`] ?? null
+      const real_usd   = r.real_usd !== null ? Number(r.real_usd) : sellinReal
       return {
         id:               Number(r.id),
         ano:              Number(r.ano),
@@ -108,10 +118,38 @@ export async function GET(req: NextRequest) {
         cliente:          r.cliente ?? '',
         valor_proyectado: Number(r.valor_usd),
         real_usd,
+        synthetic:        false,
       }
     })
 
-    // ── Mapa de real_usd manual por empresa+mes (suma de cat rows) ───
+    // Agregar filas de sellin que no tienen catRow proyectado (no fueron planeadas)
+    const existingKeys = new Set(
+      catDbRows.map(r => `${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}-${r.cliente}`)
+    )
+    const syntheticRows = realRows
+      .filter(r => !existingKeys.has(`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}-${r.cliente_nombre}`))
+      .map(r => ({
+        id:               null as null,
+        ano:              Number(r.ano),
+        mes:              Number(r.mes),
+        mes_label:        MES[Number(r.mes)] ?? String(r.mes),
+        empresa:          r.empresa,
+        categoria:        r.categoria,
+        pais:             r.pais ?? '',
+        cliente:          r.cliente_nombre ?? '',
+        valor_proyectado: 0,
+        real_usd:         Number(r.valor_real) || 0,
+        synthetic:        true,
+      }))
+
+    const allCatRows = [...catRows, ...syntheticRows].sort((a, b) =>
+      a.mes - b.mes ||
+      a.empresa.localeCompare(b.empresa) ||
+      a.categoria.localeCompare(b.categoria) ||
+      a.pais.localeCompare(b.pais)
+    )
+
+    // Manual real_usd sum por empresa+mes
     const manualRealMap: Record<string, number> = {}
     for (const c of catDbRows) {
       if (c.real_usd === null) continue
@@ -119,16 +157,15 @@ export async function GET(req: NextRequest) {
       manualRealMap[k] = (manualRealMap[k] ?? 0) + Number(c.real_usd)
     }
 
-    // ── Combinar empresa-level rows ───────────────────────────────
+    // ── Empresa-level rows ────────────────────────────────────────
     const rows = projRows.map(r => {
-      const key              = `${r.ano}-${r.mes}`
       const empresaKey       = `${r.ano}-${r.mes}-${r.empresa}`
       const valor_proyectado = Number(r.valor_usd)
-      // BL FOODS: sellout real; LICENCIAMIENTO: suma manual de cat rows
-      const valor_real =
-        r.empresa === 'BL FOODS'
-          ? (realMap[key] ?? 0) || (manualRealMap[empresaKey] ?? 0)
-          : (manualRealMap[empresaKey] ?? 0)
+      const sellinTotal      = realByEmpresa[empresaKey] ?? 0
+      // Usar sellin si hay datos; si no (ej. LICENCIAMIENTO), usar suma manual de catRows
+      const valor_real = sellinTotal > 0
+        ? sellinTotal
+        : (manualRealMap[empresaKey] ?? 0)
       const diferencia       = valor_real - valor_proyectado
       const pct_cumplimiento = valor_proyectado > 0
         ? Math.round(valor_real / valor_proyectado * 1000) / 10
@@ -146,7 +183,7 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    return NextResponse.json({ modo, anos, rows, catRows })
+    return NextResponse.json({ anos, rows, catRows: allCatRows })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('proyeccion error:', msg)

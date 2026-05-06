@@ -1,7 +1,7 @@
 'use client'
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
-import { ChevronRight, Pencil } from 'lucide-react'
-import MultiSelect from '@/components/dashboard/MultiSelect'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { ChevronRight } from 'lucide-react'
+import FiltroMulti from '@/components/ui/FiltroMulti'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   Legend, ResponsiveContainer,
@@ -20,7 +20,7 @@ interface Row {
 }
 
 interface CatRow {
-  id:               number
+  id:               number | null
   ano:              number
   mes:              number
   empresa:          string
@@ -29,6 +29,7 @@ interface CatRow {
   cliente:          string
   valor_proyectado: number
   real_usd:         number | null
+  synthetic:        boolean
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -98,9 +99,9 @@ function ChartTooltip({ active, payload, label }: any) {
 
 // ── Página principal ───────────────────────────────────────────────────────────
 export default function ProyeccionPage() {
-  const [fAno,       setFAno]       = useState('')
-  const [fMes,       setFMes]       = useState('')
-  const [fEmpresa,   setFEmpresa]   = useState('')
+  const [fAno,       setFAno]       = useState<string[]>([])
+  const [fMes,       setFMes]       = useState<string[]>([])
+  const [fEmpresa,   setFEmpresa]   = useState<string[]>([])
   const [fCategoria, setFCategoria] = useState<string[]>([])
   const [fPais,      setFPais]      = useState<string[]>([])
   const [fCliente,   setFCliente]   = useState<string[]>([])
@@ -112,14 +113,8 @@ export default function ProyeccionPage() {
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
 
-  // Inline edit state
-  const [editingId,  setEditingId]  = useState<number | null>(null)
-  const [editValue,  setEditValue]  = useState('')
-  const [savingId,   setSavingId]   = useState<number | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   // Cascading resets
-  useEffect(() => { setFMes('') },                             [fAno])
   useEffect(() => { setFCategoria([]); setFPais([]); setFCliente([]) }, [fEmpresa])
   useEffect(() => { setFPais([]); setFCliente([]) },           [fCategoria])
   useEffect(() => { setFCliente([]) },                         [fPais])
@@ -128,9 +123,9 @@ export default function ProyeccionPage() {
     setLoading(true); setError('')
     try {
       const p = new URLSearchParams()
-      if (fAno)     p.set('ano',     fAno)
-      if (fMes)     p.set('mes',     fMes)
-      if (fEmpresa) p.set('empresa', fEmpresa)
+      if (fAno.length)     p.set('ano',     fAno.join(','))
+      if (fMes.length)     p.set('mes',     fMes.join(','))
+      if (fEmpresa.length) p.set('empresa', fEmpresa.join(','))
 
       const res  = await fetch(`/api/ventas/proyeccion?${p}`)
       const data = await res.json()
@@ -173,47 +168,10 @@ export default function ProyeccionPage() {
   // ¿Hay filtro de sub-categoría activo?
   const activeSubFilter = fCategoria.length > 0 || fPais.length > 0 || fCliente.length > 0
 
-  // Focus input when editing starts
-  useEffect(() => {
-    if (editingId !== null) inputRef.current?.focus()
-  }, [editingId])
 
-  const startEdit = (id: number, current: number | null) => {
-    setEditingId(id)
-    setEditValue(current !== null ? String(current) : '')
-  }
-
-  const saveEdit = async () => {
-    if (editingId === null) return
-    const id       = editingId
-    const raw      = editValue.trim().replace(/,/g, '')
-    const real_usd = raw === '' ? null : Number(raw)
-
-    setEditingId(null)
-
-    // Optimistic update
-    setCatRows(prev => prev.map(r => r.id === id ? { ...r, real_usd } : r))
-
-    setSavingId(id)
-    try {
-      const res = await fetch('/api/ventas/proyeccion/real', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, real_usd }),
-      })
-      if (!res.ok) throw new Error('Error al guardar')
-    } catch {
-      // Revert on error
-      fetchData()
-    } finally {
-      setSavingId(null)
-    }
-  }
-
-  const mesesDisponibles = useMemo(() => {
-    const s = new Set(rows.map(r => r.mes))
-    return Array.from(s).sort((a, b) => a - b)
-  }, [rows])
+  const mesesDisponibles = useMemo(() =>
+    Array.from({ length: 12 }, (_, i) => i + 1)
+  , [])
 
   const kpis = useMemo(() => {
     const proy = rows.reduce((s, r) => s + r.valor_proyectado, 0)
@@ -236,9 +194,10 @@ export default function ProyeccionPage() {
   }, [rows])
 
   const titulo =
-    !fAno        ? 'Toda la historia' :
-    !fMes        ? `Año ${fAno} completo` :
-    `${MES_LABELS[Number(fMes)]} ${fAno}`
+    !fAno.length        ? 'Toda la historia' :
+    fAno.length === 1 && !fMes.length ? `Año ${fAno[0]} completo` :
+    fAno.length === 1 && fMes.length === 1 ? `${MES_LABELS[Number(fMes[0])]} ${fAno[0]}` :
+    [fAno.join(', '), fMes.length ? fMes.map(m => MES_LABELS[Number(m)]).join(', ') : ''].filter(Boolean).join(' — ')
 
   return (
     <div className="p-6 space-y-6">
@@ -249,83 +208,58 @@ export default function ProyeccionPage() {
       </div>
 
       {/* Filtros */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-wrap gap-3 items-end">
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">Año</label>
-          <select
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div className="flex gap-3">
+          <FiltroMulti
+            label="Año"
+            options={anos.map(a => ({ value: String(a) }))}
             value={fAno}
-            onChange={e => setFAno(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[90px] focus:outline-none focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="">Todos</option>
-            {anos.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">Mes</label>
-          <select
-            value={fMes}
-            onChange={e => setFMes(e.target.value)}
-            disabled={!fAno}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[110px] disabled:opacity-40 focus:outline-none focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="">Todos</option>
-            {mesesDisponibles.map(m => (
-              <option key={m} value={m}>{MES_LABELS[m]}</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-gray-500">Empresa</label>
-          <select
-            value={fEmpresa}
-            onChange={e => setFEmpresa(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm min-w-[160px] focus:outline-none focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="">Todas</option>
-            <option value="LICENCIAMIENTO">LICENCIAMIENTO</option>
-            <option value="BL FOODS">BL FOODS</option>
-          </select>
-        </div>
-
-        {/* Separador */}
-        <div className="h-8 w-px bg-gray-200 self-end mb-1 hidden sm:block" />
-
-        {/* Categoría */}
-        <div className="min-w-[130px]">
-          <MultiSelect
-            label="Categoría"
-            options={optCategorias.map(c => ({ value: c, label: c }))}
-            value={fCategoria}
-            onChange={setFCategoria}
-            placeholder="Todas"
-            selectAllLabel="Todas"
+            onChange={setFAno}
+            placeholder="Todos"
+            className="flex-1 min-w-[80px]"
           />
-        </div>
-
-        {/* País */}
-        <div className="min-w-[120px]">
-          <MultiSelect
+          <FiltroMulti
+            label="Mes"
+            options={mesesDisponibles.map(m => ({ value: String(m), label: MES_LABELS[m] }))}
+            value={fMes}
+            onChange={setFMes}
+            placeholder="Todos"
+            className="flex-1 min-w-[90px]"
+          />
+          <FiltroMulti
             label="País"
-            options={optPaises.map(p => ({ value: p, label: p }))}
+            options={optPaises.map(p => ({ value: p }))}
             value={fPais}
             onChange={setFPais}
             placeholder="Todos"
-            selectAllLabel="Todos"
+            className="flex-1 min-w-[80px]"
           />
-        </div>
-
-        {/* Cliente */}
-        <div className="min-w-[160px]">
-          <MultiSelect
+          <FiltroMulti
+            label="Empresa"
+            options={[
+              { value: 'BL FOODS' },
+              { value: 'LICENCIAMIENTO' },
+            ]}
+            value={fEmpresa}
+            onChange={setFEmpresa}
+            placeholder="Todas"
+            className="flex-[2] min-w-[140px]"
+          />
+          <FiltroMulti
+            label="Categoría"
+            options={optCategorias.map(c => ({ value: c }))}
+            value={fCategoria}
+            onChange={setFCategoria}
+            placeholder="Todas"
+            className="flex-1 min-w-[100px]"
+          />
+          <FiltroMulti
             label="Cliente"
-            options={optClientes.map(c => ({ value: c, label: c }))}
+            options={optClientes.map(c => ({ value: c }))}
             value={fCliente}
             onChange={setFCliente}
             placeholder="Todos"
-            selectAllLabel="Todos"
+            className="flex-[2] min-w-[140px]"
           />
         </div>
       </div>
@@ -475,13 +409,13 @@ export default function ProyeccionPage() {
 
                       {/* Sub-filas de categoría */}
                       {isExp && subRows.map((c, ci) => {
-                        const isEditingThis = editingId === c.id
-                        const isSaving      = savingId === c.id
-
                         return (
                           <tr key={`cat-${i}-${ci}`} className={subBg}>
                             <td className="px-4 py-2 pl-10 text-gray-500 text-xs whitespace-nowrap">
-                              {c.categoria}
+                              <span>{c.categoria}</span>
+                              {c.synthetic && (
+                                <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-600 px-1 py-0.5 rounded font-medium">real</span>
+                              )}
                             </td>
                             <td className="px-4 py-2">
                               <div className="flex flex-col gap-0.5">
@@ -492,36 +426,9 @@ export default function ProyeccionPage() {
                             <td className="px-4 py-2 text-right text-xs text-gray-500">
                               {c.valor_proyectado > 0 ? fmt(c.valor_proyectado) : <span className="text-gray-300">—</span>}
                             </td>
-                            {/* Real USD — editable inline */}
-                            <td className="px-4 py-2 text-right text-xs">
-                              {isEditingThis ? (
-                                <input
-                                  ref={inputRef}
-                                  type="text"
-                                  value={editValue}
-                                  onChange={e => setEditValue(e.target.value)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') saveEdit()
-                                    if (e.key === 'Escape') setEditingId(null)
-                                  }}
-                                  onBlur={saveEdit}
-                                  className="w-28 text-right border border-blue-300 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
-                                  placeholder="0.00"
-                                />
-                              ) : (
-                                <button
-                                  onClick={e => { e.stopPropagation(); startEdit(c.id, c.real_usd) }}
-                                  className={`group flex items-center justify-end gap-1 w-full text-right ${
-                                    isSaving ? 'opacity-50' : 'hover:text-blue-600'
-                                  }`}
-                                  title="Editar real USD"
-                                >
-                                  <span className={c.real_usd !== null ? 'text-gray-700' : 'text-gray-300'}>
-                                    {c.real_usd !== null ? fmt(c.real_usd) : '—'}
-                                  </span>
-                                  <Pencil size={10} className="text-gray-300 group-hover:text-blue-400 flex-shrink-0" />
-                                </button>
-                              )}
+                            {/* Real USD — solo lectura desde sellin */}
+                            <td className="px-4 py-2 text-right text-xs text-gray-700">
+                              {c.real_usd !== null ? fmt(c.real_usd) : <span className="text-gray-300">—</span>}
                             </td>
                             <td className="px-4 py-2 text-right text-xs">
                               {c.real_usd !== null ? (
