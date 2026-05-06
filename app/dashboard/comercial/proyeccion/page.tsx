@@ -202,61 +202,39 @@ function ProyeccionInner() {
     )
   , [catRows, fCategoria, fPais, fCliente])
 
+  // KPIs siempre desde filteredCatRows:
+  // - Sin sub-filtro: filteredCatRows === catRows completo (suma = total empresa)
+  // - Con sub-filtro: sólo las filas que coinciden con Categoría/País/Cliente
   const kpis = useMemo(() => {
-    const useFiltered = fCategoria.length > 0 || fPais.length > 0 || fCliente.length > 0
-
     let proy = 0, real = 0, ultimoMes = 0
-    if (useFiltered) {
-      for (const r of filteredCatRows) {
-        proy += r.valor_proyectado
-        real += r.real_usd ?? 0
-        if ((r.real_usd ?? 0) > 0) ultimoMes = Math.max(ultimoMes, r.mes)
-      }
-    } else {
-      for (const r of rows) {
-        proy += r.valor_proyectado
-        real += r.valor_real
-        if (r.valor_real > 0) ultimoMes = Math.max(ultimoMes, r.mes)
-      }
+    for (const r of filteredCatRows) {
+      proy += r.valor_proyectado
+      real += r.real_usd ?? 0
+      if ((r.real_usd ?? 0) > 0) ultimoMes = Math.max(ultimoMes, r.mes)
     }
     const dif = real - proy
     const pct = proy > 0 ? Math.round(real / proy * 1000) / 10 : null
 
     let proyYTD = 0
-    if (useFiltered) {
-      for (const r of filteredCatRows) {
-        if (r.mes <= ultimoMes) proyYTD += r.valor_proyectado
-      }
-    } else {
-      for (const r of rows) {
-        if (r.mes <= ultimoMes) proyYTD += r.valor_proyectado
-      }
+    for (const r of filteredCatRows) {
+      if (r.mes <= ultimoMes) proyYTD += r.valor_proyectado
     }
     const facing = proy > 0 && ultimoMes > 0 ? Math.round(proyYTD / proy * 1000) / 10 : null
 
     return { proy, real, dif, pct, facing, ultimoMes }
-  }, [rows, filteredCatRows, fCategoria, fPais, fCliente])
+  }, [filteredCatRows])
 
   const chartData = useMemo(() => {
-    const useFiltered = fCategoria.length > 0 || fPais.length > 0 || fCliente.length > 0
     const map: Record<number, { mes_label: string; proyectado: number; real: number }> = {}
-    if (useFiltered) {
-      for (const r of filteredCatRows) {
-        if (!map[r.mes]) map[r.mes] = { mes_label: MES_LABELS[r.mes] ?? String(r.mes), proyectado: 0, real: 0 }
-        map[r.mes].proyectado += r.valor_proyectado
-        map[r.mes].real       += r.real_usd ?? 0
-      }
-    } else {
-      for (const r of rows) {
-        if (!map[r.mes]) map[r.mes] = { mes_label: r.mes_label, proyectado: 0, real: 0 }
-        map[r.mes].proyectado += r.valor_proyectado
-        map[r.mes].real       += r.valor_real
-      }
+    for (const r of filteredCatRows) {
+      if (!map[r.mes]) map[r.mes] = { mes_label: MES_LABELS[r.mes] ?? String(r.mes), proyectado: 0, real: 0 }
+      map[r.mes].proyectado += r.valor_proyectado
+      map[r.mes].real       += r.real_usd ?? 0
     }
     return Object.entries(map)
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([, v]) => v)
-  }, [rows, filteredCatRows, fCategoria, fPais, fCliente])
+  }, [filteredCatRows])
 
   const titulo =
     !fAno.length        ? 'Toda la historia' :
