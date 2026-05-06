@@ -127,7 +127,8 @@ export default function SellInSkus() {
   const descargarCSV = async () => {
     setDownloadingCSV(true)
     try {
-      const p = new URLSearchParams({ all: 'true' })
+      // Traer todos los registros en una sola llamada (10 000 cubre cualquier escenario real)
+      const p = new URLSearchParams({ page: '1', pageSize: '10000' })
       if (fAnos.length)   p.set('anos',       fAnos.join(','))
       if (fMeses.length)  p.set('meses',      fMeses.join(','))
       if (fPaises.length) p.set('paises',     fPaises.join(','))
