@@ -73,7 +73,7 @@ export async function enviarAlerta(opts: {
   if (opts.destinatarios.length === 0) return { ok: false, errors: ['Sin destinatarios'] }
 
   const resend  = new Resend(apiKey)
-  const from    = process.env.RESEND_FROM ?? 'Alertas BL Foods <alertas@bordenlatam.com>'
+  const from    = process.env.RESEND_FROM ?? 'onboarding@resend.dev'
   const asunto  = `${opts.isPrueba ? '[PRUEBA] ' : ''}⚠️ ${opts.nombre} — BL Food`
   const html    = buildHtml(opts)
   const errors: string[] = []
