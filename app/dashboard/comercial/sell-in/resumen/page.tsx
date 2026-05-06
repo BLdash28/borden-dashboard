@@ -87,6 +87,9 @@ export default function SellInResumen() {
     if (ps.includes('CO')) {
       setTipos(prev => prev.includes('LICENCIAMIENTO_COLOMBIA') ? prev : [...prev, 'LICENCIAMIENTO_COLOMBIA'])
       setCats(prev => prev.includes('Quesos') ? prev : [...prev, 'Quesos'])
+    } else {
+      setTipos(prev => prev.filter(t => t !== 'LICENCIAMIENTO_COLOMBIA'))
+      setCats(prev => prev.filter(c => c !== 'Quesos'))
     }
   }
 
