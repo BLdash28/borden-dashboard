@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer,
+  Tooltip, Legend, ResponsiveContainer, Customized,
 } from 'recharts'
 import FiltroMulti from '@/components/ui/FiltroMulti'
 
@@ -47,6 +47,25 @@ function DeltaBadge({ delta, isPct = false }: { delta: number; isPct?: boolean }
       <Icon size={10} />
       {delta > 0 ? '+' : ''}{delta.toFixed(1)}{isPct ? 'pp' : '%'}
     </span>
+  )
+}
+
+function MonthDividers(props: any) {
+  const axis = props.xAxisMap?.[0]
+  if (!axis?.scale) return null
+  const { scale } = axis
+  const domain: number[] = scale.domain?.() ?? []
+  const bw: number = scale.bandwidth?.() ?? 0
+  const mt = props.margin?.top ?? 0
+  const mb = props.margin?.bottom ?? 0
+  const plotH = (props.height ?? 0) - mt - mb
+  return (
+    <g>
+      {domain.slice(0, -1).map((val: number) => {
+        const x = (scale(val) ?? 0) + bw
+        return <line key={val} x1={x} x2={x} y1={mt} y2={mt + plotH} stroke="#e2e8f0" strokeWidth={1} />
+      })}
+    </g>
   )
 }
 
@@ -214,6 +233,7 @@ export default function SellInResumen() {
                 <Bar dataKey={2025}          name="2025"       fill={COLORS[2025]}       radius={[3,3,0,0]} maxBarSize={22} />
                 <Bar dataKey="proyeccion"    name="Proyección 2026" fill={COLORS.proyeccion}  radius={[3,3,0,0]} maxBarSize={22} />
                 <Bar dataKey={2026}          name="2026"       fill={COLORS[2026]}       radius={[3,3,0,0]} maxBarSize={22} />
+                <Customized component={MonthDividers} />
               </BarChart>
             </ResponsiveContainer>
           )
