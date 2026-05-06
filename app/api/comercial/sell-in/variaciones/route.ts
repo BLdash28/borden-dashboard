@@ -9,37 +9,48 @@ const inC = (col: string, vals: string[]) =>
 
 export async function GET(req: NextRequest) {
   try {
-    const sp     = req.nextUrl.searchParams
-    const dim    = sp.get('dim') || 'cliente'
-    const paises = sp.get('pais') ? sp.get('pais')!.split(',').filter(Boolean) : []
+    const sp       = req.nextUrl.searchParams
+    const dim      = sp.get('dim') || 'cliente'
+    const paises   = sp.get('pais')         ? sp.get('pais')!.split(',').filter(Boolean)         : []
+    const tipos    = sp.get('tipo_negocio') ? sp.get('tipo_negocio')!.split(',').filter(Boolean) : []
+    const clientes = sp.get('cliente')      ? sp.get('cliente')!.split(',').filter(Boolean)      : []
 
     // YTD: Ene → último mes cerrado del año actual
-    // getMonth() es 0-indexado: en Mayo retorna 4, lo que equivale al mes 4 (Abril) en la BD
     const ultimoMesCerrado = new Date().getMonth()
-
     if (ultimoMesCerrado === 0) {
       return NextResponse.json({ rows: [], totals: { total2025: 0, total2026: 0, meses: {} }, meses: [], dim })
     }
 
-    const meses = Array.from({ length: ultimoMesCerrado }, (_, i) => i + 1)
+    const meses    = Array.from({ length: ultimoMesCerrado }, (_, i) => i + 1)
     const mesSql   = `mes IN (${meses.join(',')})`
-    const paisCond = paises.length ? 'AND ' + inC('pais', paises) : ''
+    const paisCond = paises.length ? 'AND ' + inC('pais',         paises) : ''
+    const tipoCond = tipos.length  ? 'AND ' + inC('tipo_negocio', tipos)  : ''
 
-    const dimColNew = dim === 'categoria' ? 'categoria' : 'cliente_nombre'
-    const dimColOld = dim === 'categoria' ? 'categoria' : 'cliente'
+    // ventas_sell_in no tiene tipo_negocio — solo filtrar por pais
+    const paisCondOld = paises.length ? 'AND ' + inC('pais', paises) : ''
 
+    const dimColNew  = dim === 'categoria' ? 'categoria' : 'cliente_nombre'
+    const dimColOld  = dim === 'categoria' ? 'categoria' : 'cliente'
+    const clienteNew = clientes.length ? 'AND ' + inC('cliente_nombre', clientes) : ''
+    const clienteOld = clientes.length ? 'AND ' + inC('cliente',        clientes) : ''
+
+    // Usa fact_sales_sellin para 2025 y 2026 (consistente con resumen ejecutivo)
+    // Suplementa 2025 con ventas_sell_in solo para meses no cubiertos por fact_sales_sellin
     const r = await pool.query(`
       SELECT dim, ano, mes, ROUND(SUM(ingresos)::numeric, 2) AS ingresos
       FROM (
         SELECT ${dimColNew} AS dim, ano, mes, venta_neta AS ingresos
         FROM fact_sales_sellin
-        WHERE ano = 2026 AND ${mesSql} ${paisCond}
+        WHERE ano IN (2025, 2026) AND ${mesSql} ${paisCond} ${tipoCond} ${clienteNew}
 
         UNION ALL
 
         SELECT ${dimColOld} AS dim, 2025 AS ano, mes, ingresos
         FROM ventas_sell_in
-        WHERE ano = 2025 AND ${mesSql} ${paisCond}
+        WHERE ano = 2025 AND ${mesSql} ${paisCondOld} ${clienteOld}
+          AND (ano, mes) NOT IN (
+            SELECT DISTINCT ano, mes FROM fact_sales_sellin WHERE ano = 2025
+          )
       ) sub
       WHERE dim IS NOT NULL AND dim <> ''
       GROUP BY dim, ano, mes

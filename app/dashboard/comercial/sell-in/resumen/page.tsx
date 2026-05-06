@@ -53,7 +53,7 @@ export default function SellInResumen() {
   const [ano,    setAno]    = useState(2026)
   const [paises, setPaises] = useState<string[]>([])
   const [cats,   setCats]   = useState<string[]>([])
-  const [tipos,  setTipos]  = useState<string[]>([])
+  const [tipos,  setTipos]  = useState<string[]>(['REGULAR'])
 
   const [kpi,     setKpi]     = useState<KpiData | null>(null)
   const [mensual, setMensual] = useState<any[]>([])

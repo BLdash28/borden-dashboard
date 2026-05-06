@@ -32,7 +32,7 @@ export default function FiltroMulti({
 
   const display =
     value.length === 0 ? placeholder
-    : value.length <= 2 ? value.join(', ')
+    : value.length <= 2 ? value.map(v => options.find(o => o.value === v)?.label ?? v).join(', ')
     : `${value.length} seleccionados`
 
   return (

@@ -1,14 +1,19 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { Download, RefreshCw } from 'lucide-react'
+import { Download, RefreshCw, ChevronRight } from 'lucide-react'
 import FiltroMulti from '@/components/ui/FiltroMulti'
 
 const MESES_LABEL = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-const PAISES = ['CR','GT','SV','NI','HN','CO']
+const PAISES     = ['CR','GT','SV','NI','HN','CO']
 const PAISES_OPT = PAISES.map(p => ({ value: p }))
+const TIPOS_OPT  = [
+  { value: 'REGULAR',                 label: 'BL FOODS' },
+  { value: 'LICENCIAMIENTO_HELADOS',  label: 'LICENCIAMIENTO HELADOS' },
+  { value: 'LICENCIAMIENTO_COLOMBIA', label: 'LICENCIAMIENTO COLOMBIA' },
+]
 
 const fmt = (v: number) => {
-  if (!isFinite(v) || v === 0) return '—'
+  if (!isFinite(v)) return '—'
   return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
@@ -43,17 +48,31 @@ interface Totals {
 export default function SellInVariaciones() {
   const [dim,    setDim]    = useState<DimKey>('cliente')
   const [paises, setPaises] = useState<string[]>([])
+  const [tipos,  setTipos]  = useState<string[]>(['REGULAR'])
   const [rows,   setRows]   = useState<VarRow[]>([])
   const [totals, setTotals] = useState<Totals>({ total2025: 0, total2026: 0, meses: {} })
   const [meses,  setMeses]  = useState<number[]>([])
   const [loading,setLoading]= useState(true)
 
-  const cargar = useCallback(async (d: DimKey, ps: string[]) => {
+  // Drill-down: cliente → categorías
+  const [expanded,       setExpanded]       = useState<Set<string>>(new Set())
+  const [subRows,        setSubRows]        = useState<Record<string, VarRow[]>>({})
+  const [loadingClients, setLoadingClients] = useState<Set<string>>(new Set())
+
+  const buildQs = useCallback((extra?: Record<string, string>) => {
+    const qs = new URLSearchParams({ dim })
+    if (paises.length) qs.set('pais',         paises.join(','))
+    if (tipos.length)  qs.set('tipo_negocio', tipos.join(','))
+    if (extra) Object.entries(extra).forEach(([k, v]) => qs.set(k, v))
+    return qs
+  }, [dim, paises, tipos])
+
+  const cargar = useCallback(async () => {
     setLoading(true)
+    setExpanded(new Set())
+    setSubRows({})
     try {
-      const qs = new URLSearchParams({ dim: d })
-      if (ps.length) qs.set('pais', ps.join(','))
-      const res = await fetch('/api/comercial/sell-in/variaciones?' + qs)
+      const res = await fetch('/api/comercial/sell-in/variaciones?' + buildQs())
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const j = await res.json()
       setRows(j.rows ?? [])
@@ -62,9 +81,28 @@ export default function SellInVariaciones() {
     } catch {
       setRows([])
     } finally { setLoading(false) }
-  }, [])
+  }, [buildQs])
 
-  useEffect(() => { cargar(dim, paises) }, [cargar, dim, paises])
+  useEffect(() => { cargar() }, [cargar])
+
+  const toggleClient = useCallback(async (clientName: string) => {
+    if (expanded.has(clientName)) {
+      setExpanded(prev => { const s = new Set(prev); s.delete(clientName); return s })
+      return
+    }
+    setExpanded(prev => new Set([...prev, clientName]))
+    if (subRows[clientName]) return
+
+    setLoadingClients(prev => new Set([...prev, clientName]))
+    try {
+      const qs = buildQs({ dim: 'categoria', cliente: clientName })
+      const res = await fetch('/api/comercial/sell-in/variaciones?' + qs)
+      const j   = await res.json()
+      setSubRows(prev => ({ ...prev, [clientName]: j.rows ?? [] }))
+    } finally {
+      setLoadingClients(prev => { const s = new Set(prev); s.delete(clientName); return s })
+    }
+  }, [expanded, subRows, buildQs])
 
   const descargarCSV = () => {
     const header = [dim === 'cliente' ? 'Cliente' : 'Categoría']
@@ -96,6 +134,8 @@ export default function SellInVariaciones() {
     ? ((totals.total2026 - totals.total2025) / totals.total2025) * 100
     : null
 
+  const colSpanTotal = meses.length * 3 + 4
+
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
@@ -110,7 +150,7 @@ export default function SellInVariaciones() {
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => cargar(dim, paises)}
+          <button onClick={cargar}
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -124,15 +164,19 @@ export default function SellInVariaciones() {
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-            {(['cliente','categoria'] as DimKey[]).map(d => (
-              <button key={d} onClick={() => setDim(d)}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${dim===d?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                {d === 'cliente' ? 'Por Cliente' : 'Por Categoría'}
-              </button>
-            ))}
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Vista</p>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+              {(['cliente','categoria'] as DimKey[]).map(d => (
+                <button key={d} onClick={() => setDim(d)}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${dim===d?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  {d === 'cliente' ? 'Por Cliente' : 'Por Categoría'}
+                </button>
+              ))}
+            </div>
           </div>
-          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
+          <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT} value={tipos}  onChange={setTipos}  placeholder="Todos" />
+          <FiltroMulti label="País"         options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
         </div>
         <div className="flex items-center gap-4 mt-3 text-[11px]">
           <span className="text-gray-400">Variación:</span>
@@ -156,7 +200,6 @@ export default function SellInVariaciones() {
             : (
               <table className="w-full text-xs" style={{ minWidth: `${200 + meses.length * 210 + 200}px` }}>
                 <thead className="bg-gray-50 border-b border-gray-200">
-                  {/* Grupo de meses */}
                   <tr className="text-gray-400 uppercase tracking-widest text-[10px]">
                     <th className="text-left py-2 px-4 w-48" rowSpan={2}>
                       {dim === 'cliente' ? 'Cliente' : 'Categoría'}
@@ -184,24 +227,69 @@ export default function SellInVariaciones() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, i) => (
-                    <tr key={i} className={`border-b border-gray-50 hover:bg-amber-50/30 ${i%2===0?'':'bg-gray-50/30'}`}>
-                      <td className="py-2 px-4 font-medium text-gray-700 max-w-[180px] truncate">{r.dim || '—'}</td>
-                      {meses.map(m => {
-                        const d = r.meses[m] ?? { y2025: 0, y2026: 0, var: null }
-                        return (
-                          <>
-                            <td key={`${m}-25`} className="py-2 px-2 text-right text-gray-500 border-l border-gray-100">{fmt(d.y2025)}</td>
-                            <td key={`${m}-26`} className="py-2 px-2 text-right text-gray-700">{fmt(d.y2026)}</td>
-                            <td key={`${m}-v`}  className={`py-2 px-2 text-right ${varColor(d.var)}`}>{fmtVar(d.var)}</td>
-                          </>
-                        )
-                      })}
-                      <td className="py-2 px-2 text-right text-gray-500 border-l border-gray-200">{fmt(r.total2025)}</td>
-                      <td className="py-2 px-2 text-right font-bold text-gray-800">{fmt(r.total2026)}</td>
-                      <td className={`py-2 px-4 text-right ${varColor(r.varTotal)}`}>{fmtVar(r.varTotal)}</td>
-                    </tr>
-                  ))}
+                  {rows.map((r, i) => {
+                    const isExp     = expanded.has(r.dim)
+                    const isLoading = loadingClients.has(r.dim)
+                    const canExpand = dim === 'cliente'
+
+                    return (
+                      <>
+                        <tr key={`row-${i}`}
+                          onClick={() => canExpand && toggleClient(r.dim)}
+                          className={`border-b border-gray-50 ${canExpand ? 'cursor-pointer hover:bg-amber-50/30' : 'hover:bg-amber-50/30'} ${i%2===0?'':'bg-gray-50/30'}`}>
+                          <td className="py-2 px-4 font-medium text-gray-700 max-w-[180px]">
+                            <div className="flex items-center gap-1.5">
+                              {canExpand && (
+                                <ChevronRight size={12} className={`flex-shrink-0 text-gray-400 transition-transform ${isExp ? 'rotate-90' : ''}`} />
+                              )}
+                              <span className="truncate">{r.dim || '—'}</span>
+                            </div>
+                          </td>
+                          {meses.map(m => {
+                            const d = r.meses[m] ?? { y2025: 0, y2026: 0, var: null }
+                            return (
+                              <>
+                                <td key={`${m}-25`} className="py-2 px-2 text-right text-gray-500 border-l border-gray-100">{fmt(d.y2025)}</td>
+                                <td key={`${m}-26`} className="py-2 px-2 text-right text-gray-700">{fmt(d.y2026)}</td>
+                                <td key={`${m}-v`}  className={`py-2 px-2 text-right ${varColor(d.var)}`}>{fmtVar(d.var)}</td>
+                              </>
+                            )
+                          })}
+                          <td className="py-2 px-2 text-right text-gray-500 border-l border-gray-200">{fmt(r.total2025)}</td>
+                          <td className="py-2 px-2 text-right font-bold text-gray-800">{fmt(r.total2026)}</td>
+                          <td className={`py-2 px-4 text-right ${varColor(r.varTotal)}`}>{fmtVar(r.varTotal)}</td>
+                        </tr>
+
+                        {/* Sub-filas de categoría al expandir cliente */}
+                        {canExpand && isExp && (
+                          isLoading
+                            ? (
+                              <tr key={`sub-loading-${i}`} className="bg-amber-50/20">
+                                <td colSpan={colSpanTotal} className="py-2 px-8 text-xs text-gray-400">Cargando categorías…</td>
+                              </tr>
+                            )
+                            : (subRows[r.dim] ?? []).map((sub, si) => (
+                              <tr key={`sub-${i}-${si}`} className="bg-amber-50/20 border-b border-amber-100/50">
+                                <td className="py-1.5 pl-10 pr-4 text-gray-500 italic max-w-[180px] truncate">{sub.dim}</td>
+                                {meses.map(m => {
+                                  const d = sub.meses[m] ?? { y2025: 0, y2026: 0, var: null }
+                                  return (
+                                    <>
+                                      <td key={`${m}-25`} className="py-1.5 px-2 text-right text-gray-400 border-l border-gray-100 text-[11px]">{fmt(d.y2025)}</td>
+                                      <td key={`${m}-26`} className="py-1.5 px-2 text-right text-gray-600 text-[11px]">{fmt(d.y2026)}</td>
+                                      <td key={`${m}-v`}  className={`py-1.5 px-2 text-right text-[11px] ${varColor(d.var)}`}>{fmtVar(d.var)}</td>
+                                    </>
+                                  )
+                                })}
+                                <td className="py-1.5 px-2 text-right text-gray-400 border-l border-gray-200 text-[11px]">{fmt(sub.total2025)}</td>
+                                <td className="py-1.5 px-2 text-right font-semibold text-gray-700 text-[11px]">{fmt(sub.total2026)}</td>
+                                <td className={`py-1.5 px-4 text-right text-[11px] ${varColor(sub.varTotal)}`}>{fmtVar(sub.varTotal)}</td>
+                              </tr>
+                            ))
+                        )}
+                      </>
+                    )
+                  })}
                 </tbody>
                 <tfoot className="border-t-2 border-gray-300 bg-gray-50">
                   <tr className="font-bold text-gray-800">
