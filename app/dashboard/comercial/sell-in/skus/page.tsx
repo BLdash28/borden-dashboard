@@ -13,16 +13,18 @@ const fmt   = (v: unknown) => {
 }
 
 interface SkuRow {
-  sku:         string
-  descripcion: string
-  categoria:   string
-  pais:        string
-  cajas:       number
-  ingresos:    number
-  margen_valor:number
-  margen_pct:  number
-  precio_prom: number
-  y_prev:      number
+  sku:          string
+  descripcion:  string
+  categoria:    string
+  subcategoria: string
+  canal:        string
+  pais:         string
+  cajas:        number
+  ingresos:     number
+  margen_valor: number
+  margen_pct:   number
+  precio_prom:  number
+  y_prev:       number
 }
 
 export default function SellInSkus() {
@@ -79,12 +81,13 @@ export default function SellInSkus() {
       if (j.error) return
       setTotal(toNum(j.total))
 
-      // Aggregate by SKU
+      // Aggregate by SKU + País + Canal
       const skuMap: Record<string,SkuRow> = {}
       ;(j.rows??[]).forEach((r:any)=>{
-        const key = r.sku + '|' + r.pais
+        const key = r.sku + '|' + r.pais + '|' + (r.canal||'')
         if (!skuMap[key]) skuMap[key] = {
           sku: r.sku, descripcion: r.descripcion||'', categoria: r.categoria||'',
+          subcategoria: r.subcategoria||'', canal: r.canal||'',
           pais: r.pais, cajas: 0, ingresos: 0, margen_valor: 0, margen_pct: 0,
           precio_prom: 0, y_prev: 0,
         }
@@ -137,12 +140,13 @@ export default function SellInSkus() {
 
       const j = await fetch('/api/ventas/sell-in?' + p).then(r => r.json())
 
-      // Agregar por SKU+País (igual que en cargar)
+      // Agregar por SKU+País+Canal (igual que en cargar)
       const skuMap: Record<string, SkuRow> = {}
       ;(j.rows ?? []).forEach((r: any) => {
-        const key = r.sku + '|' + r.pais
+        const key = r.sku + '|' + r.pais + '|' + (r.canal || '')
         if (!skuMap[key]) skuMap[key] = {
           sku: r.sku, descripcion: r.descripcion || '', categoria: r.categoria || '',
+          subcategoria: r.subcategoria || '', canal: r.canal || '',
           pais: r.pais, cajas: 0, ingresos: 0, margen_valor: 0, margen_pct: 0, precio_prom: 0, y_prev: 0,
         }
         skuMap[key].cajas        += toNum(r.cajas)
@@ -160,9 +164,10 @@ export default function SellInSkus() {
       })
       const gt = allSorted.reduce((s, r) => s + r.ingresos, 0) || 1
 
-      const h = ['País','SKU','Producto','Categoría','Cajas','Valor','Precio Prom.','Margen Valor','Margen %','% del Total']
+      const h = ['País','SKU','Producto','Categoría','Subcategoría','Orden de Compra','Cajas','Valor','Precio Caja','Margen Valor','Margen %','% del Total']
       const csv = [h.join(','), ...allSorted.map(r => [
         r.pais, r.sku, `"${r.descripcion.replace(/"/g,'""')}"`, r.categoria,
+        r.subcategoria, r.canal,
         r.cajas.toFixed(0), r.ingresos.toFixed(2), r.precio_prom.toFixed(4),
         r.margen_valor.toFixed(2), r.margen_pct.toFixed(2) + '%',
         (r.ingresos / gt * 100).toFixed(2) + '%',
@@ -265,13 +270,15 @@ export default function SellInSkus() {
                       <th className="text-left py-2 pr-3">SKU</th>
                       <th className="text-left py-2 pr-3">Producto</th>
                       <th className="text-left py-2 pr-3">Cat.</th>
+                      <th className="text-left py-2 pr-3">Subcategoría</th>
+                      <th className="text-left py-2 pr-3">Orden de Compra</th>
                       <th className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600" onClick={()=>toggleSort('cajas')}>
                         Cajas{arrow('cajas')}
                       </th>
                       <th className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600" onClick={()=>toggleSort('ingresos')}>
                         Valor{arrow('ingresos')}
                       </th>
-                      <th className="text-right py-2 pr-3">P. Prom.</th>
+                      <th className="text-right py-2 pr-3">Precio Caja</th>
                       <th className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600" onClick={()=>toggleSort('margen_pct')}>
                         Margen %{arrow('margen_pct')}
                       </th>
@@ -286,6 +293,8 @@ export default function SellInSkus() {
                         <td className="py-1.5 pr-3 font-mono text-gray-500">{r.sku}</td>
                         <td className="py-1.5 pr-3 text-gray-700 max-w-[160px] truncate">{r.descripcion}</td>
                         <td className="py-1.5 pr-3 text-gray-500">{r.categoria}</td>
+                        <td className="py-1.5 pr-3 text-gray-500">{r.subcategoria}</td>
+                        <td className="py-1.5 pr-3 text-gray-500 font-mono text-[11px]">{r.canal}</td>
                         <td className="py-1.5 pr-3 text-right text-gray-700">{r.cajas.toLocaleString()}</td>
                         <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>
                         <td className="py-1.5 pr-3 text-right text-gray-500">{fmt(r.precio_prom)}</td>
