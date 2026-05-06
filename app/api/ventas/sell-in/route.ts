@@ -8,6 +8,7 @@ export async function GET(req: NextRequest) {
   try {
     const sp = req.nextUrl.searchParams
 
+    const fetchAll = sp.get('all') === 'true'
     const page     = parseInt(sp.get('page')     || '1')
     const pageSize = parseInt(sp.get('pageSize') || '500')
     const offset   = (page - 1) * pageSize
@@ -112,8 +113,8 @@ export async function GET(req: NextRequest) {
        FROM v_sellin ${where}
        GROUP BY pais, cliente, canal, tipo_negocio, sku, descripcion, categoria, subcategoria
        ORDER BY ingresos DESC
-       LIMIT $${idx} OFFSET $${idx + 1}`,
-      [...params, pageSize, offset]
+       ${fetchAll ? '' : `LIMIT $${idx} OFFSET $${idx + 1}`}`,
+      fetchAll ? params : [...params, pageSize, offset]
     )
 
     return NextResponse.json({ rows: r.rows, kpi, total, page, pageSize })

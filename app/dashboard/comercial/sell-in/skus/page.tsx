@@ -41,7 +41,8 @@ export default function SellInSkus() {
   const [rows,    setRows]    = useState<SkuRow[]>([])
   const [total,   setTotal]   = useState(0)
   const [page,    setPage]    = useState(1)
-  const [loading, setLoading] = useState(true)
+  const [loading,          setLoading]          = useState(true)
+  const [downloadingCSV,   setDownloadingCSV]   = useState(false)
   const [sortKey, setSortKey] = useState<'ingresos'|'unidades'|'margen_pct'>('ingresos')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
   const PAGE_SIZE = 500
@@ -123,18 +124,56 @@ export default function SellInSkus() {
 
   const arrow = (k: typeof sortKey) => sortKey===k?(sortDir==='desc'?' ↓':' ↑'):' ↕'
 
-  const descargarCSV = () => {
-    const h = ['País','SKU','Producto','Categoría','Unidades','USD','Precio Prom.','Margen USD','Margen %','% del Total']
-    const csv = [h.join(','), ...sorted.map(r=>[
-      r.pais, r.sku, `"${r.descripcion.replace(/"/g,'""')}"`, r.categoria,
-      r.unidades.toFixed(0), r.ingresos.toFixed(2), r.precio_prom.toFixed(4),
-      r.margen_valor.toFixed(2), r.margen_pct.toFixed(2)+'%',
-      (r.ingresos/grandTotal*100).toFixed(2)+'%',
-    ].join(','))].join('\n')
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}))
-    a.download = `sku_sellin_${new Date().toISOString().slice(0,10)}.csv`
-    a.click()
+  const descargarCSV = async () => {
+    setDownloadingCSV(true)
+    try {
+      const p = new URLSearchParams({ all: 'true' })
+      if (fAnos.length)   p.set('anos',       fAnos.join(','))
+      if (fMeses.length)  p.set('meses',      fMeses.join(','))
+      if (fPaises.length) p.set('paises',     fPaises.join(','))
+      if (fCats.length)   p.set('categorias', fCats.join(','))
+      if (buscar)         p.set('buscar',     buscar)
+
+      const j = await fetch('/api/ventas/sell-in?' + p).then(r => r.json())
+
+      // Agregar por SKU+País (igual que en cargar)
+      const skuMap: Record<string, SkuRow> = {}
+      ;(j.rows ?? []).forEach((r: any) => {
+        const key = r.sku + '|' + r.pais
+        if (!skuMap[key]) skuMap[key] = {
+          sku: r.sku, descripcion: r.descripcion || '', categoria: r.categoria || '',
+          pais: r.pais, unidades: 0, ingresos: 0, margen_valor: 0, margen_pct: 0, precio_prom: 0, y_prev: 0,
+        }
+        skuMap[key].unidades     += toNum(r.unidades)
+        skuMap[key].ingresos     += toNum(r.ingresos)
+        skuMap[key].margen_valor += toNum(r.margen_valor ?? 0)
+      })
+      Object.values(skuMap).forEach(s => {
+        s.margen_pct  = s.ingresos > 0 ? (s.margen_valor / s.ingresos) * 100 : 0
+        s.precio_prom = s.unidades > 0 ? s.ingresos / s.unidades : 0
+      })
+
+      const allSorted = Object.values(skuMap).sort((a, b) => {
+        const d = a[sortKey] - b[sortKey]
+        return sortDir === 'desc' ? -d : d
+      })
+      const gt = allSorted.reduce((s, r) => s + r.ingresos, 0) || 1
+
+      const h = ['País','SKU','Producto','Categoría','Unidades','USD','Precio Prom.','Margen USD','Margen %','% del Total']
+      const csv = [h.join(','), ...allSorted.map(r => [
+        r.pais, r.sku, `"${r.descripcion.replace(/"/g,'""')}"`, r.categoria,
+        r.unidades.toFixed(0), r.ingresos.toFixed(2), r.precio_prom.toFixed(4),
+        r.margen_valor.toFixed(2), r.margen_pct.toFixed(2) + '%',
+        (r.ingresos / gt * 100).toFixed(2) + '%',
+      ].join(','))].join('\n')
+
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
+      a.download = `sku_sellin_${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+    } finally {
+      setDownloadingCSV(false)
+    }
   }
 
   const margenColor = (pct: number) =>
@@ -149,9 +188,12 @@ export default function SellInSkus() {
           <h1 className="text-2xl font-bold text-gray-800">SKU Descargable</h1>
           <p className="text-sm text-gray-400 mt-1">Detalle por SKU · Crecimiento · Margen</p>
         </div>
-        <button onClick={descargarCSV} disabled={rows.length===0}
+        <button onClick={descargarCSV} disabled={rows.length===0 || downloadingCSV}
           className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm disabled:opacity-40">
-          <Download size={14}/> Descargar CSV
+          {downloadingCSV
+            ? <><RefreshCw size={14} className="animate-spin"/> Preparando…</>
+            : <><Download size={14}/> Descargar CSV</>
+          }
         </button>
       </div>
 
