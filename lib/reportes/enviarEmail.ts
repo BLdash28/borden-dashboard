@@ -1,7 +1,5 @@
 import { Resend } from 'resend'
 
-const resend = new Resend(process.env.RESEND_API_KEY)
-
 export interface Destinatario {
   nombre:  string
   email?:  string
@@ -16,6 +14,10 @@ export async function enviarEmail(opts: {
   adjuntoNombre: string
   adjuntoBuffer: Buffer
 }) {
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return [{ email: 'N/A', ok: false, error: 'RESEND_API_KEY no configurado' }]
+  const resend = new Resend(apiKey)
+
   const emailDests = opts.destinatarios.filter(d => d.canales.includes('email') && d.email)
 
   const results: { email: string; ok: boolean; error?: string }[] = []
