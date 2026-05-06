@@ -108,7 +108,7 @@ export default function ProyeccionPage() {
     return v ? v.split(',').filter(Boolean) : []
   }
 
-  const [fAno,       setFAno]       = useState<string[]>(() => parse('ano'))
+  const [fAno,       setFAno]       = useState<string[]>(() => { const v = parse('ano'); return v.length ? v : [String(new Date().getFullYear())] })
   const [fMes,       setFMes]       = useState<string[]>(() => parse('mes'))
   const [fEmpresa,   setFEmpresa]   = useState<string[]>(() => parse('empresa'))
   const [fCategoria, setFCategoria] = useState<string[]>(() => parse('categoria'))
@@ -400,7 +400,7 @@ export default function ProyeccionPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">
-                  {['Mes', 'Tipo Negocio / Categoría', 'Proyectado USD', 'Real USD', 'Diferencia', '% Cumpl.'].map(h => (
+                  {['Mes', 'Tipo Negocio', 'Categoría / País / Cliente', 'Proyectado USD', 'Real USD', 'Diferencia', '% Cumpl.'].map(h => (
                     <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 ${
                       ['Proyectado USD','Real USD','Diferencia'].includes(h) ? 'text-right' :
                       h === '% Cumpl.' ? 'text-center' : ''
@@ -466,6 +466,7 @@ export default function ProyeccionPage() {
                             </span>
                           </div>
                         </td>
+                        <td className="px-4 py-3" />
                         <td className="px-4 py-3 text-right text-gray-700">{fmt(r.valor_proyectado)}</td>
                         <td className="px-4 py-3 text-right text-gray-700">{fmt(r.valor_real)}</td>
                         <td className={`px-4 py-3 text-right font-semibold ${
@@ -482,7 +483,8 @@ export default function ProyeccionPage() {
                       {isExp && subRows.map((c, ci) => {
                         return (
                           <tr key={`cat-${i}-${ci}`} className={subBg}>
-                            <td className="px-4 py-2 pl-10 text-gray-500 text-xs whitespace-nowrap">
+                            <td className="px-4 py-2" />
+                            <td className="px-4 py-2 pl-6 text-gray-500 text-xs whitespace-nowrap">
                               <span>{c.categoria}</span>
                               {c.synthetic && (
                                 <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-600 px-1 py-0.5 rounded font-medium">real</span>
