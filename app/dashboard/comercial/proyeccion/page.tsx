@@ -1,5 +1,6 @@
 'use client'
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import FiltroMulti from '@/components/ui/FiltroMulti'
 import {
@@ -99,12 +100,20 @@ function ChartTooltip({ active, payload, label }: any) {
 
 // ── Página principal ───────────────────────────────────────────────────────────
 export default function ProyeccionPage() {
-  const [fAno,       setFAno]       = useState<string[]>([])
-  const [fMes,       setFMes]       = useState<string[]>([])
-  const [fEmpresa,   setFEmpresa]   = useState<string[]>([])
-  const [fCategoria, setFCategoria] = useState<string[]>([])
-  const [fPais,      setFPais]      = useState<string[]>([])
-  const [fCliente,   setFCliente]   = useState<string[]>([])
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+
+  const parse = (key: string) => {
+    const v = searchParams.get(key)
+    return v ? v.split(',').filter(Boolean) : []
+  }
+
+  const [fAno,       setFAno]       = useState<string[]>(() => parse('ano'))
+  const [fMes,       setFMes]       = useState<string[]>(() => parse('mes'))
+  const [fEmpresa,   setFEmpresa]   = useState<string[]>(() => parse('empresa'))
+  const [fCategoria, setFCategoria] = useState<string[]>(() => parse('categoria'))
+  const [fPais,      setFPais]      = useState<string[]>(() => parse('pais'))
+  const [fCliente,   setFCliente]   = useState<string[]>(() => parse('cliente'))
 
   const [anos,     setAnos]     = useState<number[]>([])
   const [rows,     setRows]     = useState<Row[]>([])
@@ -113,6 +122,18 @@ export default function ProyeccionPage() {
   const [loading,  setLoading]  = useState(false)
   const [error,    setError]    = useState('')
 
+
+  // Sincronizar filtros → URL para que persistan al recargar
+  useEffect(() => {
+    const p = new URLSearchParams()
+    if (fAno.length)       p.set('ano',       fAno.join(','))
+    if (fMes.length)       p.set('mes',       fMes.join(','))
+    if (fEmpresa.length)   p.set('empresa',   fEmpresa.join(','))
+    if (fCategoria.length) p.set('categoria', fCategoria.join(','))
+    if (fPais.length)      p.set('pais',      fPais.join(','))
+    if (fCliente.length)   p.set('cliente',   fCliente.join(','))
+    router.replace('?' + p.toString(), { scroll: false })
+  }, [fAno, fMes, fEmpresa, fCategoria, fPais, fCliente, router])
 
   // Cascading resets
   useEffect(() => { setFCategoria([]); setFPais([]); setFCliente([]) }, [fEmpresa])
@@ -178,7 +199,14 @@ export default function ProyeccionPage() {
     const real = rows.reduce((s, r) => s + r.valor_real,       0)
     const dif  = real - proy
     const pct  = proy > 0 ? Math.round(real / proy * 1000) / 10 : null
-    return { proy, real, dif, pct }
+
+    // Último mes con real > 0
+    const ultimoMes = rows.reduce((max, r) => r.valor_real > 0 ? Math.max(max, r.mes) : max, 0)
+    // Facing: proyectado YTD (meses 1..ultimoMes) / proyectado total
+    const proyYTD = rows.filter(r => r.mes <= ultimoMes).reduce((s, r) => s + r.valor_proyectado, 0)
+    const facing  = proy > 0 && ultimoMes > 0 ? Math.round(proyYTD / proy * 1000) / 10 : null
+
+    return { proy, real, dif, pct, facing, ultimoMes }
   }, [rows])
 
   const chartData = useMemo(() => {
@@ -235,10 +263,10 @@ export default function ProyeccionPage() {
             className="flex-1 min-w-[80px]"
           />
           <FiltroMulti
-            label="Empresa"
+            label="Tipo Negocio"
             options={[
               { value: 'BL FOODS' },
-              { value: 'LICENCIAMIENTO' },
+              { value: 'LICENCIAMIENTO', label: 'Licenciamiento' },
             ]}
             value={fEmpresa}
             onChange={setFEmpresa}
@@ -272,24 +300,36 @@ export default function ProyeccionPage() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-xs text-gray-500 font-medium mb-1">Total Proyectado</p>
-          <p className="text-xl font-bold text-gray-900">{fmt(kpis.proy)}</p>
+          <p className="text-sm font-semibold text-gray-500 mb-2">Total Proyectado</p>
+          <p className="text-2xl font-bold text-gray-900">{fmt(kpis.proy)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-xs text-gray-500 font-medium mb-1">Total Real</p>
-          <p className="text-xl font-bold text-gray-900">{fmt(kpis.real)}</p>
+          <p className="text-sm font-semibold text-gray-500 mb-2">Total Real</p>
+          <p className="text-2xl font-bold text-gray-900">{fmt(kpis.real)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-xs text-gray-500 font-medium mb-1">Diferencia USD</p>
-          <p className={`text-xl font-bold ${kpis.dif >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <p className="text-sm font-semibold text-gray-500 mb-2">Diferencia USD</p>
+          <p className={`text-2xl font-bold ${kpis.dif >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {fmtDiff(kpis.dif)}
           </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-xs text-gray-500 font-medium mb-2">% Cumplimiento</p>
+          <p className="text-sm font-semibold text-gray-500 mb-2">% Cumplimiento</p>
           <div className="text-2xl font-bold"><PctBadge v={kpis.pct} /></div>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <p className="text-sm font-semibold text-gray-500 mb-1">Facing</p>
+          <p className="text-xs text-gray-400 mb-2">
+            Proy. hasta {kpis.ultimoMes > 0 ? MES_LABELS[kpis.ultimoMes] : '—'} / total anual
+          </p>
+          <div className="text-2xl font-bold">
+            {kpis.facing !== null
+              ? <span className="text-blue-600">{kpis.facing}%</span>
+              : <span className="text-gray-400 text-xs">—</span>
+            }
+          </div>
         </div>
       </div>
 
@@ -329,7 +369,7 @@ export default function ProyeccionPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-gray-50 text-left">
-                  {['Mes', 'Empresa / Categoría', 'Proyectado USD', 'Real USD', 'Diferencia', '% Cumpl.'].map(h => (
+                  {['Mes', 'Tipo Negocio / Categoría', 'Proyectado USD', 'Real USD', 'Diferencia', '% Cumpl.'].map(h => (
                     <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 ${
                       ['Proyectado USD','Real USD','Diferencia'].includes(h) ? 'text-right' :
                       h === '% Cumpl.' ? 'text-center' : ''
@@ -391,7 +431,7 @@ export default function ProyeccionPage() {
                               />
                             )}
                             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${badgeCls}`}>
-                              {r.empresa}
+                              {r.empresa === 'LICENCIAMIENTO' ? 'Licenciamiento' : r.empresa}
                             </span>
                           </div>
                         </td>

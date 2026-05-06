@@ -101,6 +101,16 @@ export default function SellInResumen() {
     return row
   })
 
+  // Escala del eje Y basada solo en datos reales (excluye proyección)
+  const ytdYMax = (() => {
+    let max = 0
+    for (const d of ytdData) {
+      if (d['2025'] != null) max = Math.max(max, d['2025'])
+      if (d['2026'] != null) max = Math.max(max, d['2026'])
+    }
+    return max > 0 ? Math.ceil(max * 1.2 / 50000) * 50000 : undefined
+  })()
+
   const kpiCards = kpi ? [
     { label: 'Venta Neta YTD', value: '$' + kpi.ingresos.valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.ingresos.delta, icon: '💰' },
     { label: 'Cajas YTD',      value: Math.round(kpi.cajas.valor).toLocaleString('en-US'), delta: kpi.cajas.delta, icon: '📦' },
@@ -204,13 +214,13 @@ export default function SellInResumen() {
         <h3 className="text-sm font-semibold text-gray-700 mb-1">Venta Acumulada</h3>
         <p className="text-xs text-gray-400 mb-4">Suma corrida mes a mes</p>
         {loading
-          ? <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
+          ? <div className="h-80 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
           : (
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={360}>
               <LineChart data={ytdData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize: 11 }} width={52} />
+                <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize: 11 }} width={52} domain={[0, ytdYMax ?? 'auto']} />
                 <Tooltip content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null
                   const v2025 = payload.find(p => p.dataKey === '2025')?.value as number | null
