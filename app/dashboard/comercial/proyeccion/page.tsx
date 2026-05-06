@@ -244,15 +244,6 @@ function ProyeccionInner() {
         <p className="text-sm text-gray-500 mt-0.5">{titulo}</p>
       </div>
 
-      {/* DEBUG TEMPORAL */}
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs font-mono text-yellow-800 space-y-1">
-        <div>fCategoria: [{fCategoria.join(', ')}]</div>
-        <div>fPais: [{fPais.join(', ')}]</div>
-        <div>catRows.length: {catRows.length}</div>
-        <div>filteredCatRows.length: {filteredCatRows.length}</div>
-        <div>kpis.proy: {kpis.proy.toFixed(2)}</div>
-      </div>
-
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div className="flex gap-3">
