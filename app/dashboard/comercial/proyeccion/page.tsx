@@ -489,9 +489,6 @@ export default function ProyeccionPage() {
                               <div className="flex flex-col gap-0.5">
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-xs font-semibold text-gray-600">{c.categoria}</span>
-                                  {c.synthetic && (
-                                    <span className="text-[9px] bg-amber-100 text-amber-600 px-1 py-0.5 rounded font-medium">real</span>
-                                  )}
                                 </div>
                                 <span className="text-[11px] text-gray-500">{c.pais} — {c.cliente}</span>
                               </div>

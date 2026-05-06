@@ -103,9 +103,9 @@ export async function GET(req: NextRequest) {
     `, cParams)
 
     const catRows = catDbRows.map(r => {
-      // buscar por cliente exacto; si no hay, sumar todo pais+categoria
+      // match exacto por cliente; si no hay sellin para ese cliente, real = null
       const byCliente = realByKey[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}-${r.cliente}`]
-      const sellinReal = byCliente ?? realByPaisCat[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}`] ?? null
+      const sellinReal = byCliente ?? null
       const real_usd   = r.real_usd !== null ? Number(r.real_usd) : sellinReal
       return {
         id:               Number(r.id),
