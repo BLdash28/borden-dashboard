@@ -249,9 +249,29 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
               href="/dashboard/admin/usuarios"
               className={cn(
                 'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
-                pathname.includes('/usuarios') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
+                pathname.includes('/admin/usuarios') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
               )}>
               <Settings size={14} /> Configuración
+            </Link>
+          )}
+          {profile?.role === 'superadmin' && (
+            <Link
+              href="/dashboard/configuraciones/integraciones"
+              className={cn(
+                'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
+                pathname.includes('/configuraciones/integraciones') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
+              )}>
+              <Zap size={14} /> Integraciones
+            </Link>
+          )}
+          {profile?.role === 'superadmin' && (
+            <Link
+              href="/dashboard/configuraciones/reporteria"
+              className={cn(
+                'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
+                pathname.includes('/configuraciones/reporteria') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
+              )}>
+              <FileText size={14} /> Reportería
             </Link>
           )}
           <Link

@@ -194,32 +194,56 @@ export default function ProyeccionPage() {
     Array.from({ length: 12 }, (_, i) => i + 1)
   , [])
 
-  const kpis = useMemo(() => {
-    const proy = rows.reduce((s, r) => s + r.valor_proyectado, 0)
-    const real = rows.reduce((s, r) => s + r.valor_real,       0)
-    const dif  = real - proy
-    const pct  = proy > 0 ? Math.round(real / proy * 1000) / 10 : null
+  const filteredCatRows = useMemo(() =>
+    catRows.filter(c =>
+      (!fCategoria.length || fCategoria.includes(c.categoria)) &&
+      (!fPais.length      || fPais.includes(c.pais))           &&
+      (!fCliente.length   || fCliente.includes(c.cliente))
+    )
+  , [catRows, fCategoria, fPais, fCliente])
 
-    // Último mes con real > 0
-    const ultimoMes = rows.reduce((max, r) => r.valor_real > 0 ? Math.max(max, r.mes) : max, 0)
-    // Facing: proyectado YTD (meses 1..ultimoMes) / proyectado total
-    const proyYTD = rows.filter(r => r.mes <= ultimoMes).reduce((s, r) => s + r.valor_proyectado, 0)
-    const facing  = proy > 0 && ultimoMes > 0 ? Math.round(proyYTD / proy * 1000) / 10 : null
+  const kpis = useMemo(() => {
+    const src = activeSubFilter ? filteredCatRows : null
+
+    const proy = src
+      ? src.reduce((s, r) => s + r.valor_proyectado, 0)
+      : rows.reduce((s, r) => s + r.valor_proyectado, 0)
+    const real = src
+      ? src.reduce((s, r) => s + (r.real_usd ?? 0), 0)
+      : rows.reduce((s, r) => s + r.valor_real, 0)
+    const dif = real - proy
+    const pct = proy > 0 ? Math.round(real / proy * 1000) / 10 : null
+
+    const ultimoMes = src
+      ? src.reduce((max, r) => (r.real_usd ?? 0) > 0 ? Math.max(max, r.mes) : max, 0)
+      : rows.reduce((max, r) => r.valor_real > 0 ? Math.max(max, r.mes) : max, 0)
+    const proyYTD = src
+      ? src.filter(r => r.mes <= ultimoMes).reduce((s, r) => s + r.valor_proyectado, 0)
+      : rows.filter(r => r.mes <= ultimoMes).reduce((s, r) => s + r.valor_proyectado, 0)
+    const facing = proy > 0 && ultimoMes > 0 ? Math.round(proyYTD / proy * 1000) / 10 : null
 
     return { proy, real, dif, pct, facing, ultimoMes }
-  }, [rows])
+  }, [rows, filteredCatRows, activeSubFilter])
 
   const chartData = useMemo(() => {
     const map: Record<number, { mes_label: string; proyectado: number; real: number }> = {}
-    for (const r of rows) {
-      if (!map[r.mes]) map[r.mes] = { mes_label: r.mes_label, proyectado: 0, real: 0 }
-      map[r.mes].proyectado += r.valor_proyectado
-      map[r.mes].real       += r.valor_real
+    if (activeSubFilter) {
+      for (const r of filteredCatRows) {
+        if (!map[r.mes]) map[r.mes] = { mes_label: MES_LABELS[r.mes] ?? String(r.mes), proyectado: 0, real: 0 }
+        map[r.mes].proyectado += r.valor_proyectado
+        map[r.mes].real       += r.real_usd ?? 0
+      }
+    } else {
+      for (const r of rows) {
+        if (!map[r.mes]) map[r.mes] = { mes_label: r.mes_label, proyectado: 0, real: 0 }
+        map[r.mes].proyectado += r.valor_proyectado
+        map[r.mes].real       += r.valor_real
+      }
     }
     return Object.entries(map)
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([, v]) => v)
-  }, [rows])
+  }, [rows, filteredCatRows, activeSubFilter])
 
   const titulo =
     !fAno.length        ? 'Toda la historia' :
@@ -317,7 +341,14 @@ export default function ProyeccionPage() {
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <p className="text-sm font-semibold text-gray-500 mb-2">% Cumplimiento</p>
-          <div className="text-2xl font-bold"><PctBadge v={kpis.pct} /></div>
+          <div className="text-2xl font-bold">
+            {kpis.pct === null
+              ? <span className="text-gray-400 text-xs">—</span>
+              : <span className={kpis.pct >= 100 ? 'text-green-600' : kpis.pct >= 85 ? 'text-yellow-600' : 'text-red-600'}>
+                  {kpis.pct}%
+                </span>
+            }
+          </div>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <p className="text-sm font-semibold text-gray-500 mb-1">Facing</p>
