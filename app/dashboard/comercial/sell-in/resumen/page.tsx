@@ -101,14 +101,19 @@ export default function SellInResumen() {
     return row
   })
 
-  // Escala del eje Y basada solo en datos reales (excluye proyección)
-  const ytdYMax = (() => {
+  // Escala del eje Y — ticks cada $500,000
+  const { ytdYMax, ytdTicks } = (() => {
     let max = 0
     for (const d of ytdData) {
       if (d['2025'] != null) max = Math.max(max, d['2025'])
       if (d['2026'] != null) max = Math.max(max, d['2026'])
+      if (d['proyeccion'] != null) max = Math.max(max, d['proyeccion'])
     }
-    return max > 0 ? Math.ceil(max * 1.2 / 50000) * 50000 : undefined
+    if (max === 0) return { ytdYMax: undefined, ytdTicks: undefined }
+    const step   = 500_000
+    const ceiling = Math.ceil(max * 1.05 / step) * step
+    const ticks  = Array.from({ length: Math.floor(ceiling / step) + 1 }, (_, i) => i * step)
+    return { ytdYMax: ceiling, ytdTicks: ticks }
   })()
 
   const kpiCards = kpi ? [
@@ -220,7 +225,13 @@ export default function SellInResumen() {
               <LineChart data={ytdData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize: 11 }} width={52} domain={[0, ytdYMax ?? 'auto']} />
+                <YAxis
+                  tickFormatter={v => v >= 1_000_000 ? '$' + (v / 1_000_000).toFixed(1) + 'M' : '$' + (v / 1_000).toFixed(0) + 'K'}
+                  tick={{ fontSize: 11 }}
+                  width={60}
+                  domain={[0, ytdYMax ?? 'auto']}
+                  ticks={ytdTicks}
+                />
                 <Tooltip content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null
                   const v2025 = payload.find(p => p.dataKey === '2025')?.value as number | null

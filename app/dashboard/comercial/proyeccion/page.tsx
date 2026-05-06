@@ -1,5 +1,5 @@
 'use client'
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import FiltroMulti from '@/components/ui/FiltroMulti'
@@ -99,7 +99,7 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 // ── Página principal ───────────────────────────────────────────────────────────
-export default function ProyeccionPage() {
+function ProyeccionInner() {
   const router       = useRouter()
   const searchParams = useSearchParams()
 
@@ -203,31 +203,44 @@ export default function ProyeccionPage() {
   , [catRows, fCategoria, fPais, fCliente])
 
   const kpis = useMemo(() => {
-    const src = activeSubFilter ? filteredCatRows : null
+    const useFiltered = fCategoria.length > 0 || fPais.length > 0 || fCliente.length > 0
 
-    const proy = src
-      ? src.reduce((s, r) => s + r.valor_proyectado, 0)
-      : rows.reduce((s, r) => s + r.valor_proyectado, 0)
-    const real = src
-      ? src.reduce((s, r) => s + (r.real_usd ?? 0), 0)
-      : rows.reduce((s, r) => s + r.valor_real, 0)
+    let proy = 0, real = 0, ultimoMes = 0
+    if (useFiltered) {
+      for (const r of filteredCatRows) {
+        proy += r.valor_proyectado
+        real += r.real_usd ?? 0
+        if ((r.real_usd ?? 0) > 0) ultimoMes = Math.max(ultimoMes, r.mes)
+      }
+    } else {
+      for (const r of rows) {
+        proy += r.valor_proyectado
+        real += r.valor_real
+        if (r.valor_real > 0) ultimoMes = Math.max(ultimoMes, r.mes)
+      }
+    }
     const dif = real - proy
     const pct = proy > 0 ? Math.round(real / proy * 1000) / 10 : null
 
-    const ultimoMes = src
-      ? src.reduce((max, r) => (r.real_usd ?? 0) > 0 ? Math.max(max, r.mes) : max, 0)
-      : rows.reduce((max, r) => r.valor_real > 0 ? Math.max(max, r.mes) : max, 0)
-    const proyYTD = src
-      ? src.filter(r => r.mes <= ultimoMes).reduce((s, r) => s + r.valor_proyectado, 0)
-      : rows.filter(r => r.mes <= ultimoMes).reduce((s, r) => s + r.valor_proyectado, 0)
+    let proyYTD = 0
+    if (useFiltered) {
+      for (const r of filteredCatRows) {
+        if (r.mes <= ultimoMes) proyYTD += r.valor_proyectado
+      }
+    } else {
+      for (const r of rows) {
+        if (r.mes <= ultimoMes) proyYTD += r.valor_proyectado
+      }
+    }
     const facing = proy > 0 && ultimoMes > 0 ? Math.round(proyYTD / proy * 1000) / 10 : null
 
     return { proy, real, dif, pct, facing, ultimoMes }
-  }, [rows, filteredCatRows, activeSubFilter])
+  }, [rows, filteredCatRows, fCategoria, fPais, fCliente])
 
   const chartData = useMemo(() => {
+    const useFiltered = fCategoria.length > 0 || fPais.length > 0 || fCliente.length > 0
     const map: Record<number, { mes_label: string; proyectado: number; real: number }> = {}
-    if (activeSubFilter) {
+    if (useFiltered) {
       for (const r of filteredCatRows) {
         if (!map[r.mes]) map[r.mes] = { mes_label: MES_LABELS[r.mes] ?? String(r.mes), proyectado: 0, real: 0 }
         map[r.mes].proyectado += r.valor_proyectado
@@ -243,7 +256,7 @@ export default function ProyeccionPage() {
     return Object.entries(map)
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([, v]) => v)
-  }, [rows, filteredCatRows, activeSubFilter])
+  }, [rows, filteredCatRows, fCategoria, fPais, fCliente])
 
   const titulo =
     !fAno.length        ? 'Toda la historia' :
@@ -528,5 +541,13 @@ export default function ProyeccionPage() {
         )}
       </div>
     </div>
+  )
+}
+
+export default function ProyeccionPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-gray-400 text-sm">Cargando…</div>}>
+      <ProyeccionInner />
+    </Suspense>
   )
 }
