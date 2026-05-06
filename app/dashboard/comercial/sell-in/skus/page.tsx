@@ -5,10 +5,9 @@ import MultiSelect from '@/components/dashboard/MultiSelect'
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const toNum = (v: unknown) => { const n = parseFloat(String(v)); return isNaN(n) ? 0 : n }
-const fmt = (v: unknown) => {
-  const n = toNum(v)
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+const OPT2: Intl.NumberFormatOptions = { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+const fmtN = (v: unknown) => { const n = toNum(v); return isFinite(n) ? n.toLocaleString('en-US', OPT2) : '0.00' }
+const fmt  = (v: unknown) => '$' + fmtN(v)
 
 interface SkuRow {
   sku:          string
@@ -293,7 +292,7 @@ export default function SellInSkus() {
                         <td className="py-1.5 pr-3 text-gray-500">{r.categoria}</td>
                         <td className="py-1.5 pr-3 text-gray-500">{r.subcategoria}</td>
                         <td className="py-1.5 pr-3 text-gray-500 font-mono text-[11px]">{r.canal}</td>
-                        <td className="py-1.5 pr-3 text-right text-gray-700">{r.cajas.toLocaleString()}</td>
+                        <td className="py-1.5 pr-3 text-right text-gray-700">{fmtN(r.cajas)}</td>
                         <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>
                         <td className="py-1.5 pr-3 text-right text-gray-500">{fmt(r.precio_prom)}</td>
                         <td className={`py-1.5 pr-3 text-right font-bold ${margenColor(r.margen_pct)}`}>

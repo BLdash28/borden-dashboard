@@ -11,11 +11,12 @@ const toNum = (v: unknown): number => {
   return isNaN(n) ? 0 : n
 }
 
-const fmt = (v: unknown): string => {
+const OPT2: Intl.NumberFormatOptions = { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+const fmtN = (v: unknown): string => {
   const n = toNum(v)
-  if (!isFinite(n)) return '$0.00'
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return isFinite(n) ? n.toLocaleString('en-US', OPT2) : '0.00'
 }
+const fmt = (v: unknown): string => '$' + fmtN(v)
 
 interface SellInRow {
   pais:            string
@@ -413,7 +414,7 @@ export default function SellInPage() {
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-blue-500">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Cajas Totales</p>
-          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : (kpi?.total_unidades ?? 0).toLocaleString()}</p>
+          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : fmtN(kpi?.total_unidades ?? 0)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-green-500">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Clientes Activos</p>
@@ -475,7 +476,7 @@ export default function SellInPage() {
                           <td className="py-1.5 pr-3 text-gray-700 max-w-[160px] truncate">{r.descripcion}</td>
                           <td className="py-1.5 pr-3 text-gray-600">{r.categoria}</td>
                           <td className="py-1.5 pr-3 text-gray-500">{r.subcategoria}</td>
-                          <td className="py-1.5 pr-3 text-right text-gray-700">{r.cajas.toLocaleString()}</td>
+                          <td className="py-1.5 pr-3 text-right text-gray-700">{fmtN(r.cajas)}</td>
                           <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>
                           <td className="py-1.5 pr-3 text-right text-gray-500">{fmt(r.precio_promedio)}</td>
                           <td className="py-1.5 text-right text-gray-500">{r.pct.toFixed(1)}%</td>
