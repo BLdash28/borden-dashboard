@@ -5,11 +5,9 @@ import MultiSelect from '@/components/dashboard/MultiSelect'
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const toNum = (v: unknown) => { const n = parseFloat(String(v)); return isNaN(n) ? 0 : n }
-const fmt   = (v: unknown) => {
+const fmt = (v: unknown) => {
   const n = toNum(v)
-  if (n >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M'
-  if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K'
-  return '$' + n.toFixed(2)
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 interface SkuRow {
