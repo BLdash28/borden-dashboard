@@ -9,6 +9,6 @@
     "app/api/ventas/sellout/upload/route.ts": { "maxDuration": 60 }
   },
   "crons": [
-    { "path": "/api/alertas/cron", "schedule": "0 * * * *" }
+    { "path": "/api/alertas/cron", "schedule": "0 8 * * *" }
   ]
 }
