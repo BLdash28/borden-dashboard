@@ -484,16 +484,16 @@ export default function ProyeccionPage() {
                         return (
                           <tr key={`cat-${i}-${ci}`} className={subBg}>
                             <td className="px-4 py-2" />
-                            <td className="px-4 py-2 pl-6 text-gray-500 text-xs whitespace-nowrap">
-                              <span>{c.categoria}</span>
-                              {c.synthetic && (
-                                <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-600 px-1 py-0.5 rounded font-medium">real</span>
-                              )}
-                            </td>
+                            <td className="px-4 py-2" />
                             <td className="px-4 py-2">
                               <div className="flex flex-col gap-0.5">
-                                <span className="text-[11px] font-semibold text-gray-600">{c.pais}</span>
-                                <span className="text-[10px] text-gray-400">{c.cliente}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-semibold text-gray-600">{c.categoria}</span>
+                                  {c.synthetic && (
+                                    <span className="text-[9px] bg-amber-100 text-amber-600 px-1 py-0.5 rounded font-medium">real</span>
+                                  )}
+                                </div>
+                                <span className="text-[11px] text-gray-500">{c.pais} — {c.cliente}</span>
                               </div>
                             </td>
                             <td className="px-4 py-2 text-right text-xs text-gray-500">
