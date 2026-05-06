@@ -214,6 +214,27 @@ function ProyeccionInner() {
 
   const activeSubFilter = fCategoria.length > 0 || fPais.length > 0 || fCliente.length > 0
 
+  // Cuando hay sub-filtro activo, recalcular las filas de empresa-nivel desde catRows filtrados
+  const tableRows = useMemo(() => {
+    if (!activeSubFilter) return rows
+    const grouped: Record<string, { proy: number; real: number }> = {}
+    for (const c of catRows) {
+      const k = `${c.ano}-${c.mes}-${c.empresa}`
+      if (!grouped[k]) grouped[k] = { proy: 0, real: 0 }
+      grouped[k].proy += c.valor_proyectado
+      grouped[k].real += c.real_usd ?? 0
+    }
+    return rows
+      .map(r => {
+        const k = `${r.ano}-${r.mes}-${r.empresa}`
+        const g = grouped[k]
+        if (!g) return null
+        const vp = g.proy, vr = g.real
+        return { ...r, valor_proyectado: vp, valor_real: vr, diferencia: vr - vp,
+                 pct_cumplimiento: vp > 0 ? Math.round(vr / vp * 1000) / 10 : null }
+      })
+      .filter((r): r is Row => r !== null)
+  }, [rows, catRows, activeSubFilter])
 
   const mesesDisponibles = useMemo(() =>
     Array.from({ length: 12 }, (_, i) => i + 1)
@@ -398,7 +419,7 @@ function ProyeccionInner() {
 
         {loading ? (
           <div className="p-10 text-center text-sm text-gray-400">Cargando…</div>
-        ) : rows.length === 0 ? (
+        ) : tableRows.length === 0 ? (
           <div className="p-10 text-center text-sm text-gray-400">Sin datos para el período seleccionado</div>
         ) : (
           <div className="overflow-x-auto">
@@ -414,7 +435,7 @@ function ProyeccionInner() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {rows.map((r, i) => {
+                {tableRows.map((r, i) => {
                   const expandKey = `${r.ano}-${r.mes}-${r.empresa}`
                   const hasCats   = r.empresa === 'LICENCIAMIENTO' || r.empresa === 'BL FOODS'
 
