@@ -9,7 +9,7 @@ import {
   Package, Globe2, Tag, Store, ShoppingBag,
   FileText, Users, LogOut, ChevronDown, ChevronRight, FileCheck, Settings, Shield,
   Truck, Box, Megaphone, Share2, DollarSign, CreditCard, Scale, PieChart, Zap, MapPin,
-  Activity, Layers, Search, AlertTriangle, List
+  Activity, Layers, Search, AlertTriangle, List, Bell
 } from 'lucide-react'
 
 const MENUS: Record<string, { section: string; items: { href: string; icon: any; label: string }[] }[]> = {
@@ -272,6 +272,16 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
                 pathname.includes('/configuraciones/reporteria') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
               )}>
               <FileText size={14} /> Reportería
+            </Link>
+          )}
+          {profile?.role === 'superadmin' && (
+            <Link
+              href="/dashboard/configuraciones/alertas"
+              className={cn(
+                'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
+                pathname.includes('/configuraciones/alertas') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
+              )}>
+              <Bell size={14} /> Alertas
             </Link>
           )}
           <Link

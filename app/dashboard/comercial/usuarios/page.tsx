@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { UserPlus, Search, Shield, Pencil, Trash2, X, Eye, EyeOff, LayoutDashboard, Link2 } from 'lucide-react'
+import { UserPlus, Search, Shield, Pencil, Trash2, X, Eye, EyeOff, LayoutDashboard, Mail, Send } from 'lucide-react'
 import { Btn } from '@/components/ui'
 import { toast } from 'sonner'
 
@@ -22,30 +22,34 @@ const PAISES = ['GT','SV','CO','CR','NI']
 
 const EMPTY_FORM = {
   full_name: '', email: '', password: '', role: 'usuario',
-  paises: [] as string[], dashboards: [] as string[],
+  paises: [] as string[], dashboards: [] as string[], useInvite: false,
 }
 
 type ModalMode = 'create' | 'edit' | 'delete' | 'dashboards' | null
 
 export default function UsuariosPage() {
-  const [users, setUsers]       = useState<any[]>([])
-  const [search, setSearch]     = useState('')
-  const [loading, setLoading]   = useState(true)
-  const [saving, setSaving]     = useState(false)
-  const [modal, setModal]       = useState<ModalMode>(null)
-  const [selected, setSelected] = useState<any>(null)
-  const [form, setForm]         = useState({ ...EMPTY_FORM })
-  const [showPass, setShowPass] = useState(false)
+  const [users, setUsers]           = useState<any[]>([])
+  const [authStatus, setAuthStatus] = useState<Record<string, { email_confirmed_at: string | null }>>({})
+  const [search, setSearch]         = useState('')
+  const [loading, setLoading]       = useState(true)
+  const [saving, setSaving]         = useState(false)
+  const [modal, setModal]           = useState<ModalMode>(null)
+  const [selected, setSelected]     = useState<any>(null)
+  const [form, setForm]             = useState({ ...EMPTY_FORM })
+  const [showPass, setShowPass]     = useState(false)
   const supabase = createClient()
 
   useEffect(() => { loadUsers() }, [])
 
   const loadUsers = async () => {
     setLoading(true)
-    const { data, error } = await supabase
-      .from('profiles').select('*').order('created_at', { ascending: false })
+    const [{ data, error }, statusRes] = await Promise.all([
+      supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+      fetch('/api/usuarios/auth-status').then(r => r.json()).catch(() => ({})),
+    ])
     if (error) toast.error('Error cargando usuarios')
     setUsers(data || [])
+    setAuthStatus(statusRes || {})
     setLoading(false)
   }
 
@@ -70,21 +74,43 @@ export default function UsuariosPage() {
 
   // ── Create ──────────────────────────────────────────────────────────────────
   const handleCreate = async () => {
-    if (!form.full_name || !form.email || !form.password) {
-      toast.error('Completa nombre, email y contraseña'); return
-    }
+    if (!form.full_name || !form.email) { toast.error('Completa nombre y email'); return }
+    if (!form.useInvite && !form.password) { toast.error('Ingresa una contraseña o usa invitación'); return }
     setSaving(true)
     try {
-      const res = await fetch('/api/usuarios/crear', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: form.email, password: form.password,
-          full_name: form.full_name, role: form.role,
-          paises: form.paises, dashboards: form.dashboards }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Error al crear usuario')
-      toast.success(`Usuario ${form.full_name} creado`)
+      if (form.useInvite) {
+        // Create profile first with a random temp password, then send invite
+        const tempPwd = Math.random().toString(36).slice(2) + 'Aa1!'
+        const res = await fetch('/api/usuarios/crear', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: form.email, password: tempPwd,
+            full_name: form.full_name, role: form.role,
+            paises: form.paises, dashboards: form.dashboards }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Error al crear usuario')
+        // Send invite email
+        const inv = await fetch('/api/usuarios/invite', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: form.email, full_name: form.full_name }),
+        })
+        const invData = await inv.json()
+        if (!inv.ok) toast.error(`Usuario creado pero no se pudo enviar invitación: ${invData.error}`)
+        else toast.success(`Invitación enviada a ${form.email}`)
+      } else {
+        const res = await fetch('/api/usuarios/crear', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: form.email, password: form.password,
+            full_name: form.full_name, role: form.role,
+            paises: form.paises, dashboards: form.dashboards }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error || 'Error al crear usuario')
+        toast.success(`Usuario ${form.full_name} creado`)
+      }
       closeModal(); loadUsers()
     } catch (e: any) { toast.error(e.message) }
     setSaving(false)
@@ -130,18 +156,17 @@ export default function UsuariosPage() {
     setSaving(false)
   }
 
-  // ── Recovery link ───────────────────────────────────────────────────────────
+  // ── Reset password (send email) ─────────────────────────────────────────────
   const handleRecoveryLink = async (u: any) => {
     try {
-      const res  = await fetch('/api/usuarios/recovery-link', {
+      const res  = await fetch('/api/usuarios/reset', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: u.email }),
+        body: JSON.stringify({ email: u.email, full_name: u.full_name }),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Error al generar enlace')
-      await navigator.clipboard.writeText(data.link)
-      toast.success(`Enlace copiado al portapapeles — compártelo con ${u.full_name}`)
+      if (!res.ok) throw new Error(data.error || 'Error al enviar email')
+      toast.success(`Email de recuperación enviado a ${u.email}`)
     } catch (e: any) { toast.error(e.message) }
   }
 
@@ -270,11 +295,18 @@ export default function UsuariosPage() {
                       </div>
                     </td>
                     <td className="py-3 pr-4">
-                      <button onClick={()=>handleToggle(u)}
-                        className={`text-[10px] px-2.5 py-1 rounded-full font-medium transition-all hover:opacity-75 ${
-                          u.is_active?'bg-green-100 text-green-700':'bg-red-100 text-red-600'}`}>
-                        {u.is_active?'● Activo':'● Inactivo'}
-                      </button>
+                      <div className="flex flex-col gap-1">
+                        <button onClick={()=>handleToggle(u)}
+                          className={`text-[10px] px-2.5 py-1 rounded-full font-medium transition-all hover:opacity-75 ${
+                            u.is_active?'bg-green-100 text-green-700':'bg-red-100 text-red-600'}`}>
+                          {u.is_active?'● Activo':'● Inactivo'}
+                        </button>
+                        {authStatus[u.id]?.email_confirmed_at === null && (
+                          <span className="text-[9px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 font-medium text-center">
+                            Invitación pendiente
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-3">
                       <div className="flex items-center gap-1.5">
@@ -288,10 +320,10 @@ export default function UsuariosPage() {
                           style={{color:'var(--t3)'}}>
                           <Pencil size={13} />
                         </button>
-                        <button onClick={()=>handleRecoveryLink(u)} title="Copiar enlace de reseteo"
+                        <button onClick={()=>handleRecoveryLink(u)} title="Enviar reset de contraseña"
                           className="p-1.5 rounded-lg transition-all hover:bg-amber-500/10 hover:text-amber-500"
                           style={{color:'var(--t3)'}}>
-                          <Link2 size={13} />
+                          <Mail size={13} />
                         </button>
                         <button onClick={()=>openDelete(u)} title="Eliminar"
                           className="p-1.5 rounded-lg transition-all hover:bg-red-500/10 hover:text-red-500"
@@ -338,6 +370,17 @@ export default function UsuariosPage() {
                 </div>
               </div>
 
+              {modal==='create' && (
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <div onClick={()=>setForm({...form, useInvite: !form.useInvite})}
+                    className={`w-8 h-4 rounded-full transition-colors relative ${form.useInvite?'bg-amber-500':'bg-gray-300'}`}>
+                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${form.useInvite?'left-4':'left-0.5'}`}/>
+                  </div>
+                  <span className="text-[11px]" style={{color:'var(--t2)'}}>
+                    Enviar link de invitación <span style={{color:'var(--t3)'}}>(no asignar contraseña)</span>
+                  </span>
+                </label>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-[9px] uppercase tracking-[1.5px] block mb-1" style={{color:'var(--t3)'}}>
@@ -346,9 +389,10 @@ export default function UsuariosPage() {
                   <div className="relative">
                     <input type={showPass?'text':'password'} value={form.password}
                       onChange={e=>setForm({...form,password:e.target.value})}
-                      placeholder={modal==='create'?'Mínimo 6 caracteres':'vacío = sin cambio'}
-                      className="w-full px-3 py-1.5 pr-8 text-sm rounded-lg border outline-none" style={inputStyle} />
-                    <button type="button" onClick={()=>setShowPass(!showPass)}
+                      disabled={form.useInvite}
+                      placeholder={form.useInvite?'Se enviará por email':modal==='create'?'Mínimo 6 caracteres':'vacío = sin cambio'}
+                      className="w-full px-3 py-1.5 pr-8 text-sm rounded-lg border outline-none disabled:opacity-40" style={inputStyle} />
+                    <button type="button" onClick={()=>setShowPass(!showPass)} disabled={form.useInvite}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2" style={{color:'var(--t3)'}}>
                       {showPass?<EyeOff size={12}/>:<Eye size={12}/>}
                     </button>
