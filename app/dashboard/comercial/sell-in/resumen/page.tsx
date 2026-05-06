@@ -7,7 +7,8 @@ import {
 } from 'recharts'
 import FiltroMulti from '@/components/ui/FiltroMulti'
 
-const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+const MESES      = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+const MESES_FULL = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
 const PAISES = ['CR','GT','SV','NI','HN','CO']
 const CATS   = ['Quesos','Leches','Helados']
 const PAISES_OPT = PAISES.map(p => ({ value: p }))
@@ -199,11 +200,16 @@ export default function SellInResumen() {
           ? <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
           : (
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={mensual} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <BarChart data={mensual} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barCategoryGap="30%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="mes" tickFormatter={m => MESES[m]} tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize: 11 }} width={52} />
-                <Tooltip formatter={(v: number) => fmtFull(v)} labelFormatter={m => MESES[Number(m)]} />
+                <Tooltip
+                  formatter={(v: number) => fmtFull(v)}
+                  labelFormatter={m => MESES_FULL[Number(m)]}
+                  position={{ y: 170 }}
+                  allowEscapeViewBox={{ y: true }}
+                />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey={2025}          name="2025"       fill={COLORS[2025]}       radius={[3,3,0,0]} maxBarSize={22} />
                 <Bar dataKey="proyeccion"    name="Proyección 2026" fill={COLORS.proyeccion}  radius={[3,3,0,0]} maxBarSize={22} />
@@ -239,7 +245,7 @@ export default function SellInResumen() {
                   const pct = v2025 && v2026 && v2025 > 0 ? ((v2026 - v2025) / v2025) * 100 : null
                   return (
                     <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs">
-                      <p className="font-semibold text-gray-700 mb-1">{label}</p>
+                      <p className="font-semibold text-gray-700 mb-1">{MESES_FULL[MESES.indexOf(label)] ?? label}</p>
                       {payload.map((p: any) => (
                         <p key={p.dataKey} style={{ color: p.stroke }} className="leading-5">
                           {p.name}: {p.value != null ? fmtFull(p.value) : '—'}
