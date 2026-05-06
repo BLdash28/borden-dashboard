@@ -326,15 +326,15 @@ export default function ProyeccionPage() {
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-sm font-semibold text-gray-500 mb-2">Total Proyectado</p>
+          <p className="text-sm font-semibold text-gray-500 mb-2">Total Proyectado 2026</p>
           <p className="text-2xl font-bold text-gray-900">{fmt(kpis.proy)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-sm font-semibold text-gray-500 mb-2">Total Real</p>
+          <p className="text-sm font-semibold text-gray-500 mb-2">Total Real YTD</p>
           <p className="text-2xl font-bold text-gray-900">{fmt(kpis.real)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-sm font-semibold text-gray-500 mb-2">Diferencia USD</p>
+          <p className="text-sm font-semibold text-gray-500 mb-2">Diferencia USD YTD</p>
           <p className={`text-2xl font-bold ${kpis.dif >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {fmtDiff(kpis.dif)}
           </p>
@@ -344,7 +344,7 @@ export default function ProyeccionPage() {
           <div className="text-2xl font-bold">
             {kpis.pct === null
               ? <span className="text-gray-400 text-xs">—</span>
-              : <span className={kpis.pct >= 100 ? 'text-green-600' : kpis.pct >= 85 ? 'text-yellow-600' : 'text-red-600'}>
+              : <span className={kpis.pct >= (kpis.facing ?? 0) ? 'text-green-600' : 'text-red-600'}>
                   {kpis.pct}%
                 </span>
             }
