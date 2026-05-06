@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
     const ano    = parseInt(sp.get('ano') || '2026')
     const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
     const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
-    const tipo   = sp.get('tipo_negocio') || ''
+    const tipos  = sp.get('tipo_negocio') ? sp.get('tipo_negocio')!.split(',').filter(Boolean) : []
 
     const inC = (col: string, vals: string[]) =>
       `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
       const conds = [`ano = ${anoVal}`]
       if (paises.length) conds.push(inC('pais', paises))
       if (cats.length)   conds.push(inC('categoria', cats))
-      if (tipo)          conds.push(`tipo_negocio = '${tipo.replace(/'/g,"''")}'`)
+      if (tipos.length)  conds.push(inC('tipo_negocio', tipos))
       return 'WHERE ' + conds.join(' AND ')
     }
 

@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     const sp     = req.nextUrl.searchParams
     const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
     const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
-    const tipo   = sp.get('tipo_negocio') || ''
+    const tipos  = sp.get('tipo_negocio') ? sp.get('tipo_negocio')!.split(',').filter(Boolean) : []
 
     const inC = (col: string, vals: string[]) =>
       `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
@@ -17,16 +17,19 @@ export async function GET(req: NextRequest) {
     const extraConds: string[] = []
     if (paises.length) extraConds.push(inC('pais', paises))
     if (cats.length)   extraConds.push(inC('categoria', cats))
-    if (tipo)          extraConds.push(`tipo_negocio = '${tipo.replace(/'/g,"''")}'`)
+    if (tipos.length)  extraConds.push(inC('tipo_negocio', tipos))
     const extra = extraConds.length ? 'AND ' + extraConds.join(' AND ') : ''
 
-    // ventas_sell_in no tiene tipo_negocio — si hay filtro de tipo solo usamos fact_sales_sellin
+    // ventas_sell_in no tiene tipo_negocio — filtrar solo por pais/categoria
     const extraViejo = (() => {
       const c: string[] = []
       if (paises.length) c.push(inC('pais', paises))
       if (cats.length)   c.push(inC('categoria', cats))
       return c.length ? 'AND ' + c.join(' AND ') : ''
     })()
+
+    // Para proyecciones: mapear tipos → empresas
+    const tipo = tipos.length === 1 ? tipos[0] : ''
 
     const r = await pool.query(`
       -- fact_sales_sellin: fuente principal (2026+)

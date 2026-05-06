@@ -10,10 +10,13 @@ import FiltroMulti from '@/components/ui/FiltroMulti'
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const PAISES = ['CR','GT','SV','NI','HN','CO']
 const CATS   = ['Quesos','Leches','Helados']
-const TIPOS  = ['REGULAR','LICENCIAMIENTO_HELADOS','LICENCIAMIENTO_COLOMBIA']
-
 const PAISES_OPT = PAISES.map(p => ({ value: p }))
 const CATS_OPT   = CATS.map(c => ({ value: c }))
+const TIPOS_OPT  = [
+  { value: 'REGULAR',                 label: 'BL FOODS' },
+  { value: 'LICENCIAMIENTO_HELADOS',  label: 'LICENCIAMIENTO HELADOS' },
+  { value: 'LICENCIAMIENTO_COLOMBIA', label: 'LICENCIAMIENTO COLOMBIA' },
+]
 
 const fmt = (v: number) => {
   if (!isFinite(v)) return '$0'
@@ -50,20 +53,20 @@ export default function SellInResumen() {
   const [ano,    setAno]    = useState(2026)
   const [paises, setPaises] = useState<string[]>([])
   const [cats,   setCats]   = useState<string[]>([])
-  const [tipo,   setTipo]   = useState('')
+  const [tipos,  setTipos]  = useState<string[]>([])
 
   const [kpi,     setKpi]     = useState<KpiData | null>(null)
   const [mensual, setMensual] = useState<any[]>([])
   const [ytd,     setYtd]     = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const cargar = useCallback(async (a: number, ps: string[], cs: string[], t: string) => {
+  const cargar = useCallback(async (a: number, ps: string[], cs: string[], ts: string[]) => {
     setLoading(true)
     try {
       const qs = new URLSearchParams({ ano: String(a) })
       if (ps.length) qs.set('pais', ps.join(','))
       if (cs.length) qs.set('categoria', cs.join(','))
-      if (t) qs.set('tipo_negocio', t)
+      if (ts.length) qs.set('tipo_negocio', ts.join(','))
 
       const [kR, eR] = await Promise.all([
         fetch('/api/comercial/sell-in/kpis?' + qs).then(r => r.ok ? r.json() : {}) as Promise<any>,
@@ -77,7 +80,15 @@ export default function SellInResumen() {
     } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { cargar(ano, paises, cats, tipo) }, [cargar, ano, paises, cats, tipo])
+  useEffect(() => { cargar(ano, paises, cats, tipos) }, [cargar, ano, paises, cats, tipos])
+
+  const handlePaisChange = (ps: string[]) => {
+    setPaises(ps)
+    if (ps.includes('CO')) {
+      setTipos(prev => prev.includes('LICENCIAMIENTO_COLOMBIA') ? prev : [...prev, 'LICENCIAMIENTO_COLOMBIA'])
+      setCats(prev => prev.includes('Quesos') ? prev : [...prev, 'Quesos'])
+    }
+  }
 
   // Transform ytd for recharts
   const ytdData = Array.from({ length: 12 }, (_, i) => {
@@ -121,19 +132,11 @@ export default function SellInResumen() {
               ))}
             </div>
           </div>
-          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos" />
-          <div className="flex-1 min-w-[180px]">
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Tipo Negocio</p>
-            <select value={tipo} onChange={e => {
-              const val = e.target.value
-              setTipo(val)
-              if (val === 'LICENCIAMIENTO_COLOMBIA') setCats(['Quesos'])
-            }}
-              className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
-              <option value="">Todos</option>
-              {TIPOS.map(t => <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
-            </select>
-          </div>
+          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={handlePaisChange} placeholder="Todos" />
+          <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT} value={tipos} onChange={ts => {
+            setTipos(ts)
+            if (ts.includes('LICENCIAMIENTO_COLOMBIA')) setCats(prev => prev.includes('Quesos') ? prev : [...prev, 'Quesos'])
+          }} placeholder="Todos" />
           <FiltroMulti label="Categoría" options={CATS_OPT} value={cats} onChange={setCats} placeholder="Todas" />
         </div>
       </div>
