@@ -9,9 +9,7 @@ const PAISES_OPT = PAISES.map(p => ({ value: p }))
 
 const fmt = (v: number) => {
   if (!isFinite(v) || v === 0) return '—'
-  if (v >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M'
-  if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'K'
-  return '$' + v.toFixed(2)
+  return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function varColor(v: number | null) {
