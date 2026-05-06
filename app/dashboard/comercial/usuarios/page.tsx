@@ -57,7 +57,7 @@ export default function UsuariosPage() {
 
   const openEdit = (u: any) => {
     setForm({ full_name: u.full_name||'', email: u.email||'', password: '',
-      role: u.role||'usuario', paises: u.paises||[], dashboards: u.dashboards||[] })
+      role: u.role||'usuario', paises: u.paises||[], dashboards: u.dashboards||[], useInvite: false })
     setSelected(u); setModal('edit')
   }
 
