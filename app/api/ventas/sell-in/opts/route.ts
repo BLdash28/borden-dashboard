@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic'
 const DIM_MAP: Record<string, string> = {
   pais:      'pais',
   categoria: 'categoria',
-  cliente:   'cliente',
+  cliente:   'cliente_nombre',
   canal:     'canal',
   sku:       'sku',
 }
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const col = DIM_MAP[dim]
     if (!col) return NextResponse.json({ error: `dim inválido: ${dim}` }, { status: 400 })
 
-    const conds: string[] = [`${col} IS NOT NULL`, `${col} <> ''`]
+    const conds: string[] = [`${col} IS NOT NULL`, `${col} <> ''`, 'venta_neta > 0']
     const params: unknown[] = []
     let idx = 1
 
@@ -38,10 +38,10 @@ export async function GET(req: NextRequest) {
     if (paises.length)   { conds.push(`pais IN (${paises.map(() => `$${idx++}`).join(',')})`);    params.push(...paises) }
     if (cats.length)     { conds.push(`categoria IN (${cats.map(() => `$${idx++}`).join(',')})`); params.push(...cats) }
     if (canales.length)  { conds.push(`canal IN (${canales.map(() => `$${idx++}`).join(',')})`);  params.push(...canales) }
-    if (clientes.length) { conds.push(`cliente IN (${clientes.map(() => `$${idx++}`).join(',')})`); params.push(...clientes) }
+    if (clientes.length) { conds.push(`cliente_nombre IN (${clientes.map(() => `$${idx++}`).join(',')})`); params.push(...clientes) }
 
     const { rows } = await pool.query(
-      `SELECT DISTINCT ${col} AS val FROM ventas_sell_in
+      `SELECT DISTINCT ${col} AS val FROM fact_sales_sellin
        WHERE ${conds.join(' AND ')}
        ORDER BY ${col}`,
       params

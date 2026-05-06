@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     const pageSize = parseInt(sp.get('pageSize') || '500')
     const offset   = (page - 1) * pageSize
 
-    const conds: string[] = []
+    const conds: string[] = ['venta_neta > 0']
     const params: unknown[] = []
     let idx = 1
 
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
     if (canalesArr.length)  { conds.push(`canal IN (${canalesArr.map(() => `$${idx++}`).join(',')})`);  params.push(...canalesArr) }
 
     const clientesArr = (sp.get('clientes') || '').split(',').map(s => s.trim()).filter(Boolean)
-    if (clientesArr.length) { conds.push(`cliente IN (${clientesArr.map(() => `$${idx++}`).join(',')})`); params.push(...clientesArr) }
+    if (clientesArr.length) { conds.push(`cliente_nombre IN (${clientesArr.map(() => `$${idx++}`).join(',')})`); params.push(...clientesArr) }
 
     const negocioArr = (sp.get('tipo_negocio') || '').split(',').map(s => s.trim()).filter(Boolean)
     if (negocioArr.length) { conds.push(`tipo_negocio IN (${negocioArr.map(() => `$${idx++}`).join(',')})`); params.push(...negocioArr) }
@@ -50,21 +50,21 @@ export async function GET(req: NextRequest) {
     // Búsqueda libre
     const buscarP = sp.get('buscar') || ''
     if (buscarP) {
-      conds.push(`(sku ILIKE $${idx} OR descripcion ILIKE $${idx} OR cliente ILIKE $${idx})`)
+      conds.push(`(sku ILIKE $${idx} OR descripcion ILIKE $${idx} OR cliente_nombre ILIKE $${idx})`)
       params.push(`%${buscarP}%`); idx++
     }
 
-    const where = conds.length ? 'WHERE ' + conds.join(' AND ') : ''
+    const where = 'WHERE ' + conds.join(' AND ')
 
     // KPIs
     const kpiR = await pool.query(
       `SELECT
-         ROUND(SUM(ingresos)::numeric,    2) AS total_ingresos,
-         ROUND(SUM(unidades)::numeric,    0) AS total_unidades,
-         ROUND(SUM(margen_valor)::numeric,2) AS total_margen,
-         COUNT(DISTINCT cliente)             AS total_clientes,
-         COUNT(DISTINCT sku)                 AS total_skus
-       FROM v_sellin ${where}`,
+         ROUND(SUM(venta_neta)::numeric,      2) AS total_ingresos,
+         ROUND(SUM(cantidad_cajas)::numeric,  0) AS total_unidades,
+         ROUND(SUM(margen_valor)::numeric,    2) AS total_margen,
+         COUNT(DISTINCT cliente_nombre)          AS total_clientes,
+         COUNT(DISTINCT sku)                     AS total_skus
+       FROM fact_sales_sellin ${where}`,
       params
     )
     const kpi = {
@@ -81,9 +81,9 @@ export async function GET(req: NextRequest) {
     // Count (filas agrupadas)
     const countR = await pool.query(
       `SELECT COUNT(*) AS total FROM (
-         SELECT pais, cliente, canal, sku, descripcion, categoria
-         FROM v_sellin ${where}
-         GROUP BY pais, cliente, canal, sku, descripcion, categoria
+         SELECT pais, cliente_nombre, canal, sku, descripcion, categoria
+         FROM fact_sales_sellin ${where}
+         GROUP BY pais, cliente_nombre, canal, sku, descripcion, categoria
        ) sub`,
       params
     )
@@ -93,25 +93,25 @@ export async function GET(req: NextRequest) {
     const r = await pool.query(
       `SELECT
          pais,
-         cliente,
+         cliente_nombre                               AS cliente,
          canal,
          tipo_negocio,
          sku,
          descripcion,
          categoria,
          subcategoria,
-         ROUND(SUM(unidades)::numeric,    0) AS unidades,
-         ROUND(SUM(cajas)::numeric,       2) AS cajas,
-         ROUND(SUM(ingresos)::numeric,    2) AS ingresos,
-         ROUND(SUM(margen_valor)::numeric,2) AS margen_valor,
-         CASE WHEN SUM(ingresos) > 0
-              THEN ROUND((SUM(margen_valor)/SUM(ingresos))::numeric, 4)
-              ELSE 0 END                      AS margen_pct,
-         CASE WHEN SUM(cajas) > 0
-              THEN ROUND((SUM(ingresos)/SUM(cajas))::numeric, 4)
-              ELSE 0 END                      AS precio_promedio
-       FROM v_sellin ${where}
-       GROUP BY pais, cliente, canal, tipo_negocio, sku, descripcion, categoria, subcategoria
+         ROUND(SUM(cantidad_unidades)::numeric, 0)   AS unidades,
+         ROUND(SUM(cantidad_cajas)::numeric,    2)   AS cajas,
+         ROUND(SUM(venta_neta)::numeric,        2)   AS ingresos,
+         ROUND(SUM(margen_valor)::numeric,      2)   AS margen_valor,
+         CASE WHEN SUM(venta_neta) > 0
+              THEN ROUND((SUM(margen_valor)/SUM(venta_neta))::numeric, 4)
+              ELSE 0 END                              AS margen_pct,
+         CASE WHEN SUM(cantidad_cajas) > 0
+              THEN ROUND((SUM(venta_neta)/SUM(cantidad_cajas))::numeric, 4)
+              ELSE 0 END                              AS precio_promedio
+       FROM fact_sales_sellin ${where}
+       GROUP BY pais, cliente_nombre, canal, tipo_negocio, sku, descripcion, categoria, subcategoria
        ORDER BY ingresos DESC
        ${fetchAll ? '' : `LIMIT $${idx} OFFSET $${idx + 1}`}`,
       fetchAll ? params : [...params, pageSize, offset]
