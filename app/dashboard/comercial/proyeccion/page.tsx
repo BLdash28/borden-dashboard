@@ -110,7 +110,7 @@ function ProyeccionInner() {
 
   const [fAno,       setFAno]       = useState<string[]>(() => { const v = parse('ano'); return v.length ? v : [String(new Date().getFullYear())] })
   const [fMes,       setFMes]       = useState<string[]>(() => parse('mes'))
-  const [fEmpresa,   setFEmpresa]   = useState<string[]>(() => parse('empresa'))
+  const [fEmpresa,   setFEmpresa]   = useState<string[]>(() => { const v = parse('empresa'); return v.length ? v : ['BL FOODS'] })
   const [fCategoria, setFCategoria] = useState<string[]>(() => parse('categoria'))
   const [fPais,      setFPais]      = useState<string[]>(() => parse('pais'))
   const [fCliente,   setFCliente]   = useState<string[]>(() => parse('cliente'))
