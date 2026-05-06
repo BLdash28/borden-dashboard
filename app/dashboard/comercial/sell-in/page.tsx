@@ -13,25 +13,24 @@ const toNum = (v: unknown): number => {
 
 const fmt = (v: unknown): string => {
   const n = toNum(v)
-  if (!isFinite(n)) return '$0'
-  if (n >= 1e6) return '$' + (n / 1e6).toFixed(2) + 'M'
-  if (n >= 1e3) return '$' + (n / 1e3).toFixed(1) + 'K'
-  return '$' + n.toFixed(2)
+  if (!isFinite(n)) return '$0.00'
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 interface SellInRow {
-  pais:           string
-  cliente:        string
-  canal:          string
-  sku:            string
-  descripcion:    string
-  categoria:      string
-  unidades:       number
-  ingresos:       number
+  pais:            string
+  cliente:         string
+  canal:           string
+  sku:             string
+  descripcion:     string
+  categoria:       string
+  subcategoria:    string
+  cajas:           number
+  ingresos:        number
   precio_promedio: number
 }
 
-type SortKey = 'ingresos' | 'unidades' | 'pct'
+type SortKey = 'ingresos' | 'cajas' | 'pct'
 interface SortState { key: SortKey; dir: 'asc' | 'desc' }
 
 export default function SellInPage() {
@@ -168,13 +167,14 @@ export default function SellInPage() {
       .then(j => {
         if (j.error) { showError(j.error || 'Error al cargar datos'); return }
         setRows((j.rows ?? []).map((r: Record<string, unknown>) => ({
-          pais:            String(r.pais        ?? ''),
-          cliente:         String(r.cliente     ?? ''),
-          canal:           String(r.canal       ?? ''),
-          sku:             String(r.sku         ?? ''),
-          descripcion:     String(r.descripcion ?? ''),
-          categoria:       String(r.categoria   ?? ''),
-          unidades:        toNum(r.unidades),
+          pais:            String(r.pais         ?? ''),
+          cliente:         String(r.cliente      ?? ''),
+          canal:           String(r.canal        ?? ''),
+          sku:             String(r.sku          ?? ''),
+          descripcion:     String(r.descripcion  ?? ''),
+          categoria:       String(r.categoria    ?? ''),
+          subcategoria:    String(r.subcategoria ?? ''),
+          cajas:           toNum(r.cajas),
           ingresos:        toNum(r.ingresos),
           precio_promedio: toNum(r.precio_promedio),
         })))
@@ -214,9 +214,9 @@ export default function SellInPage() {
 
   const sorted = [...rowsWithPct].sort((a, b) => {
     const diff =
-      sort.key === 'ingresos'  ? a.ingresos  - b.ingresos  :
-      sort.key === 'unidades'  ? a.unidades  - b.unidades  :
-                                 a.pct       - b.pct
+      sort.key === 'ingresos' ? a.ingresos - b.ingresos :
+      sort.key === 'cajas'    ? a.cajas    - b.cajas    :
+                                a.pct      - b.pct
     return sort.dir === 'asc' ? diff : -diff
   })
 
@@ -229,7 +229,7 @@ export default function SellInPage() {
 
   // ── CSV ─────────────────────────────────────────────────────────────────────
   const descargarCSV = () => {
-    const headers = ['País','Cliente','Canal','SKU','Producto','Categoría','Unidades','USD','Precio Prom.','% Total']
+    const headers = ['País','Cliente','Orden de Compra','SKU','Producto','Categoría','Subcategoría','Cajas','Valor','Precio Caja','% Total']
     const esc = (v: string | number) => {
       const s = String(v)
       return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
@@ -237,8 +237,8 @@ export default function SellInPage() {
     const csv = [
       headers.join(','),
       ...sorted.map(r => [
-        r.pais, r.cliente, r.canal, r.sku, r.descripcion, r.categoria,
-        r.unidades, r.ingresos.toFixed(2), r.precio_promedio.toFixed(4), r.pct.toFixed(2) + '%',
+        r.pais, r.cliente, r.canal, r.sku, r.descripcion, r.categoria, r.subcategoria,
+        r.cajas.toFixed(0), r.ingresos.toFixed(2), r.precio_promedio.toFixed(4), r.pct.toFixed(2) + '%',
       ].map(esc).join(',')),
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
@@ -412,7 +412,7 @@ export default function SellInPage() {
           <p className="text-2xl font-bold text-gray-800">{loading ? '...' : fmt(kpi?.total_ingresos ?? 0)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-blue-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Unidades Totales</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Cajas Totales</p>
           <p className="text-2xl font-bold text-gray-800">{loading ? '...' : (kpi?.total_unidades ?? 0).toLocaleString()}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-green-500">
@@ -445,19 +445,20 @@ export default function SellInPage() {
                       <tr className="text-gray-400 uppercase tracking-widest border-b border-gray-100">
                         <th className="text-left py-2 pr-3">País</th>
                         <th className="text-left py-2 pr-3">Cliente</th>
-                        <th className="text-left py-2 pr-3">Canal</th>
+                        <th className="text-left py-2 pr-3">Orden de Compra</th>
                         <th className="text-left py-2 pr-3">SKU</th>
                         <th className="text-left py-2 pr-3">Producto</th>
                         <th className="text-left py-2 pr-3">Categoría</th>
+                        <th className="text-left py-2 pr-3">Subcategoría</th>
                         <th
                           className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600 select-none"
-                          onClick={() => toggleSort('unidades')}
-                        >Unidades{arrow('unidades')}</th>
+                          onClick={() => toggleSort('cajas')}
+                        >Cajas{arrow('cajas')}</th>
                         <th
                           className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600 select-none"
                           onClick={() => toggleSort('ingresos')}
-                        >USD{arrow('ingresos')}</th>
-                        <th className="text-right py-2 pr-3">P. Prom.</th>
+                        >Valor{arrow('ingresos')}</th>
+                        <th className="text-right py-2 pr-3">Precio Caja</th>
                         <th
                           className="text-right py-2 cursor-pointer hover:text-gray-600 select-none"
                           onClick={() => toggleSort('pct')}
@@ -469,11 +470,12 @@ export default function SellInPage() {
                         <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="py-1.5 pr-3 font-semibold text-amber-600">{r.pais}</td>
                           <td className="py-1.5 pr-3 text-gray-700 max-w-[140px] truncate">{r.cliente}</td>
-                          <td className="py-1.5 pr-3 text-gray-500">{r.canal}</td>
+                          <td className="py-1.5 pr-3 text-gray-500 font-mono text-[11px]">{r.canal}</td>
                           <td className="py-1.5 pr-3 font-mono text-gray-500">{r.sku}</td>
                           <td className="py-1.5 pr-3 text-gray-700 max-w-[160px] truncate">{r.descripcion}</td>
                           <td className="py-1.5 pr-3 text-gray-600">{r.categoria}</td>
-                          <td className="py-1.5 pr-3 text-right text-gray-700">{r.unidades.toLocaleString()}</td>
+                          <td className="py-1.5 pr-3 text-gray-500">{r.subcategoria}</td>
+                          <td className="py-1.5 pr-3 text-right text-gray-700">{r.cajas.toLocaleString()}</td>
                           <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>
                           <td className="py-1.5 pr-3 text-right text-gray-500">{fmt(r.precio_promedio)}</td>
                           <td className="py-1.5 text-right text-gray-500">{r.pct.toFixed(1)}%</td>
