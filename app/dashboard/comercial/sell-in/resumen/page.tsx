@@ -179,7 +179,7 @@ export default function SellInResumen() {
 
       {/* Gráfico de barras: mensual por año */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Proyección 2026</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">Venta Neta Mensual — 2025 / Proyección 2026 / 2026</h3>
         {loading
           ? <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
           : (
