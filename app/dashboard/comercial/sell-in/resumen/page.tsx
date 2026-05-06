@@ -122,15 +122,19 @@ export default function SellInResumen() {
             </div>
           </div>
           <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos" />
-          <FiltroMulti label="Categoría" options={CATS_OPT} value={cats} onChange={setCats} placeholder="Todas" />
           <div className="flex-1 min-w-[180px]">
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Tipo Negocio</p>
-            <select value={tipo} onChange={e => setTipo(e.target.value)}
+            <select value={tipo} onChange={e => {
+              const val = e.target.value
+              setTipo(val)
+              if (val === 'LICENCIAMIENTO_COLOMBIA') setCats(['Quesos'])
+            }}
               className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400">
               <option value="">Todos</option>
               {TIPOS.map(t => <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
             </select>
           </div>
+          <FiltroMulti label="Categoría" options={CATS_OPT} value={cats} onChange={setCats} placeholder="Todas" />
         </div>
       </div>
 
