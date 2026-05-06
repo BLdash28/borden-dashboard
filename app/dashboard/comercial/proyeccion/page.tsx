@@ -360,7 +360,7 @@ function ProyeccionInner() {
           <p className="text-2xl font-bold text-gray-900">{fmt(kpis.real)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-sm font-semibold text-gray-500 mb-2">Diferencia USD YTD</p>
+          <p className="text-sm font-semibold text-gray-500 mb-2">Diferencia USD YTG</p>
           <p className={`text-2xl font-bold ${kpis.dif >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {fmtDiff(kpis.dif)}
           </p>
