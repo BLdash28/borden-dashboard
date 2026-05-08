@@ -64,10 +64,11 @@ interface Reporte {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TIPO_LABELS: Record<string, string> = {
-  ventas_por_pais: 'Ventas por País',
-  top_productos:   'Top Productos',
-  kpis_resumen:    'KPIs Resumen',
-  top_tiendas:     'Top Tiendas',
+  ventas_por_pais:    'Ventas por País',
+  top_productos:      'Top Productos',
+  kpis_resumen:       'KPIs Resumen',
+  top_tiendas:        'Top Tiendas',
+  cobertura_quiebres: 'Cobertura / Quiebres',
 }
 
 const DIAS_SEMANA = [
@@ -81,7 +82,7 @@ const DIAS_SEMANA = [
 ]
 
 const PAISES_OPTS  = ['CR', 'GT', 'SV', 'NI', 'HN', 'CO']
-const CATEG_OPTS   = ['Quesos', 'Leches', 'Helados']
+const CATEG_OPTS   = ['Queso', 'Leche', 'Helado']
 const PERIODO_OPTS = [
   { value: 'ultimo_mes',       label: 'Último mes' },
   { value: 'ultima_semana',    label: 'Última semana' },

@@ -6,6 +6,7 @@ export type TipoReporte =
   | 'top_productos'
   | 'kpis_resumen'
   | 'top_tiendas'
+  | 'cobertura_quiebres'
 
 interface Filtros {
   pais?:      string[]
@@ -80,6 +81,74 @@ export async function generarExcel(
         LIMIT 100
       `)
       addSheet(wb, rows, 'Top Tiendas')
+      break
+    }
+
+    case 'cobertura_quiebres': {
+      // Fecha más reciente con datos
+      const { rows: [dateRow] } = await pool.query(
+        `SELECT MAX(fecha) AS max_fecha FROM inventario_tiendas`
+      )
+      const maxFecha = dateRow?.max_fecha
+      if (!maxFecha) { addSheet(wb, [{ mensaje: 'Sin datos en inventario_tiendas' }], 'Sin datos'); break }
+
+      // Países a incluir
+      let paises: string[] = filtros.pais?.length ? filtros.pais : []
+      if (!paises.length) {
+        const { rows: pr } = await pool.query(
+          `SELECT DISTINCT pais FROM inventario_tiendas WHERE fecha = $1 ORDER BY pais`,
+          [maxFecha]
+        )
+        paises = pr.map((r: any) => r.pais)
+      }
+
+      // Condición de categoría (solo letras/espacios para evitar injection)
+      const catSafe = (filtros.categoria ?? []).filter(c => /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/.test(c))
+      const catCond = catSafe.length
+        ? catSafe.map(c => `LOWER(t.categoria) LIKE '%${c.toLowerCase().replace(/s$/, '')}%'`).join(' OR ')
+        : '1=1'
+
+      // Hoja resumen
+      const { rows: resumen } = await pool.query(`
+        SELECT t.pais               AS "País",
+               t.categoria          AS "Categoría",
+               COUNT(*)             AS "Quiebres",
+               COUNT(DISTINCT t.tienda_nbr) AS "Tiendas afectadas"
+        FROM inventario_tiendas t
+        WHERE t.fecha = $1
+          AND t.inv_mano = 0
+          AND (${catCond})
+          ${paises.length ? `AND t.pais IN (${paises.map(p => `'${p}'`).join(',')})` : ''}
+        GROUP BY t.pais, t.categoria
+        ORDER BY t.pais, t.categoria
+      `, [maxFecha])
+      addSheet(wb, resumen, 'Resumen')
+
+      // Una hoja por país
+      for (const pais of paises) {
+        const { rows } = await pool.query(`
+          SELECT
+            t.tienda_nbr     AS "Tienda #",
+            t.tienda_nombre  AS "Tienda",
+            t.upc            AS "UPC",
+            t.descripcion    AS "Descripción",
+            t.categoria      AS "Categoría",
+            t.inv_mano       AS "Inv. Mano",
+            t.inv_transito   AS "En Tránsito",
+            t.inv_almacen    AS "En Almacén",
+            c.inv_mano_cajas AS "CEDI (cajas)"
+          FROM inventario_tiendas t
+          LEFT JOIN inventario_cedi c
+            ON c.pais = t.pais AND c.upc = t.upc AND c.fecha = t.fecha
+          WHERE t.fecha = $1
+            AND t.pais = $2
+            AND t.inv_mano = 0
+            AND (${catCond})
+          ORDER BY t.tienda_nombre, t.descripcion
+        `, [maxFecha, pais])
+
+        addSheet(wb, rows, pais.substring(0, 31))
+      }
       break
     }
   }
