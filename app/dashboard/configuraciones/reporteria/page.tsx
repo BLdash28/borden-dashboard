@@ -879,23 +879,29 @@ export default function ReporteriaPage() {
                     </div>
                   </div>
 
-                  {/* Período */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-2">Período</label>
-                    <div className="relative">
-                      <select
-                        value={form.filtros.periodo ?? ''}
-                        onChange={e => setFiltro('periodo', e.target.value)}
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-amber-400"
-                      >
-                        <option value="">Sin filtro</option>
-                        {PERIODO_OPTS.map(o => (
-                          <option key={o.value} value={o.value}>{o.label}</option>
-                        ))}
-                      </select>
-                      <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                  {/* Período — no aplica para cobertura (siempre usa fecha más reciente) */}
+                  {form.tipo_reporte === 'cobertura_quiebres' ? (
+                    <div className="flex items-center gap-2 pt-5">
+                      <span className="text-xs text-gray-400 italic">Período: siempre usa el corte más reciente disponible</span>
                     </div>
-                  </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-2">Período</label>
+                      <div className="relative">
+                        <select
+                          value={form.filtros.periodo ?? ''}
+                          onChange={e => setFiltro('periodo', e.target.value)}
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm appearance-none focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        >
+                          <option value="">Sin filtro</option>
+                          {PERIODO_OPTS.map(o => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </section>
 
