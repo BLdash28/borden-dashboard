@@ -151,6 +151,17 @@ function toggleArr<T>(arr: T[], val: T): T[] {
   return arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val]
 }
 
+function parseDiasSemana(cronExpr: string | null, diaSemana: number | null): number[] {
+  if (cronExpr) {
+    const parts = cronExpr.trim().split(/\s+/)
+    if (parts.length === 5 && parts[4] !== '*') {
+      const days = parts[4].split(',').map(Number).filter(n => !isNaN(n) && n >= 0 && n <= 6)
+      if (days.length > 0) return days
+    }
+  }
+  return diaSemana != null ? [diaSemana] : [1]
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function FrecuenciaBadge({ frecuencia }: { frecuencia: string }) {
@@ -250,7 +261,7 @@ export default function ReporteriaPage() {
       destinatarios: r.destinatarios ?? [],
       formato:       r.formato ?? 'excel',
       frecuencia:    r.frecuencia,
-      dias_semana:   r.dia_semana != null ? [r.dia_semana] : [1],
+      dias_semana:   parseDiasSemana(r.cron_expresion, r.dia_semana),
       dia_mes:       r.dia_mes,
       hora_envio:    r.hora_envio ?? '08:00',
       filtros: {
