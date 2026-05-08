@@ -472,7 +472,14 @@ export default function ReporteriaPage() {
 
                     {/* Último status */}
                     <td className="px-4 py-3">
-                      <StatusBadge status={r.ultimo_status} />
+                      <div className="flex flex-col gap-0.5">
+                        <StatusBadge status={r.ultimo_status} />
+                        {r.ultimo_mensaje && (
+                          <span className="text-xs text-gray-400 max-w-[200px] truncate" title={r.ultimo_mensaje}>
+                            {r.ultimo_mensaje}
+                          </span>
+                        )}
+                      </div>
                     </td>
 
                     {/* Última ejecución */}

@@ -41,8 +41,12 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
         })
       : []
 
-    const allOk = [...emailResults, ...waResults].every(r => r.ok)
-    const msg   = `Email: ${emailResults.length} envíos, WhatsApp: ${waResults.length} envíos`
+    const allResults = [...emailResults, ...waResults]
+    const allOk = allResults.length > 0 && allResults.every(r => r.ok)
+    const errors = allResults.filter(r => !r.ok).map(r => r.error).join('; ')
+    const msg = allResults.length === 0
+      ? 'Sin destinatarios configurados con email/canal válido'
+      : `Email: ${emailResults.length} envíos, WhatsApp: ${waResults.length} envíos${errors ? ` | Errores: ${errors}` : ''}`
 
     await pool.query(`
       UPDATE config_reportes

@@ -28,7 +28,7 @@ export async function enviarEmail(opts: {
   for (const dest of emailDests) {
     try {
       await resend.emails.send({
-        from:    process.env.RESEND_FROM ?? 'Reportes BL Foods <reportes@bordenlatam.com>',
+        from:    process.env.RESEND_FROM ?? 'onboarding@resend.dev',
         to:      [dest.email!],
         subject: opts.asunto,
         html:    `<p>Hola ${dest.nombre},</p><p>${opts.cuerpo}</p><p>Adjunto encontrará el reporte en formato Excel.</p>`,
