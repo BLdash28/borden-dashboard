@@ -30,10 +30,10 @@ export async function POST(req: NextRequest) {
       RETURNING id
     `, [
       b.nombre, b.tipo_reporte,
-      b.canales ?? [], b.destinatarios ?? [],
+      b.canales ?? [], JSON.stringify(b.destinatarios ?? []),
       b.formato ?? 'excel', b.frecuencia,
       b.cron_expresion ?? null, b.dia_semana ?? null, b.dia_mes ?? null,
-      b.hora_envio ?? null, b.filtros ?? {}, b.activo ?? true,
+      b.hora_envio ?? null, JSON.stringify(b.filtros ?? {}), b.activo ?? true,
     ])
     return NextResponse.json({ id: rows[0].id })
   } catch (err: any) {
