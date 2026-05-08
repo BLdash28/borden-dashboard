@@ -3,24 +3,31 @@ import { pool } from '@/lib/db/pool'
 
 export const dynamic = 'force-dynamic'
 
+const GITHUB_OWNER    = 'BLdash28'
+const GITHUB_REPO     = 'BotBorden'
+const WORKFLOW_MAP: Record<string, string> = {
+  retaillik:  'inventario_diario.yml',
+  sellout:    'sellout_semanal.yml',
+}
+
 export async function POST(_: NextRequest, { params }: { params: { id: string } }) {
-  const start = Date.now()
   try {
     const { rows } = await pool.query('SELECT * FROM config_bots WHERE id = $1', [params.id])
     if (!rows.length) return NextResponse.json({ error: 'Bot no encontrado' }, { status: 404 })
     const bot = rows[0]
-
     if (!bot.activo) return NextResponse.json({ error: 'Bot inactivo' }, { status: 400 })
 
-    const result = await ejecutarBot(bot)
+    const result = bot.tipo === 'retaillik' || bot.tipo === 'sellout'
+      ? await dispararGitHubWorkflow(bot)
+      : await ejecutarApiRest(bot)
 
     await pool.query(`
       UPDATE config_bots
       SET ultima_ejecucion = NOW(), ultimo_status = $1, ultimo_mensaje = $2, updated_at = NOW()
       WHERE id = $3
-    `, [result.ok ? 'success' : 'error', result.mensaje, params.id])
+    `, [result.ok ? 'running' : 'error', result.mensaje, params.id])
 
-    return NextResponse.json({ ok: result.ok, mensaje: result.mensaje, ms: Date.now() - start })
+    return NextResponse.json({ ok: result.ok, mensaje: result.mensaje })
   } catch (err: any) {
     await pool.query(`
       UPDATE config_bots
@@ -31,11 +38,30 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
   }
 }
 
-async function ejecutarBot(bot: any): Promise<{ ok: boolean; mensaje: string }> {
-  if (bot.tipo === 'retaillik') {
-    return ejecutarRetailLink(bot)
+async function dispararGitHubWorkflow(bot: any): Promise<{ ok: boolean; mensaje: string }> {
+  const token    = process.env.GITHUB_BOT_TOKEN
+  if (!token)    return { ok: false, mensaje: 'GITHUB_BOT_TOKEN no configurado en Vercel' }
+
+  const workflow = WORKFLOW_MAP[bot.tipo]
+  if (!workflow) return { ok: false, mensaje: `Sin workflow para tipo: ${bot.tipo}` }
+
+  const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${workflow}/dispatches`
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Accept':        'application/vnd.github+json',
+      'Content-Type':  'application/json',
+    },
+    body: JSON.stringify({ ref: 'main' }),
+  })
+
+  if (!res.ok) {
+    const txt = await res.text()
+    return { ok: false, mensaje: `GitHub API error ${res.status}: ${txt}` }
   }
-  return ejecutarApiRest(bot)
+
+  return { ok: true, mensaje: `Workflow ${workflow} disparado — revisa GitHub Actions para el progreso` }
 }
 
 async function ejecutarApiRest(bot: any): Promise<{ ok: boolean; mensaje: string }> {
@@ -71,24 +97,4 @@ async function ejecutarApiRest(bot: any): Promise<{ ok: boolean; mensaje: string
   }
 
   return { ok: true, mensaje: 'Ejecutado sin tabla destino configurada' }
-}
-
-async function ejecutarRetailLink(bot: any): Promise<{ ok: boolean; mensaje: string }> {
-  // RetailLink (Walmart) integration placeholder
-  // Requires: RETAILLINK_USER, RETAILLINK_PASS env vars + endpoint config
-  const user = process.env.RETAILLINK_USER
-  const pass = process.env.RETAILLINK_PASS
-  if (!user || !pass) return { ok: false, mensaje: 'RETAILLINK_USER / RETAILLINK_PASS no configurados' }
-  if (!bot.endpoint_url)  return { ok: false, mensaje: 'endpoint_url de RetailLink no configurado' }
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'X-RL-User': user,
-    'X-RL-Key': bot.api_key ?? pass,
-    ...(bot.headers ?? {}),
-  }
-  const res = await fetch(bot.endpoint_url, { method: bot.metodo ?? 'GET', headers })
-  if (!res.ok) return { ok: false, mensaje: `RetailLink HTTP ${res.status}: ${await res.text()}` }
-
-  return { ok: true, mensaje: 'RetailLink ejecutado correctamente' }
 }
