@@ -21,19 +21,25 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
 
     const resumenTexto = `Reporte: ${reporte.nombre}\nFecha: ${fecha}\nTipo: ${reporte.tipo_reporte}`
 
-    const emailResults = await enviarEmail({
-      destinatarios: reporte.destinatarios ?? [],
-      asunto:        `[BL Foods] ${reporte.nombre} — ${fecha}`,
-      cuerpo:        resumenTexto,
-      adjuntoNombre: nombre,
-      adjuntoBuffer: buffer,
-    })
+    const canales: string[] = reporte.canales ?? []
 
-    const waResults = await enviarWhatsapp({
-      destinatarios: reporte.destinatarios ?? [],
-      resumenTexto,
-      nombreReporte: reporte.nombre,
-    })
+    const emailResults = canales.includes('email')
+      ? await enviarEmail({
+          destinatarios: reporte.destinatarios ?? [],
+          asunto:        `[BL Foods] ${reporte.nombre} — ${fecha}`,
+          cuerpo:        resumenTexto,
+          adjuntoNombre: nombre,
+          adjuntoBuffer: buffer,
+        })
+      : []
+
+    const waResults = canales.includes('whatsapp')
+      ? await enviarWhatsapp({
+          destinatarios: reporte.destinatarios ?? [],
+          resumenTexto,
+          nombreReporte: reporte.nombre,
+        })
+      : []
 
     const allOk = [...emailResults, ...waResults].every(r => r.ok)
     const msg   = `Email: ${emailResults.length} envíos, WhatsApp: ${waResults.length} envíos`

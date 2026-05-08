@@ -18,7 +18,10 @@ export async function enviarEmail(opts: {
   if (!apiKey) return [{ email: 'N/A', ok: false, error: 'RESEND_API_KEY no configurado' }]
   const resend = new Resend(apiKey)
 
-  const emailDests = opts.destinatarios.filter(d => d.canales.includes('email') && d.email)
+  // Si el destinatario no tiene canales propios configurados, recibe por todos los canales del reporte
+  const emailDests = opts.destinatarios.filter(d =>
+    d.email && (d.canales?.length === 0 || !d.canales || d.canales.includes('email'))
+  )
 
   const results: { email: string; ok: boolean; error?: string }[] = []
 

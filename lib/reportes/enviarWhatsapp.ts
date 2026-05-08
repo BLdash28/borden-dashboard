@@ -19,9 +19,7 @@ export async function enviarWhatsapp(opts: {
   const token   = process.env.WHATSAPP_TOKEN
   const phoneId = process.env.WHATSAPP_PHONE_ID
 
-  if (!token || !phoneId) {
-    return [{ telefono: 'N/A', ok: false, error: 'WHATSAPP_TOKEN / WHATSAPP_PHONE_ID no configurados' }]
-  }
+  if (!token || !phoneId) return []
 
   const waDests = opts.destinatarios.filter(d => d.canales.includes('whatsapp') && d.telefono)
   const results: { telefono: string; ok: boolean; error?: string }[] = []
