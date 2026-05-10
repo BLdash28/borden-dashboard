@@ -170,7 +170,7 @@ async function _generarCobertura(filtros: Filtros): Promise<Buffer> {
       const { rows: [agg] } = await pool.query(`
         SELECT COUNT(*) AS quiebres, COUNT(DISTINCT tienda_nbr) AS tiendas
         FROM inventario_tiendas
-        WHERE fecha = $1 AND pais = $2 AND inv_mano = 0 AND LOWER(categoria) LIKE $3
+        WHERE fecha = $1 AND pais = $2 AND inv_mano <= 0 AND LOWER(descripcion) LIKE $3
       `, [maxFecha, pais, pat])
       if (Number(agg?.quiebres) > 0) {
         wsRes.getCell(resRow, 1).value = pais
@@ -191,7 +191,7 @@ async function _generarCobertura(filtros: Filtros): Promise<Buffer> {
                t.inv_mano, t.inv_transito, c.inv_mano_cajas
         FROM inventario_tiendas t
         LEFT JOIN inventario_cedi c ON c.pais = t.pais AND c.upc = t.upc AND c.fecha = t.fecha
-        WHERE t.fecha = $1 AND t.pais = $2 AND t.inv_mano = 0 AND LOWER(t.categoria) LIKE $3
+        WHERE t.fecha = $1 AND t.pais = $2 AND t.inv_mano <= 0 AND LOWER(t.descripcion) LIKE $3
         ORDER BY t.tienda_nombre, t.descripcion
       `, [maxFecha, pais, pat])
 
