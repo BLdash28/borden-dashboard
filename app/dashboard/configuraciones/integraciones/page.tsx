@@ -461,20 +461,22 @@ export default function IntegracionesPage() {
                     {/* Tipo badge */}
                     <td className="px-5 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        bot.tipo === 'api_rest'              ? 'bg-blue-50 text-blue-700'
-                        : bot.tipo === 'retaillik_sellout'   ? 'bg-green-50 text-green-700'
-                        : bot.tipo === 'retaillik_sellout_4w'? 'bg-teal-50 text-teal-700'
-                        : bot.tipo === 'unisuper_inventario' ? 'bg-orange-50 text-orange-700'
-                        : bot.tipo === 'unisuper_venta_diaria' ? 'bg-amber-50 text-amber-700'
+                        bot.tipo === 'api_rest'               ? 'bg-blue-50 text-blue-700'
+                        : bot.tipo === 'retaillik_sellout'    ? 'bg-green-50 text-green-700'
+                        : bot.tipo === 'retaillik_sellout_4w' ? 'bg-teal-50 text-teal-700'
+                        : bot.tipo === 'unisuper_inventario'  ? 'bg-orange-50 text-orange-700'
+                        : bot.tipo === 'unisuper_venta_diaria'  ? 'bg-amber-50 text-amber-700'
                         : bot.tipo === 'unisuper_venta_mensual' ? 'bg-yellow-50 text-yellow-700'
+                        : bot.tipo === 'onedrive_excel'       ? 'bg-sky-50 text-sky-700'
                         : 'bg-purple-50 text-purple-700'
                       }`}>
-                        {bot.tipo === 'api_rest'               ? 'API REST'
-                        : bot.tipo === 'retaillik_sellout'     ? 'RL Sellout CW'
-                        : bot.tipo === 'retaillik_sellout_4w'  ? 'RL Sellout 4W'
-                        : bot.tipo === 'unisuper_inventario'   ? 'UNI Inventario'
-                        : bot.tipo === 'unisuper_venta_diaria' ? 'UNI Venta Día'
-                        : bot.tipo === 'unisuper_venta_mensual'? 'UNI Venta Mes'
+                        {bot.tipo === 'api_rest'                ? 'API REST'
+                        : bot.tipo === 'retaillik_sellout'      ? 'RL Sellout CW'
+                        : bot.tipo === 'retaillik_sellout_4w'   ? 'RL Sellout 4W'
+                        : bot.tipo === 'unisuper_inventario'    ? 'UNI Inventario'
+                        : bot.tipo === 'unisuper_venta_diaria'  ? 'UNI Venta Día'
+                        : bot.tipo === 'unisuper_venta_mensual' ? 'UNI Venta Mes'
+                        : bot.tipo === 'onedrive_excel'         ? 'OneDrive Excel'
                         : 'RL Inventario'}
                       </span>
                     </td>
@@ -645,6 +647,7 @@ export default function IntegracionesPage() {
                     <option value="unisuper_inventario">Unisuper — Inventario</option>
                     <option value="unisuper_venta_diaria">Unisuper — Venta Diaria</option>
                     <option value="unisuper_venta_mensual">Unisuper — Venta Mensual</option>
+                    <option value="onedrive_excel">OneDrive — Colombia Sellout</option>
                   </select>
                   <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
