@@ -30,7 +30,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import {
   Plus, Pencil, Trash2, Play, Eye, EyeOff, X, ChevronDown,
-  AlertTriangle, RefreshCw, CheckCircle2, XCircle,
+  AlertTriangle, RefreshCw, CheckCircle2, XCircle, Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -207,6 +207,14 @@ export default function IntegracionesPage() {
     if (profile?.role === 'superadmin') loadBots()
   }, [profile, loadBots])
 
+  // Polling automático mientras haya bots en estado 'running'
+  useEffect(() => {
+    const hasRunning = bots.some(b => b.ultimo_status === 'running')
+    if (!hasRunning) return
+    const interval = setInterval(() => loadBots(), 8000)
+    return () => clearInterval(interval)
+  }, [bots, loadBots])
+
   // -------------------------------------------------------------------------
   // Toggle activo
   // -------------------------------------------------------------------------
@@ -233,14 +241,20 @@ export default function IntegracionesPage() {
 
   const runBot = async (id: number) => {
     setRunningId(id)
+    // Actualización optimista: mostrar "En proceso" inmediatamente
+    setBots(prev => prev.map(b => b.id === id
+      ? { ...b, ultimo_status: 'running', ultimo_mensaje: 'Iniciando...', ultima_ejecucion: new Date().toISOString() }
+      : b
+    ))
     try {
       const res = await fetch(`/api/bots/run/${id}`, { method: 'POST' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.mensaje ?? 'Error ejecutando bot')
-      toast.success(data.mensaje ?? 'Bot ejecutado correctamente')
+      toast.success('Workflow disparado — monitoreando estado...')
       await loadBots()
     } catch (e: any) {
       toast.error(e.message ?? 'Error ejecutando bot')
+      await loadBots()
     } finally {
       setRunningId(null)
     }
@@ -481,18 +495,23 @@ export default function IntegracionesPage() {
 
                     {/* Último Status */}
                     <td className="px-5 py-3">
-                      {bot.ultimo_status ? (
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                          bot.ultimo_status === 'success'
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-red-100 text-red-700'
-                        }`}>
-                          {bot.ultimo_status === 'success'
-                            ? <CheckCircle2 className="w-3 h-3" />
-                            : <XCircle className="w-3 h-3" />}
-                          {bot.ultimo_status === 'success' ? 'Éxito' : 'Error'}
-                        </span>
-                      ) : (
+                      {bot.ultimo_status ? (() => {
+                        const s = bot.ultimo_status
+                        const isOk      = s === 'ok' || s === 'success'
+                        const isRunning = s === 'running'
+                        return (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                            isOk      ? 'bg-green-100 text-green-700' :
+                            isRunning ? 'bg-blue-100 text-blue-700'   :
+                                        'bg-red-100 text-red-700'
+                          }`}>
+                            {isOk      ? <CheckCircle2 className="w-3 h-3" /> :
+                             isRunning ? <Loader2 className="w-3 h-3 animate-spin" /> :
+                                         <XCircle className="w-3 h-3" />}
+                            {isOk ? 'Éxito' : isRunning ? 'En proceso' : 'Error'}
+                          </span>
+                        )
+                      })() : (
                         <span className="text-gray-400 text-xs">—</span>
                       )}
                       {bot.ultimo_mensaje && (
