@@ -40,6 +40,7 @@ import { toast } from 'sonner'
 
 type BotTipo = 'api_rest' | 'retaillik' | 'retaillik_sellout' | 'retaillik_sellout_4w'
             | 'unisuper_inventario' | 'unisuper_venta_diaria' | 'unisuper_venta_mensual'
+            | 'onedrive_excel'
 type BotMetodo = 'GET' | 'POST'
 
 interface Bot {
