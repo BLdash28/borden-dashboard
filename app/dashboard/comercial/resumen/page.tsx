@@ -28,13 +28,10 @@ const fmt = (n: number) =>
   '$' + n.toFixed(0)
 
 const fmtFull = (n: number) =>
-  '$' + (isFinite(n) ? n : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-
-const fmtP = (n: number) => isNaN(n) || !n ? '—' : '$' + n.toFixed(2)
-
-const fmtFull = (n: number) =>
   isNaN(n) || !isFinite(n) ? '$0.00' :
   '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+const fmtP = (n: number) => isNaN(n) || !n ? '—' : '$' + n.toFixed(2)
 
 const toNum = (v: any): number => {
   const n = parseFloat(String(v))
