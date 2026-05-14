@@ -11,6 +11,7 @@ const WORKFLOW_TIPO: Record<string, string> = {
   'Unisuper Venta Diaria':   'unisuper_venta_diaria',
   'Unisuper Venta Mensual':  'unisuper_venta_mensual',
   'Colombia Sellout Semanal': 'onedrive_excel',
+  'Selectos Inventario':      'selectos_inventario',
 }
 
 export async function POST(req: NextRequest) {
