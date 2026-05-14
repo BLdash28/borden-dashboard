@@ -39,6 +39,7 @@ import { toast } from 'sonner'
 // ---------------------------------------------------------------------------
 
 type BotTipo = 'api_rest' | 'retaillik' | 'retaillik_sellout' | 'retaillik_sellout_4w'
+            | 'unisuper_inventario' | 'unisuper_venta_diaria' | 'unisuper_venta_mensual'
 type BotMetodo = 'GET' | 'POST'
 
 interface Bot {
@@ -445,21 +446,21 @@ export default function IntegracionesPage() {
                     {/* Tipo badge */}
                     <td className="px-5 py-3">
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        bot.tipo === 'api_rest'
-                          ? 'bg-blue-50 text-blue-700'
-                          : bot.tipo === 'retaillik_sellout'
-                            ? 'bg-green-50 text-green-700'
-                            : bot.tipo === 'retaillik_sellout_4w'
-                              ? 'bg-teal-50 text-teal-700'
-                              : 'bg-purple-50 text-purple-700'
+                        bot.tipo === 'api_rest'              ? 'bg-blue-50 text-blue-700'
+                        : bot.tipo === 'retaillik_sellout'   ? 'bg-green-50 text-green-700'
+                        : bot.tipo === 'retaillik_sellout_4w'? 'bg-teal-50 text-teal-700'
+                        : bot.tipo === 'unisuper_inventario' ? 'bg-orange-50 text-orange-700'
+                        : bot.tipo === 'unisuper_venta_diaria' ? 'bg-amber-50 text-amber-700'
+                        : bot.tipo === 'unisuper_venta_mensual' ? 'bg-yellow-50 text-yellow-700'
+                        : 'bg-purple-50 text-purple-700'
                       }`}>
-                        {bot.tipo === 'api_rest'
-                          ? 'API REST'
-                          : bot.tipo === 'retaillik_sellout'
-                            ? 'RL Sellout CW'
-                            : bot.tipo === 'retaillik_sellout_4w'
-                              ? 'RL Sellout 4W'
-                              : 'RL Inventario'}
+                        {bot.tipo === 'api_rest'               ? 'API REST'
+                        : bot.tipo === 'retaillik_sellout'     ? 'RL Sellout CW'
+                        : bot.tipo === 'retaillik_sellout_4w'  ? 'RL Sellout 4W'
+                        : bot.tipo === 'unisuper_inventario'   ? 'UNI Inventario'
+                        : bot.tipo === 'unisuper_venta_diaria' ? 'UNI Venta Día'
+                        : bot.tipo === 'unisuper_venta_mensual'? 'UNI Venta Mes'
+                        : 'RL Inventario'}
                       </span>
                     </td>
 
@@ -621,6 +622,9 @@ export default function IntegracionesPage() {
                     <option value="retaillik">RetailLink — Inventario</option>
                     <option value="retaillik_sellout">RetailLink — Sellout Current Week</option>
                     <option value="retaillik_sellout_4w">RetailLink — Sellout Last 4 Weeks</option>
+                    <option value="unisuper_inventario">Unisuper — Inventario</option>
+                    <option value="unisuper_venta_diaria">Unisuper — Venta Diaria</option>
+                    <option value="unisuper_venta_mensual">Unisuper — Venta Mensual</option>
                   </select>
                   <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>

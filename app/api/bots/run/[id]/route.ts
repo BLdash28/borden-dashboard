@@ -6,9 +6,12 @@ export const dynamic = 'force-dynamic'
 const GITHUB_OWNER    = 'BLdash28'
 const GITHUB_REPO     = 'BotBorden'
 const WORKFLOW_MAP: Record<string, string> = {
-  retaillik:            'inventario_diario.yml',
-  retaillik_sellout:    'sellout_semanal.yml',
-  retaillik_sellout_4w: 'sellout_4w.yml',
+  retaillik:               'inventario_diario.yml',
+  retaillik_sellout:       'sellout_semanal.yml',
+  retaillik_sellout_4w:    'sellout_4w.yml',
+  unisuper_inventario:     'unisuper_inventario.yml',
+  unisuper_venta_diaria:   'unisuper_venta_diaria.yml',
+  unisuper_venta_mensual:  'unisuper_venta_mensual.yml',
 }
 
 export async function POST(_: NextRequest, { params }: { params: { id: string } }) {
@@ -18,7 +21,10 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
     const bot = rows[0]
     if (!bot.activo) return NextResponse.json({ error: 'Bot inactivo' }, { status: 400 })
 
-    const result = bot.tipo === 'retaillik' || bot.tipo === 'retaillik_sellout' || bot.tipo === 'retaillik_sellout_4w'
+    const isGitHub = ['retaillik','retaillik_sellout','retaillik_sellout_4w',
+                      'unisuper_inventario','unisuper_venta_diaria','unisuper_venta_mensual']
+                      .includes(bot.tipo)
+    const result = isGitHub
       ? await dispararGitHubWorkflow(bot)
       : await ejecutarApiRest(bot)
 
