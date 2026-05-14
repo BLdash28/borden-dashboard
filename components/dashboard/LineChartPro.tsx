@@ -23,7 +23,8 @@ interface Props {
   color?:       string          // single-line color
   lines?:       LineDef[]       // multi-line mode
   height?:      number
-  formatter?:   (v: number) => string
+  formatter?:        (v: number) => string
+  tooltipFormatter?: (v: number) => string
   tooltipUnit?: string
   xTickFmt?:    (v: any) => string
   yTickFmt?:    (v: any) => string
@@ -38,9 +39,10 @@ interface Props {
 }
 
 // ── Pro Tooltip ───────────────────────────────────────────────────────────────
-function ProTooltip({ active, payload, label, formatter, unit }: any) {
+function ProTooltip({ active, payload, label, formatter, tooltipFormatter, unit }: any) {
   if (!active || !payload?.length) return null
   const c = payload[0]?.stroke ?? payload[0]?.color ?? '#c8873a'
+  const fmt = tooltipFormatter ?? formatter
   return (
     <div style={{
       background: 'var(--surface, rgba(15,15,18,0.97))',
@@ -75,7 +77,7 @@ function ProTooltip({ active, payload, label, formatter, unit }: any) {
             </span>
           </div>
           <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--t1, #f1f5f9)' }}>
-            {formatter ? formatter(Number(p.value)) : p.value}
+            {fmt ? fmt(Number(p.value)) : p.value}
           </span>
         </div>
       ))}
@@ -88,7 +90,7 @@ export const LineChartPro = memo(function LineChartPro({
   data, nameKey,
   dataKey = 'value', color = '#c8873a',
   lines,
-  height = 240, formatter = fmtDefault, tooltipUnit,
+  height = 240, formatter = fmtDefault, tooltipFormatter, tooltipUnit,
   xTickFmt, yTickFmt, xInterval, xAngle = 0,
   yWidth, margin, area = false, dot = false,
   yDomain, refLine,
@@ -166,7 +168,8 @@ export const LineChartPro = memo(function LineChartPro({
 
       <ResponsiveContainer width="100%" height={height}>
         <Chart data={data} margin={m}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--border, #f0f0f0)" />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--border, #e4e4e7)" vertical={false} />
+          <CartesianGrid vertical stroke="#b4b4c0" strokeDasharray="4 4" horizontal={false} />
 
           <XAxis
             dataKey={nameKey}
@@ -185,7 +188,7 @@ export const LineChartPro = memo(function LineChartPro({
           />
 
           <Tooltip
-            content={<ProTooltip formatter={formatter} unit={tooltipUnit} />}
+            content={<ProTooltip formatter={formatter} tooltipFormatter={tooltipFormatter} unit={tooltipUnit} />}
             wrapperStyle={{ zIndex: 50, outline: 'none' }}
           />
 

@@ -63,7 +63,7 @@ function MonthDividers(props: any) {
     <g>
       {domain.slice(0, -1).map((val: number) => {
         const x = (xAxis.scale(val) ?? 0) + bw
-        return <line key={val} x1={x} x2={x} y1={mt} y2={y2} stroke="#e2e8f0" strokeWidth={1} />
+        return <line key={val} x1={x} x2={x} y1={mt} y2={y2} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" />
       })}
     </g>
   )

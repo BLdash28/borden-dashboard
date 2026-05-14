@@ -27,6 +27,9 @@ const fmt = (n: number) =>
   n >= 1e3 ? '$' + (n / 1e3).toFixed(1) + 'K' :
   '$' + n.toFixed(0)
 
+const fmtFull = (n: number) =>
+  '$' + (isFinite(n) ? n : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
 const fmtP = (n: number) => isNaN(n) || !n ? '—' : '$' + n.toFixed(2)
 
 const fmtFull = (n: number) =>
@@ -542,7 +545,7 @@ export default function ResumenPage() {
             <>
               <LineChartPro
                 data={visible} nameKey={chartKey} dataKey="ventas_valor"
-                color="#c8873a" height={380} formatter={fmt} tooltipUnit="USD"
+                color="#c8873a" height={380} formatter={fmt} tooltipFormatter={fmtFull} tooltipUnit="USD"
                 xTickFmt={chartXFmt}
                 xInterval={modo === 'ano' ? 0 : Math.max(Math.ceil(visible.length / 10) - 1, 0)}
                 dot

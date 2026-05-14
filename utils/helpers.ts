@@ -13,6 +13,12 @@ export const fmt = (v: any): string => {
   return '$' + Math.round(n).toString()
 }
 
+// Formato moneda completo con comas: $482,400.00
+export const fmtFull = (v: any): string => {
+  const n = toNum(v)
+  return '$' + (isFinite(n) ? n : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 // Formato moneda con 2 decimales: $2.56
 export const fmt$ = (v: any): string => '$' + toNum(v).toFixed(2)
 
