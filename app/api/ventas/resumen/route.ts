@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     // ── Periods listing (no per-user restrictions needed) ────────
     if (tipo === 'periodos') {
       const { data: periodos } = await withCache(
-        'periodos-v6',
+        'periodos-v7',
         async () => {
           const r = await pool.query(
             'SELECT ano, mes, COUNT(DISTINCT pais) AS n_paises, COUNT(*) AS filas, ' +
