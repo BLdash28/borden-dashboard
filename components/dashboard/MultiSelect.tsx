@@ -125,6 +125,10 @@ export default function MultiSelect({
             </div>
           )}
 
+          {options.length === 0 && !selectAllLabel && (
+            <div className="px-3 py-3 text-[12px]" style={{ color: 'var(--t3)' }}>Sin opciones disponibles</div>
+          )}
+
           {options.map(opt => {
             const disabled = opt.disabled || isDisabled(opt.value)
             const selected = value.includes(opt.value)
