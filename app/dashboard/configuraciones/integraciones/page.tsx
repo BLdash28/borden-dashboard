@@ -211,7 +211,7 @@ export default function IntegracionesPage() {
   useEffect(() => {
     const hasRunning = bots.some(b => b.ultimo_status === 'running')
     if (!hasRunning) return
-    const interval = setInterval(() => loadBots(), 8000)
+    const interval = setInterval(() => loadBots(), 30000)
     return () => clearInterval(interval)
   }, [bots, loadBots])
 
