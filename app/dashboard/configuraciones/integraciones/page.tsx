@@ -4,10 +4,11 @@
   CREATE TABLE config_bots (
     id               BIGSERIAL PRIMARY KEY,
     nombre           VARCHAR NOT NULL,
-    tipo             VARCHAR NOT NULL CHECK (tipo IN ('api_rest', 'retaillik')),
+    tipo             VARCHAR NOT NULL CHECK (tipo IN ('api_rest', 'retaillik', 'retaillik_sellout')),
     descripcion      TEXT,
     endpoint_url     VARCHAR,
     api_key          VARCHAR,
+    job_id           VARCHAR,   -- Job ID del reporte en RetailLink (solo tipo retaillik)
     headers          JSONB DEFAULT '{}',
     metodo           VARCHAR DEFAULT 'GET',
     body_template    JSONB DEFAULT '{}',
@@ -37,7 +38,7 @@ import { toast } from 'sonner'
 // Types
 // ---------------------------------------------------------------------------
 
-type BotTipo = 'api_rest' | 'retaillik'
+type BotTipo = 'api_rest' | 'retaillik' | 'retaillik_sellout'
 type BotMetodo = 'GET' | 'POST'
 
 interface Bot {
@@ -47,6 +48,7 @@ interface Bot {
   descripcion?: string
   endpoint_url?: string
   api_key?: string
+  job_id?: string
   headers?: Record<string, unknown>
   metodo?: BotMetodo
   body_template?: Record<string, unknown>
@@ -69,6 +71,7 @@ const EMPTY_FORM: Omit<Bot, 'id' | 'created_at' | 'updated_at'> = {
   descripcion: '',
   endpoint_url: '',
   api_key: '',
+  job_id: '',
   headers: {},
   metodo: 'GET',
   body_template: {},
@@ -87,15 +90,24 @@ function cronToHuman(expr: string): string {
   const parts = expr.trim().split(/\s+/)
   if (parts.length < 5) return 'Expresión inválida'
   const [min, hour, dom, , dow] = parts
-  const days = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
-  const time =
-    hour !== '*' && min !== '*'
-      ? `a las ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`
-      : ''
+  const DAYS = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado']
+
+  const time = hour !== '*' && min !== '*'
+    ? `a las ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`
+    : ''
+
   if (min === '*' && hour === '*') return 'Cada minuto'
-  if (dow !== '*' && dom === '*') return `Todos los ${days[parseInt(dow)] ?? dow} ${time}`
-  if (dom !== '*' && dow === '*') return `El día ${dom} de cada mes ${time}`
-  return `Todos los días ${time}`
+
+  if (dow !== '*' && dom === '*') {
+    const nombres = dow.split(',').map(d => DAYS[parseInt(d.trim())] ?? d.trim())
+    const lista = nombres.length > 1
+      ? nombres.slice(0, -1).join(', ') + ' y ' + nombres.at(-1)
+      : nombres[0]
+    return `Todos los ${lista} ${time}`.trim()
+  }
+
+  if (dom !== '*' && dow === '*') return `El día ${dom} de cada mes ${time}`.trim()
+  return `Todos los días ${time}`.trim()
 }
 
 function getNextExecution(cronExpr?: string): string {
@@ -275,6 +287,7 @@ export default function IntegracionesPage() {
       descripcion: bot.descripcion ?? '',
       endpoint_url: bot.endpoint_url ?? '',
       api_key: bot.api_key ?? '',
+      job_id: bot.job_id ?? '',
       headers: bot.headers ?? {},
       metodo: (bot.metodo as BotMetodo) ?? 'GET',
       body_template: bot.body_template ?? {},
@@ -369,7 +382,7 @@ export default function IntegracionesPage() {
   // Render
   // -------------------------------------------------------------------------
 
-  const isRetaillik = form.tipo === 'retaillik'
+  const isRetaillik = form.tipo === 'retaillik' || form.tipo === 'retaillik_sellout'
   const isPost      = form.metodo === 'POST'
 
   return (
@@ -434,9 +447,15 @@ export default function IntegracionesPage() {
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                         bot.tipo === 'api_rest'
                           ? 'bg-blue-50 text-blue-700'
-                          : 'bg-purple-50 text-purple-700'
+                          : bot.tipo === 'retaillik_sellout'
+                            ? 'bg-green-50 text-green-700'
+                            : 'bg-purple-50 text-purple-700'
                       }`}>
-                        {bot.tipo === 'api_rest' ? 'API REST' : 'RetailLink'}
+                        {bot.tipo === 'api_rest'
+                          ? 'API REST'
+                          : bot.tipo === 'retaillik_sellout'
+                            ? 'RL Sellout'
+                            : 'RL Inventario'}
                       </span>
                     </td>
 
@@ -595,7 +614,8 @@ export default function IntegracionesPage() {
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 appearance-none pr-8"
                   >
                     <option value="api_rest">API REST Personalizada</option>
-                    <option value="retaillik">RetailLink (Walmart)</option>
+                    <option value="retaillik">RetailLink — Inventario</option>
+                    <option value="retaillik_sellout">RetailLink — Sellout</option>
                   </select>
                   <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
@@ -603,9 +623,31 @@ export default function IntegracionesPage() {
 
               {/* RetailLink info box */}
               {isRetaillik && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs text-blue-700">
-                  RetailLink requiere <code className="font-mono font-semibold">RETAILLINK_USER</code> y{' '}
-                  <code className="font-mono font-semibold">RETAILLINK_PASS</code> en variables de entorno.
+                <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-xs text-blue-700 space-y-1">
+                  <p className="font-semibold mb-1">Variables requeridas en GitHub Secrets:</p>
+                  <p><code className="font-mono font-semibold">RETAILLINK_USER</code> — correo de la cuenta RetailLink</p>
+                  <p><code className="font-mono font-semibold">RETAILLINK_PASSWORD</code> — contraseña de la cuenta</p>
+                  <p><code className="font-mono font-semibold">RETAILLINK_BOT_TOKEN</code> — token JWT del bot</p>
+                  <p><code className="font-mono font-semibold">BROWSERBASE_API_KEY</code> / <code className="font-mono font-semibold">BROWSERBASE_PROJECT_ID</code> — browser cloud</p>
+                </div>
+              )}
+
+              {/* Job ID — solo RetailLink */}
+              {isRetaillik && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Job ID <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={form.job_id ?? ''}
+                    onChange={e => setField('job_id', e.target.value)}
+                    placeholder="49753313"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    ID del reporte guardado en RetailLink (Decision Support → requestid).
+                  </p>
                 </div>
               )}
 

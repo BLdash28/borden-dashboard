@@ -27,10 +27,10 @@ const MENUS: Record<string, { section: string; items: { href: string; icon: any;
     {
       section: 'Sell Out',
       items: [
-        { href: '/resumen',              icon: BarChart2,    label: 'Resumen Ejecutivo' },
-        { href: '/sellout/tendencias',   icon: TrendingUp,   label: 'Tendencias'        },
-        { href: '/sellout',              icon: ShoppingCart, label: 'Detalle por SKU'   },
-        { href: '/sellout/ytd',          icon: ArrowUpRight, label: 'YTD y Variaciones' },
+        { href: '/resumen',                    icon: BarChart2,    label: 'Resumen Ejecutivo'   },
+        { href: '/sellout/tendencias',         icon: TrendingUp,   label: 'Tendencias'          },
+        { href: '/sellout',                    icon: ShoppingCart, label: 'Detalle por SKU'     },
+        { href: '/sellout/ytd',                icon: ArrowUpRight, label: 'YTD y Variaciones'   },
       ],
     },
     {

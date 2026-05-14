@@ -6,8 +6,8 @@ export const dynamic = 'force-dynamic'
 const GITHUB_OWNER    = 'BLdash28'
 const GITHUB_REPO     = 'BotBorden'
 const WORKFLOW_MAP: Record<string, string> = {
-  retaillik:  'inventario_diario.yml',
-  sellout:    'sellout_semanal.yml',
+  retaillik:          'inventario_diario.yml',
+  retaillik_sellout:  'sellout_semanal.yml',
 }
 
 export async function POST(_: NextRequest, { params }: { params: { id: string } }) {
@@ -17,7 +17,7 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
     const bot = rows[0]
     if (!bot.activo) return NextResponse.json({ error: 'Bot inactivo' }, { status: 400 })
 
-    const result = bot.tipo === 'retaillik' || bot.tipo === 'sellout'
+    const result = bot.tipo === 'retaillik' || bot.tipo === 'retaillik_sellout'
       ? await dispararGitHubWorkflow(bot)
       : await ejecutarApiRest(bot)
 
@@ -45,6 +45,12 @@ async function dispararGitHubWorkflow(bot: any): Promise<{ ok: boolean; mensaje:
   const workflow = WORKFLOW_MAP[bot.tipo]
   if (!workflow) return { ok: false, mensaje: `Sin workflow para tipo: ${bot.tipo}` }
 
+  // Construir inputs del workflow según el tipo de bot
+  const inputs: Record<string, string> = {}
+  if (bot.job_id) {
+    inputs.job_id_dvtas = bot.job_id
+  }
+
   const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${workflow}/dispatches`
   const res = await fetch(url, {
     method: 'POST',
@@ -53,7 +59,7 @@ async function dispararGitHubWorkflow(bot: any): Promise<{ ok: boolean; mensaje:
       'Accept':        'application/vnd.github+json',
       'Content-Type':  'application/json',
     },
-    body: JSON.stringify({ ref: 'main' }),
+    body: JSON.stringify({ ref: 'main', inputs }),
   })
 
   if (!res.ok) {
