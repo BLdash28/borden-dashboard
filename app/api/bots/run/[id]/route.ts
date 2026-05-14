@@ -6,8 +6,9 @@ export const dynamic = 'force-dynamic'
 const GITHUB_OWNER    = 'BLdash28'
 const GITHUB_REPO     = 'BotBorden'
 const WORKFLOW_MAP: Record<string, string> = {
-  retaillik:          'inventario_diario.yml',
-  retaillik_sellout:  'sellout_semanal.yml',
+  retaillik:           'inventario_diario.yml',
+  retaillik_sellout:   'sellout_semanal.yml',
+  retaillik_sellout_4w: 'sellout_semanal.yml',
 }
 
 export async function POST(_: NextRequest, { params }: { params: { id: string } }) {
@@ -17,7 +18,7 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
     const bot = rows[0]
     if (!bot.activo) return NextResponse.json({ error: 'Bot inactivo' }, { status: 400 })
 
-    const result = bot.tipo === 'retaillik' || bot.tipo === 'retaillik_sellout'
+    const result = bot.tipo === 'retaillik' || bot.tipo === 'retaillik_sellout' || bot.tipo === 'retaillik_sellout_4w'
       ? await dispararGitHubWorkflow(bot)
       : await ejecutarApiRest(bot)
 
@@ -49,6 +50,11 @@ async function dispararGitHubWorkflow(bot: any): Promise<{ ok: boolean; mensaje:
   const inputs: Record<string, string> = {}
   if (bot.job_id) {
     inputs.job_id_dvtas = bot.job_id
+  }
+  if (bot.tipo === 'retaillik_sellout_4w') {
+    inputs.mode = 'backfill'
+  } else if (bot.tipo === 'retaillik_sellout') {
+    inputs.mode = 'semanal'
   }
 
   const url = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/actions/workflows/${workflow}/dispatches`

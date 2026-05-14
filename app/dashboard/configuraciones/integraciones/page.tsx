@@ -4,7 +4,7 @@
   CREATE TABLE config_bots (
     id               BIGSERIAL PRIMARY KEY,
     nombre           VARCHAR NOT NULL,
-    tipo             VARCHAR NOT NULL CHECK (tipo IN ('api_rest', 'retaillik', 'retaillik_sellout')),
+    tipo             VARCHAR NOT NULL CHECK (tipo IN ('api_rest', 'retaillik', 'retaillik_sellout', 'retaillik_sellout_4w')),
     descripcion      TEXT,
     endpoint_url     VARCHAR,
     api_key          VARCHAR,
@@ -38,7 +38,7 @@ import { toast } from 'sonner'
 // Types
 // ---------------------------------------------------------------------------
 
-type BotTipo = 'api_rest' | 'retaillik' | 'retaillik_sellout'
+type BotTipo = 'api_rest' | 'retaillik' | 'retaillik_sellout' | 'retaillik_sellout_4w'
 type BotMetodo = 'GET' | 'POST'
 
 interface Bot {
@@ -382,7 +382,7 @@ export default function IntegracionesPage() {
   // Render
   // -------------------------------------------------------------------------
 
-  const isRetaillik = form.tipo === 'retaillik' || form.tipo === 'retaillik_sellout'
+  const isRetaillik = form.tipo === 'retaillik' || form.tipo === 'retaillik_sellout' || form.tipo === 'retaillik_sellout_4w'
   const isPost      = form.metodo === 'POST'
 
   return (
@@ -449,13 +449,17 @@ export default function IntegracionesPage() {
                           ? 'bg-blue-50 text-blue-700'
                           : bot.tipo === 'retaillik_sellout'
                             ? 'bg-green-50 text-green-700'
-                            : 'bg-purple-50 text-purple-700'
+                            : bot.tipo === 'retaillik_sellout_4w'
+                              ? 'bg-teal-50 text-teal-700'
+                              : 'bg-purple-50 text-purple-700'
                       }`}>
                         {bot.tipo === 'api_rest'
                           ? 'API REST'
                           : bot.tipo === 'retaillik_sellout'
-                            ? 'RL Sellout'
-                            : 'RL Inventario'}
+                            ? 'RL Sellout CW'
+                            : bot.tipo === 'retaillik_sellout_4w'
+                              ? 'RL Sellout 4W'
+                              : 'RL Inventario'}
                       </span>
                     </td>
 
@@ -615,7 +619,8 @@ export default function IntegracionesPage() {
                   >
                     <option value="api_rest">API REST Personalizada</option>
                     <option value="retaillik">RetailLink — Inventario</option>
-                    <option value="retaillik_sellout">RetailLink — Sellout</option>
+                    <option value="retaillik_sellout">RetailLink — Sellout Current Week</option>
+                    <option value="retaillik_sellout_4w">RetailLink — Sellout Last 4 Weeks</option>
                   </select>
                   <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
