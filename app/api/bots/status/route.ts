@@ -10,7 +10,7 @@ const WORKFLOW_TIPO: Record<string, string> = {
   'Unisuper Inventario':     'unisuper_inventario',
   'Unisuper Venta Diaria':   'unisuper_venta_diaria',
   'Unisuper Venta Mensual':  'unisuper_venta_mensual',
-  'OneDrive Excel':          'onedrive_excel',
+  'Colombia Sellout Semanal': 'onedrive_excel',
 }
 
 export async function POST(req: NextRequest) {
