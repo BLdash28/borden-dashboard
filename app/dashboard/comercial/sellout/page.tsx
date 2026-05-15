@@ -37,11 +37,13 @@ interface SelloutRow {
 type SortKey = 'ventas_valor' | 'ventas_unidades' | 'pct'
 interface SortState { key: SortKey; dir: 'asc' | 'desc' }
 
+const CURRENT_YEAR = String(new Date().getFullYear())
+
 export default function SelloutPage() {
   // Period state
   const [mesMap, setMesMap] = useState<Record<number, number[]>>({})
   const [anos, setAnos]     = useState<number[]>([])
-  const [fAnos, setFAnos]   = useState<string[]>([])
+  const [fAnos, setFAnos]   = useState<string[]>([CURRENT_YEAR])
   const [fMeses, setFMeses] = useState<string[]>([])
 
   // Hierarchical filter state
@@ -202,7 +204,7 @@ export default function SelloutPage() {
   }, [])
 
   useEffect(() => {
-    cargar([], [], [], [], [], [], '', 1)
+    cargar([CURRENT_YEAR], [], [], [], [], [], '', 1)
   }, [cargar])
 
   const triggerCargar = (
@@ -216,12 +218,12 @@ export default function SelloutPage() {
   }
 
   const limpiar = () => {
-    setFAnos([]); setFMeses([])
+    setFAnos([CURRENT_YEAR]); setFMeses([])
     setFPaises([]); setFCats([]); setFSubcats([])
     setFClientes([])
     setBuscar(''); setBuscarInput('')
     setPage(1)
-    cargar([], [], [], [], [], [], '', 1)
+    cargar([CURRENT_YEAR], [], [], [], [], [], '', 1)
   }
 
   // ── Sort logic ────────────────────────────────────────────────────────────
