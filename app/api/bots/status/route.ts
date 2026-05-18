@@ -15,11 +15,6 @@ const WORKFLOW_TIPO: Record<string, string> = {
 }
 
 export async function POST(req: NextRequest) {
-  const apiKey = process.env.DASHBOARD_API_KEY
-  if (!apiKey || req.headers.get('Authorization') !== `Bearer ${apiKey}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
   try {
     const { workflow, status, mensaje } = await req.json()
 
