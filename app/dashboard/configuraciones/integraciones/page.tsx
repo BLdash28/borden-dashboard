@@ -38,7 +38,7 @@ import { toast } from 'sonner'
 // Types
 // ---------------------------------------------------------------------------
 
-type BotTipo = 'api_rest' | 'retaillik' | 'retaillik_sellout' | 'retaillik_sellout_4w'
+type BotTipo = '' | 'api_rest' | 'retaillik' | 'retaillik_sellout' | 'retaillik_sellout_4w'
             | 'unisuper_inventario' | 'unisuper_venta_diaria' | 'unisuper_venta_mensual'
             | 'onedrive_excel' | 'selectos_inventario' | 'sellin_excel'
 type BotMetodo = 'GET' | 'POST'
@@ -69,7 +69,7 @@ type ModalMode = 'create' | 'edit' | null
 
 const EMPTY_FORM: Omit<Bot, 'id' | 'created_at' | 'updated_at'> = {
   nombre: '',
-  tipo: 'api_rest',
+  tipo: '',
   descripcion: '',
   endpoint_url: '',
   api_key: '',
@@ -350,6 +350,7 @@ export default function IntegracionesPage() {
 
   const handleSave = async () => {
     if (!form.nombre.trim()) { toast.error('El nombre es requerido'); return }
+    if (!form.tipo) { toast.error('Selecciona un tipo de bot'); return }
     setSaving(true)
     try {
       const payload: any = {
@@ -675,6 +676,7 @@ export default function IntegracionesPage() {
                     onChange={e => setField('tipo', e.target.value as BotTipo)}
                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 appearance-none pr-8"
                   >
+                    <option value="" disabled>— Selecciona un tipo —</option>
                     <option value="api_rest">API REST Personalizada</option>
                     <option value="retaillik">RetailLink — Inventario</option>
                     <option value="retaillik_sellout">RetailLink — Sellout Current Week</option>
@@ -689,6 +691,9 @@ export default function IntegracionesPage() {
                   <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
               </div>
+
+              {/* Campos adicionales — solo si se eligió un tipo */}
+              {form.tipo && (<>
 
               {/* RetailLink info box */}
               {isRetaillik && (
@@ -921,6 +926,8 @@ export default function IntegracionesPage() {
                   <p className="text-xs text-amber-600">{cronToHuman(form.cron_expresion)}</p>
                 )}
               </div>
+
+              </>)}
 
               {/* Activo toggle */}
               <div className="flex items-center gap-3">
