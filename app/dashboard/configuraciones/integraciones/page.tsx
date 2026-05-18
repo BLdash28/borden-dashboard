@@ -112,6 +112,28 @@ function cronToHuman(expr: string): string {
   return `Todos los días ${time}`.trim()
 }
 
+type Sched = { frecuencia: 'diario' | 'semanal' | 'mensual'; dias: number[]; diaMes: number; hora: string }
+
+function parseCronToSched(expr: string): Sched {
+  const def: Sched = { frecuencia: 'semanal', dias: [1], diaMes: 1, hora: '06:00' }
+  if (!expr?.trim()) return def
+  const [min, hour, dom, , dow] = expr.trim().split(/\s+/)
+  const hora = (hour !== '*' && min !== '*')
+    ? `${hour.padStart(2,'0')}:${min.padStart(2,'0')}` : '06:00'
+  if (dow && dow !== '*')
+    return { frecuencia: 'semanal', dias: dow.split(',').map(Number), diaMes: 1, hora }
+  if (dom && dom !== '*')
+    return { frecuencia: 'mensual', dias: [1], diaMes: parseInt(dom) || 1, hora }
+  return { frecuencia: 'diario', dias: [1], diaMes: 1, hora }
+}
+
+function buildCronFromSched(s: Sched): string {
+  const [h = '6', m = '0'] = s.hora.split(':')
+  if (s.frecuencia === 'diario')   return `${m} ${h} * * *`
+  if (s.frecuencia === 'semanal')  return `${m} ${h} * * ${[...s.dias].sort().join(',')}`
+  return `${m} ${h} ${s.diaMes} * *`
+}
+
 function getNextExecution(cronExpr?: string): string {
   if (!cronExpr) return '—'
   const human = cronToHuman(cronExpr)
@@ -162,6 +184,7 @@ export default function IntegracionesPage() {
   const [headersStr, setHeadersStr]   = useState('')
   const [bodyStr, setBodyStr]         = useState('')
   const [mapeoStr, setMapeoStr]       = useState('')
+  const [sched, setSched]             = useState<Sched>({ frecuencia: 'semanal', dias: [1], diaMes: 1, hora: '06:00' })
 
   // delete confirm
   const [deleteId, setDeleteId]   = useState<number | null>(null)
@@ -292,6 +315,7 @@ export default function IntegracionesPage() {
     setBodyStr('')
     setMapeoStr('')
     setShowApiKey(false)
+    setSched({ frecuencia: 'semanal', dias: [1], diaMes: 1, hora: '06:00' })
     setModal('create')
   }
 
@@ -316,6 +340,7 @@ export default function IntegracionesPage() {
     setBodyStr(jsonStringify(bot.body_template))
     setMapeoStr(jsonStringify(bot.mapeo_columnas))
     setShowApiKey(false)
+    setSched(parseCronToSched(bot.cron_expresion ?? ''))
     setModal('edit')
   }
 
@@ -399,7 +424,13 @@ export default function IntegracionesPage() {
   // -------------------------------------------------------------------------
 
   const isRetaillik = form.tipo === 'retaillik' || form.tipo === 'retaillik_sellout' || form.tipo === 'retaillik_sellout_4w'
+  const isApiRest   = form.tipo === 'api_rest'
   const isPost      = form.metodo === 'POST'
+
+  const updateSched = (next: Sched) => {
+    setSched(next)
+    setField('cron_expresion', buildCronFromSched(next))
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 space-y-6">
@@ -701,7 +732,8 @@ export default function IntegracionesPage() {
                 />
               </div>
 
-              {/* Endpoint URL */}
+              {/* ---- api_rest only fields ---- */}
+              {isApiRest && (
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Endpoint URL</label>
                 <input
@@ -712,8 +744,9 @@ export default function IntegracionesPage() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                 />
               </div>
+              )}
 
-              {/* API Key */}
+              {isApiRest && (
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">API Key</label>
                 <div className="relative">
@@ -739,9 +772,9 @@ export default function IntegracionesPage() {
                   </p>
                 )}
               </div>
+              )}
 
-              {/* ---- api_rest only fields ---- */}
-              {!isRetaillik && (
+              {isApiRest && (
                 <>
                   {/* Metodo */}
                   <div>
@@ -817,22 +850,75 @@ export default function IntegracionesPage() {
                 </>
               )}
 
-              {/* Cron expresión */}
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                  Cron Expression
-                </label>
-                <input
-                  type="text"
-                  value={form.cron_expresion}
-                  onChange={e => setField('cron_expresion', e.target.value)}
-                  placeholder="0 6 * * 1"
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-amber-400"
-                />
+              {/* Schedule picker */}
+              <div className="space-y-3">
+                <label className="block text-xs font-medium text-gray-700">Horario</label>
+
+                {/* Frecuencia tabs */}
+                <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                  {(['diario','semanal','mensual'] as const).map(f => (
+                    <button key={f} type="button"
+                      onClick={() => updateSched({ ...sched, frecuencia: f })}
+                      className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        sched.frecuencia === f
+                          ? 'bg-white text-amber-600 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {f.charAt(0).toUpperCase() + f.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Días de semana */}
+                {sched.frecuencia === 'semanal' && (
+                  <div className="flex gap-1">
+                    {['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'].map((d, i) => (
+                      <button key={i} type="button"
+                        onClick={() => {
+                          const dias = sched.dias.includes(i)
+                            ? sched.dias.filter(x => x !== i)
+                            : [...sched.dias, i]
+                          if (!dias.length) return
+                          updateSched({ ...sched, dias })
+                        }}
+                        className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          sched.dias.includes(i)
+                            ? 'bg-amber-500 text-white'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                      >
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Día del mes */}
+                {sched.frecuencia === 'mensual' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">Día del mes</span>
+                    <input type="number" min={1} max={28}
+                      value={sched.diaMes}
+                      onChange={e => updateSched({ ...sched, diaMes: parseInt(e.target.value) || 1 })}
+                      className="w-20 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
+                    />
+                  </div>
+                )}
+
+                {/* Hora */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Hora (UTC)</span>
+                  <input type="time"
+                    value={sched.hora}
+                    onChange={e => updateSched({ ...sched, hora: e.target.value })}
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+
+                {/* Preview */}
                 {form.cron_expresion && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    {cronToHuman(form.cron_expresion)}
-                  </p>
+                  <p className="text-xs text-amber-600">{cronToHuman(form.cron_expresion)}</p>
                 )}
               </div>
 
