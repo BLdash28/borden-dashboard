@@ -14,6 +14,7 @@ const WORKFLOW_MAP: Record<string, string> = {
   unisuper_venta_mensual:  'unisuper_venta_mensual.yml',
   onedrive_excel:          'onedrive_excel.yml',
   selectos_inventario:     'selectos_inventario.yml',
+  sellin_excel:            'sellin.yml',
 }
 
 export async function POST(_: NextRequest, { params }: { params: { id: string } }) {
@@ -25,7 +26,7 @@ export async function POST(_: NextRequest, { params }: { params: { id: string } 
 
     const isGitHub = ['retaillik','retaillik_sellout','retaillik_sellout_4w',
                       'unisuper_inventario','unisuper_venta_diaria','unisuper_venta_mensual',
-                      'onedrive_excel','selectos_inventario']
+                      'onedrive_excel','selectos_inventario','sellin_excel']
                       .includes(bot.tipo)
     const result = isGitHub
       ? await dispararGitHubWorkflow(bot)

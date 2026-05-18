@@ -40,7 +40,7 @@ import { toast } from 'sonner'
 
 type BotTipo = 'api_rest' | 'retaillik' | 'retaillik_sellout' | 'retaillik_sellout_4w'
             | 'unisuper_inventario' | 'unisuper_venta_diaria' | 'unisuper_venta_mensual'
-            | 'onedrive_excel' | 'selectos_inventario'
+            | 'onedrive_excel' | 'selectos_inventario' | 'sellin_excel'
 type BotMetodo = 'GET' | 'POST'
 
 interface Bot {
@@ -469,6 +469,7 @@ export default function IntegracionesPage() {
                         : bot.tipo === 'unisuper_venta_mensual' ? 'bg-yellow-50 text-yellow-700'
                         : bot.tipo === 'onedrive_excel'       ? 'bg-sky-50 text-sky-700'
                         : bot.tipo === 'selectos_inventario' ? 'bg-red-50 text-red-700'
+                        : bot.tipo === 'sellin_excel'        ? 'bg-green-50 text-green-700'
                         : 'bg-purple-50 text-purple-700'
                       }`}>
                         {bot.tipo === 'api_rest'                ? 'API REST'
@@ -479,6 +480,7 @@ export default function IntegracionesPage() {
                         : bot.tipo === 'unisuper_venta_mensual' ? 'UNI Venta Mes'
                         : bot.tipo === 'onedrive_excel'         ? 'OneDrive Excel'
                         : bot.tipo === 'selectos_inventario'   ? 'Selectos Inv.'
+                        : bot.tipo === 'sellin_excel'           ? 'Sell In Excel'
                         : 'RL Inventario'}
                       </span>
                     </td>
@@ -651,6 +653,7 @@ export default function IntegracionesPage() {
                     <option value="unisuper_venta_mensual">Unisuper — Venta Mensual</option>
                     <option value="onedrive_excel">OneDrive — Colombia Sellout</option>
                     <option value="selectos_inventario">Selectos — Inventario</option>
+                    <option value="sellin_excel">OneDrive — Sell In BLFoods</option>
                   </select>
                   <ChevronDown className="absolute right-2.5 top-2.5 w-4 h-4 text-gray-400 pointer-events-none" />
                 </div>
