@@ -50,6 +50,24 @@ function DeltaBadge({ delta, isPct = false }: { delta: number; isPct?: boolean }
   )
 }
 
+function LineMonthDividers(props: any) {
+  const xAxis = props.xAxisMap?.[0]
+  const yAxis = props.yAxisMap?.[0]
+  if (!xAxis?.scale) return null
+  const domain: string[] = xAxis.scale.domain?.() ?? []
+  const step: number = xAxis.scale.step?.() ?? 0
+  const mt = props.margin?.top ?? 0
+  const y2 = yAxis?.scale ? yAxis.scale(0) : (props.height ?? 0) - (props.margin?.bottom ?? 0)
+  return (
+    <g>
+      {domain.slice(0, -1).map((val: string) => {
+        const x = (xAxis.scale(val) ?? 0) + step / 2
+        return <line key={val} x1={x} x2={x} y1={mt} y2={y2} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" />
+      })}
+    </g>
+  )
+}
+
 function MonthDividers(props: any) {
   const xAxis = props.xAxisMap?.[0]
   const yAxis = props.yAxisMap?.[0]
@@ -283,6 +301,7 @@ export default function SellInResumen() {
                 <Line type="monotone" dataKey="2025"       name="2025"            stroke={COLORS[2025]}      strokeWidth={2} dot={false} connectNulls={false} />
                 <Line type="monotone" dataKey="proyeccion" name="Proyección 2026"  stroke={COLORS.proyeccion} strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="5 3" />
                 <Line type="monotone" dataKey="2026"       name="2026"            stroke={COLORS[2026]}      strokeWidth={2} dot={false} connectNulls={false} />
+                <Customized component={LineMonthDividers} />
               </LineChart>
             </ResponsiveContainer>
           )
