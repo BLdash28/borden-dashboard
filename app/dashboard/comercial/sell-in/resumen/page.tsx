@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, RefreshCw, Pencil, Save, X } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Customized,
@@ -98,6 +98,11 @@ export default function SellInResumen() {
   const [ytd,     setYtd]     = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
+  const [metas,     setMetas]     = useState<number[]>(Array(12).fill(0))
+  const [editando,  setEditando]  = useState(false)
+  const [editVals,  setEditVals]  = useState<string[]>(Array(12).fill(''))
+  const [guardando, setGuardando] = useState(false)
+
   const cargar = useCallback(async (a: number, ps: string[], cs: string[], ts: string[]) => {
     setLoading(true)
     try {
@@ -118,7 +123,27 @@ export default function SellInResumen() {
     } finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { cargar(ano, paises, cats, tipos) }, [cargar, ano, paises, cats, tipos])
+  const cargarMetas = useCallback(async (a: number) => {
+    const r = await fetch(`/api/comercial/sell-in/metas?ano=${a}`)
+    if (!r.ok) return
+    const { metas: m } = await r.json()
+    setMetas(m)
+    setEditVals(m.map((v: number) => v > 0 ? String(v) : ''))
+  }, [])
+
+  const guardarMetas = async () => {
+    setGuardando(true)
+    const vals = editVals.map(v => parseFloat(v.replace(/,/g, '')) || 0)
+    const r = await fetch('/api/comercial/sell-in/metas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ano, metas: vals }),
+    })
+    if (r.ok) { setMetas(vals); setEditando(false) }
+    setGuardando(false)
+  }
+
+  useEffect(() => { cargar(ano, paises, cats, tipos); cargarMetas(ano) }, [cargar, cargarMetas, ano, paises, cats, tipos])
 
   const handlePaisChange = (ps: string[]) => {
     setPaises(ps)
@@ -152,6 +177,25 @@ export default function SellInResumen() {
     const ceiling = Math.ceil(max * 1.05 / step) * step
     const ticks  = Array.from({ length: Math.floor(ceiling / step) + 1 }, (_, i) => i * step)
     return { ytdYMax: ceiling, ytdTicks: ticks }
+  })()
+
+  const metasData = Array.from({ length: 12 }, (_, i) => ({
+    mes:  MESES[i + 1],
+    real: ytdData[i]['2026'] ?? null,
+    meta: metas[i] > 0 ? metas[i] : null,
+  }))
+
+  const { metasYMax, metasTicks } = (() => {
+    let max = 0
+    for (const d of metasData) {
+      if (d.real != null) max = Math.max(max, d.real)
+      if (d.meta != null) max = Math.max(max, d.meta)
+    }
+    if (max === 0) return { metasYMax: undefined, metasTicks: undefined }
+    const step    = 500_000
+    const ceiling = Math.ceil(max * 1.1 / step) * step
+    const ticks   = Array.from({ length: Math.floor(ceiling / step) + 1 }, (_, i) => i * step)
+    return { metasYMax: ceiling, metasTicks: ticks }
   })()
 
   const kpiCards = kpi ? [
@@ -306,6 +350,97 @@ export default function SellInResumen() {
             </ResponsiveContainer>
           )
         }
+      </div>
+
+      {/* Gráfico: Venta Acumulada Proyectada */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+        <div className="flex items-start justify-between mb-1">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700">Venta Acumulada Proyectada</h3>
+            <p className="text-xs text-gray-400 mb-4">Real 2026 vs meta mensual acumulada</p>
+          </div>
+          {!editando ? (
+            <button onClick={() => setEditando(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+              <Pencil size={11} /> Editar metas
+            </button>
+          ) : (
+            <div className="flex gap-2">
+              <button onClick={() => { setEditando(false); setEditVals(metas.map(v => v > 0 ? String(v) : '')) }}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
+                <X size={11} /> Cancelar
+              </button>
+              <button onClick={guardarMetas} disabled={guardando}
+                className="flex items-center gap-1 px-3 py-1.5 text-xs text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-50">
+                <Save size={11} /> {guardando ? 'Guardando...' : 'Guardar'}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {loading
+          ? <div className="h-64 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
+          : (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={metasData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                <YAxis
+                  tickFormatter={v => v >= 1_000_000 ? '$' + (v / 1_000_000).toFixed(1) + 'M' : '$' + (v / 1_000).toFixed(0) + 'K'}
+                  tick={{ fontSize: 11 }}
+                  width={60}
+                  domain={[0, metasYMax ?? 'auto']}
+                  ticks={metasTicks}
+                />
+                <Tooltip content={({ active, payload, label }) => {
+                  if (!active || !payload?.length) return null
+                  const real = payload.find(p => p.dataKey === 'real')?.value as number | null
+                  const meta = payload.find(p => p.dataKey === 'meta')?.value as number | null
+                  const pct  = real && meta && meta > 0 ? (real / meta) * 100 : null
+                  return (
+                    <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs">
+                      <p className="font-semibold text-gray-700 mb-1">{MESES_FULL[MESES.indexOf(label)] ?? label}</p>
+                      {payload.map((p: any) => (
+                        <p key={p.dataKey} style={{ color: p.stroke }} className="leading-5">
+                          {p.name}: {p.value != null ? fmtFull(p.value) : '—'}
+                        </p>
+                      ))}
+                      {pct != null && (
+                        <p className={`mt-1 font-semibold ${pct >= 100 ? 'text-green-600' : 'text-red-500'}`}>
+                          Avance: {pct.toFixed(1)}%
+                        </p>
+                      )}
+                    </div>
+                  )
+                }} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Line type="monotone" dataKey="real" name="Real 2026" stroke={COLORS[2026]} strokeWidth={2} dot={false} connectNulls={false} />
+                <Line type="monotone" dataKey="meta" name="Meta"      stroke="#10b981"       strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="5 3" />
+                <Customized component={LineMonthDividers} />
+              </LineChart>
+            </ResponsiveContainer>
+          )
+        }
+
+        {editando && (
+          <div className="mt-4 border-t pt-4">
+            <p className="text-xs text-gray-400 mb-3">Meta acumulada por mes (USD) — ingresa el total acumulado hasta cada mes</p>
+            <div className="grid grid-cols-6 sm:grid-cols-12 gap-2">
+              {MESES.slice(1).map((mes, i) => (
+                <div key={mes} className="flex flex-col gap-1">
+                  <label className="text-[10px] text-center text-gray-400 font-medium">{mes}</label>
+                  <input
+                    type="text"
+                    value={editVals[i]}
+                    onChange={e => { const v = [...editVals]; v[i] = e.target.value; setEditVals(v) }}
+                    placeholder="0"
+                    className="w-full text-center text-xs px-1 py-1.5 border border-gray-200 rounded-md outline-none focus:border-amber-400"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
