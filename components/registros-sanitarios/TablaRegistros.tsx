@@ -370,6 +370,13 @@ export default function TablaRegistros({ registros, loading, isAdmin, dimProduct
                             </span>
                             <span style={{ color: 'var(--t3)' }}>SKU:</span>
                             <span className="font-mono font-medium" style={{ color: 'var(--t1)' }}>{match.sku}</span>
+                            {match.codigo_barras && (
+                              <>
+                                <span style={{ color: 'var(--border)' }}>·</span>
+                                <span style={{ color: 'var(--t3)' }}>EAN:</span>
+                                <span className="font-mono font-medium" style={{ color: 'var(--t1)' }}>{match.codigo_barras}</span>
+                              </>
+                            )}
                             <span style={{ color: 'var(--border)' }}>·</span>
                             <span style={{ color: 'var(--t1)' }}>{match.descripcion}</span>
                             {match.categoria && (
