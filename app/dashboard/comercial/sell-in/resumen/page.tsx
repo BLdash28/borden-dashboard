@@ -60,8 +60,8 @@ function LineMonthDividers(props: any) {
   const y2 = yAxis?.scale ? yAxis.scale(0) : (props.height ?? 0) - (props.margin?.bottom ?? 0)
   return (
     <g>
-      {domain.slice(0, -1).map((val: string) => {
-        const x = (xAxis.scale(val) ?? 0) + step / 2
+      {domain.map((val: string) => {
+        const x = xAxis.scale(val) ?? 0
         return <line key={val} x1={x} x2={x} y1={mt} y2={y2} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 3" />
       })}
     </g>
