@@ -69,9 +69,11 @@ export default function MultiSelect({
 
   return (
     <div className="relative" ref={ref}>
-      <div className="text-[10px] uppercase tracking-widest font-medium mb-1.5" style={{ color: 'var(--t3)' }}>
-        {label}
-      </div>
+      {label && (
+        <div className="text-[10px] uppercase tracking-widest font-medium mb-1.5" style={{ color: 'var(--t3)' }}>
+          {label}
+        </div>
+      )}
       <button
         ref={btnRef}
         onClick={handleOpen}
