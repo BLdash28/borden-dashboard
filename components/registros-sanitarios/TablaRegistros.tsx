@@ -286,8 +286,8 @@ export default function TablaRegistros({ registros, loading, isAdmin, dimProduct
                         </span>
                         {(r.ean || r.cod_dfa) && (
                           match
-                            ? <CheckCircle size={10} style={{ color: '#2a7a58', flexShrink: 0 }} title={`Match vía ${result?.via === 'dfa' ? 'COD DFA' : 'EAN'}`} />
-                            : <AlertCircle size={10} style={{ color: '#ef4444', flexShrink: 0 }} title="Sin match en dim_producto" />
+                            ? <CheckCircle size={10} style={{ color: '#2a7a58', flexShrink: 0 }} />
+                            : <AlertCircle size={10} style={{ color: '#ef4444', flexShrink: 0 }} />
                         )}
                       </div>
                     </td>
