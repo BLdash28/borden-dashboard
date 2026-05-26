@@ -74,11 +74,11 @@ export async function GET(req: NextRequest) {
       pool.query(
         `SELECT ROUND(SUM(ventas_valor)::numeric, 2) AS total_valor,
                 ROUND(SUM(ventas_unidades)::numeric, 0) AS total_unidades
-         FROM fact_sales_sellout ${where}`,
+         FROM v_ventas ${where}`,
         params
       ),
       pool.query(
-        `SELECT COUNT(*) AS total FROM fact_sales_sellout ${where}`,
+        `SELECT COUNT(*) AS total FROM v_ventas ${where}`,
         params
       ),
       pool.query(
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
                 subcategoria,
                 ROUND(ventas_unidades::numeric, 0) AS ventas_unidades,
                 ROUND(ventas_valor::numeric, 2)    AS ventas_valor
-         FROM fact_sales_sellout ${where}
+         FROM v_ventas ${where}
          ORDER BY ano DESC, mes DESC, dia DESC, ventas_valor DESC
          LIMIT $${idx} OFFSET $${idx + 1}`,
         [...params, pageSize, offset]

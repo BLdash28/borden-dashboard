@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
     const where = conds.join(' AND ')
 
     // ── Full response cache (5 min TTL) ─────────────────────────
-    const cacheKey = `resumen-v7:${new URL(req.url).searchParams.toString()}`
+    const cacheKey = `resumen-v8:${new URL(req.url).searchParams.toString()}`
     const { data: result } = await withCache(
       cacheKey,
       async () => {
@@ -158,7 +158,7 @@ export async function GET(req: NextRequest) {
                       EXTRACT(WEEK FROM make_date(ano::int, mes::int, GREATEST(dia::int,1)))::int AS semana,
                       ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor,
                       ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
-               FROM fact_sales_sellout WHERE ${where} AND dia > 0
+               FROM v_ventas WHERE ${where} AND dia > 0
                GROUP BY dia, semana ORDER BY dia`, params)
               .catch(() => ({ rows: [] as any[] }))
           : Promise.resolve({ rows: [] as any[] })
