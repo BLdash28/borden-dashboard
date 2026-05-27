@@ -140,12 +140,12 @@ export default function SellOutYTD() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-6">
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Sell Out</p>
-          <h1 className="text-2xl font-bold text-gray-800">YTD y Variaciones</h1>
-          <p className="text-sm text-gray-400 mt-0.5">2025 vs 2026 · Año completo</p>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800">YTD y Variaciones</h1>
+          <p className="text-xs md:text-sm text-gray-400 mt-0.5">2025 vs 2026 · Año completo</p>
         </div>
         <div className="flex gap-2">
           <button onClick={cargar}
@@ -174,7 +174,7 @@ export default function SellOutYTD() {
           </div>
           <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
         </div>
-        <div className="flex items-center gap-4 mt-3 text-[11px]">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px]">
           <span className="text-gray-400">Variación:</span>
           <span className="text-green-600 font-semibold">● &gt;+5% Bueno</span>
           <span className="text-amber-600 font-semibold">● −5% a +5% Neutral</span>

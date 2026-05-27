@@ -192,15 +192,15 @@ export default function TendenciasPage() {
   const data = tab === 'tendencias' ? puntos : varData
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5">
       {/* Header */}
       <div>
         <p className="text-xs text-gray-400 uppercase tracking-widest">Sell Out</p>
-        <h1 className="text-2xl font-bold text-gray-800">Tendencias</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-800">Tendencias</h1>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-0 border-b border-gray-200">
+      <div className="flex items-center gap-0 border-b border-gray-200 overflow-x-auto">
         {(['tendencias', 'variaciones', 'evolucion'] as const).map(t => (
           <button key={t} onClick={() => setTab(t)}
             className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
@@ -233,12 +233,13 @@ export default function TendenciasPage() {
           ? (
             <div className="space-y-5">
               {/* Mensual */}
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                <h3 className="text-sm font-semibold text-gray-700 mb-4">Venta Neta Mensual — 2024 / 2025 / 2026</h3>
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
+                <h3 className="text-xs md:text-sm font-semibold text-gray-700 mb-3 md:mb-4">Venta Neta Mensual — 2024 / 2025 / 2026</h3>
                 {mensual.length === 0
-                  ? <div className="h-52 flex items-center justify-center text-gray-400 text-sm">Sin datos.</div>
+                  ? <div className="h-40 md:h-52 flex items-center justify-center text-gray-400 text-sm">Sin datos.</div>
                   : (
-                    <ResponsiveContainer width="100%" height={220}>
+                    <div className="h-[160px] md:h-[220px]">
+                    <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={mensual} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barCategoryGap="30%">
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                         <XAxis dataKey="mes_label" tick={{ fontSize: 11 }} />
@@ -256,18 +257,20 @@ export default function TendenciasPage() {
                         <Customized component={MonthDividers} />
                       </BarChart>
                     </ResponsiveContainer>
+                    </div>
                   )
                 }
               </div>
 
               {/* YTD acumulado */}
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                <h3 className="text-sm font-semibold text-gray-700 mb-1">Venta Acumulada</h3>
-                <p className="text-xs text-gray-400 mb-4">Suma corrida mes a mes</p>
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
+                <h3 className="text-xs md:text-sm font-semibold text-gray-700 mb-0.5 md:mb-1">Venta Acumulada</h3>
+                <p className="text-xs text-gray-400 mb-3 md:mb-4">Suma corrida mes a mes</p>
                 {ytdData.length === 0
-                  ? <div className="h-80 flex items-center justify-center text-gray-400 text-sm">Sin datos.</div>
+                  ? <div className="h-52 md:h-80 flex items-center justify-center text-gray-400 text-sm">Sin datos.</div>
                   : (
-                    <ResponsiveContainer width="100%" height={360}>
+                    <div className="h-[220px] md:h-[360px]">
+                    <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={ytdData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                         <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
@@ -306,6 +309,7 @@ export default function TendenciasPage() {
                         <Customized component={LineMonthDividers} />
                       </LineChart>
                     </ResponsiveContainer>
+                    </div>
                   )
                 }
               </div>
@@ -314,13 +318,14 @@ export default function TendenciasPage() {
           : data.length === 0
             ? <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 h-80 flex items-center justify-center text-gray-400 text-sm">Sin datos disponibles.</div>
             : (
-              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
                 {tab === 'tendencias'
                   ? (
                     <>
-                      <p className="text-sm text-gray-500 mb-4">
+                      <p className="text-xs md:text-sm text-gray-500 mb-3 md:mb-4">
                         Tendencia en Usd al día: {new Date().toLocaleDateString('es-CR', { day:'2-digit', month:'short' }).replace(' ','/').replace('.','')}</p>
-                      <ResponsiveContainer width="100%" height={420}>
+                      <div className="h-[260px] md:h-[420px]">
+                      <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={puntos} margin={{ top: 28, right: 30, left: 10, bottom: 5 }} barGap={4}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                           <XAxis dataKey="mes_label" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
@@ -342,12 +347,14 @@ export default function TendenciasPage() {
                           </Bar>
                         </ComposedChart>
                       </ResponsiveContainer>
+                      </div>
                     </>
                   )
                   : (
                     <>
-                      <p className="text-sm text-gray-500 mb-4">Variación mes a mes (%)</p>
-                      <ResponsiveContainer width="100%" height={420}>
+                      <p className="text-xs md:text-sm text-gray-500 mb-3 md:mb-4">Variación mes a mes (%)</p>
+                      <div className="h-[260px] md:h-[420px]">
+                      <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={varData.slice(1)} margin={{ top: 28, right: 30, left: 10, bottom: 5 }} barGap={4}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
                           <XAxis dataKey="mes_label" tick={{ fontSize: 11, fill: '#6b7280' }} axisLine={false} tickLine={false} />
@@ -366,6 +373,7 @@ export default function TendenciasPage() {
                           </Bar>
                         </ComposedChart>
                       </ResponsiveContainer>
+                      </div>
                     </>
                   )
                 }

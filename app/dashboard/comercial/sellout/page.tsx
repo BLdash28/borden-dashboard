@@ -318,13 +318,13 @@ export default function SelloutPage() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-6">
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Ventas</p>
-          <h1 className="text-2xl font-bold text-gray-800">Ventas Sellout</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800">Ventas Sellout</h1>
         </div>
         <div className="flex items-center gap-2">
           {isSuperadmin && (
@@ -498,19 +498,19 @@ export default function SelloutPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-amber-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Ventas Totales USD</p>
-          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : fmtFull(kpi?.total_valor ?? 0)}</p>
+      <div className="grid grid-cols-2 gap-3 md:gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 border-l-4 border-l-amber-500">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1 md:mb-2">Ventas Totales USD</p>
+          <p className="text-xl md:text-2xl font-bold text-gray-800 break-all">{loading ? '...' : fmtFull(kpi?.total_valor ?? 0)}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-blue-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Unidades Totales</p>
-          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : Math.round(kpi?.total_unidades ?? 0).toLocaleString('en-US')}</p>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 border-l-4 border-l-blue-500">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1 md:mb-2">Unidades Totales</p>
+          <p className="text-xl md:text-2xl font-bold text-gray-800">{loading ? '...' : Math.round(kpi?.total_unidades ?? 0).toLocaleString('en-US')}</p>
         </div>
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={() => setDetalleExpanded(v => !v)}

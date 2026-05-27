@@ -161,7 +161,7 @@ export default function SellInResumen() {
   const kpiCards = kpi ? [
     { label: 'Venta Neta YTD',    value: '$' + kpi.ingresos.valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.ingresos.delta, icon: '💰', sub: null },
     { label: 'Utilidad Bruta YTD', value: '$' + kpi.margen.valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.margen.delta, icon: '💵', sub: null },
-    { label: 'Margen Promedio YTD', value: kpi.margen_pct.toFixed(1) + '%', delta: kpi.margen_pct_delta, icon: '📊', sub: null, isPct: true },
+    { label: 'Margen Bruto Prom. YTD', value: kpi.margen_pct.toFixed(1) + '%', delta: kpi.margen_pct_delta, icon: '📊', sub: null, isPct: true },
     { label: 'Cajas YTD',          value: Math.round(kpi.cajas.valor).toLocaleString('en-US'), delta: kpi.cajas.delta, icon: '📦', sub: null },
   ] : []
 

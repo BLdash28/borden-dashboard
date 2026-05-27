@@ -278,16 +278,16 @@ function ProyeccionInner() {
     [fAno.join(', '), fMes.length ? fMes.map(m => MES_LABELS[Number(m)]).join(', ') : ''].filter(Boolean).join(' — ')
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-6">
       {/* Encabezado */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Proyección</h1>
-        <p className="text-sm text-gray-500 mt-0.5">{titulo}</p>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900">Proyección</h1>
+        <p className="text-xs md:text-sm text-gray-500 mt-0.5">{titulo}</p>
       </div>
 
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 md:gap-3">
           <FiltroMulti
             label="Año"
             options={anos.map(a => ({ value: String(a) }))}
@@ -350,24 +350,24 @@ function ProyeccionInner() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-sm font-semibold text-gray-500 mb-2">Total Proyectado 2026</p>
-          <p className="text-2xl font-bold text-gray-900">{fmt(kpis.proy)}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
+          <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">Total Proyectado 2026</p>
+          <p className="text-lg md:text-2xl font-bold text-gray-900 break-all">{fmt(kpis.proy)}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-sm font-semibold text-gray-500 mb-2">Total Real YTD</p>
-          <p className="text-2xl font-bold text-gray-900">{fmt(kpis.real)}</p>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
+          <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">Total Real YTD</p>
+          <p className="text-lg md:text-2xl font-bold text-gray-900 break-all">{fmt(kpis.real)}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-sm font-semibold text-gray-500 mb-2">Diferencia USD YTG</p>
-          <p className={`text-2xl font-bold ${kpis.dif >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
+          <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">Diferencia USD YTG</p>
+          <p className={`text-lg md:text-2xl font-bold break-all ${kpis.dif >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {fmtDiff(kpis.dif)}
           </p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-sm font-semibold text-gray-500 mb-2">% Cumplimiento</p>
-          <div className="text-2xl font-bold">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
+          <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">% Cumplimiento</p>
+          <div className="text-lg md:text-2xl font-bold">
             {kpis.pct === null
               ? <span className="text-gray-400 text-xs">—</span>
               : <span className={kpis.pct >= (kpis.facing ?? 0) ? 'text-green-600' : 'text-red-600'}>
@@ -376,12 +376,12 @@ function ProyeccionInner() {
             }
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <p className="text-sm font-semibold text-gray-500 mb-1">Facing</p>
-          <p className="text-xs text-gray-400 mb-2">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 col-span-2 sm:col-span-1">
+          <p className="text-xs font-semibold text-gray-500 mb-0.5 md:mb-1 leading-tight">Facing</p>
+          <p className="text-[10px] text-gray-400 mb-1 md:mb-2">
             Proy. hasta {kpis.ultimoMes > 0 ? MES_LABELS[kpis.ultimoMes] : '—'} / total anual
           </p>
-          <div className="text-2xl font-bold">
+          <div className="text-lg md:text-2xl font-bold">
             {kpis.facing !== null
               ? <span className="text-blue-600">{kpis.facing}%</span>
               : <span className="text-gray-400 text-xs">—</span>
@@ -392,9 +392,10 @@ function ProyeccionInner() {
 
       {/* Gráfico */}
       {chartData.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-4">Proyectado vs Real por Mes</h2>
-          <ResponsiveContainer width="100%" height={320}>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
+          <h2 className="text-xs md:text-sm font-semibold text-gray-700 mb-3 md:mb-4">Proyectado vs Real por Mes</h2>
+          <div className="h-[200px] md:h-[320px]">
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
               <XAxis dataKey="mes_label" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
@@ -408,12 +409,13 @@ function ProyeccionInner() {
               <Bar dataKey="real"       name="Real"       fill="#2a7a58" radius={[3, 3, 0, 0]} maxBarSize={40} />
             </BarChart>
           </ResponsiveContainer>
+          </div>
         </div>
       )}
 
       {/* Tabla */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-gray-100">
+        <div className="px-3 md:px-5 py-3 md:py-4 border-b border-gray-100">
           <h2 className="text-sm font-semibold text-gray-700">Detalle</h2>
         </div>
 
