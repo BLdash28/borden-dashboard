@@ -9,34 +9,46 @@ import {
   BarChart2, TrendingUp, ShoppingCart, ArrowUpRight, Target,
   Package, Globe2, Tag, Store, ShoppingBag,
   FileText, LogOut, ChevronDown, ChevronRight, FileCheck, Settings, Shield,
-  Truck, Box, Megaphone, Share2, DollarSign, CreditCard, Scale, PieChart, MapPin,
+  Box, Megaphone, Share2, DollarSign, CreditCard, Scale, PieChart, Zap, MapPin,
+  Activity, Layers, Search, AlertTriangle, List, Bell,
 } from 'lucide-react'
 
 const MENUS: Record<string, { section: string; items: { href: string; icon: any; label: string }[] }[]> = {
   comercial: [
     {
-      section: 'Vistas',
+      section: 'Sell In',
       items: [
-        { href: '/resumen',        icon: BarChart2,    label: 'Resumen Ejecutivo'    },
-        { href: '/ventas-pais',    icon: Globe2,       label: 'Ventas Diarias x País' },
-        { href: '/sellout',        icon: ShoppingCart, label: 'Ventas Sellout'       },
-        { href: '/crecimientos',   icon: ArrowUpRight, label: 'Crecimientos YTD'     },
-        { href: '/cumplimiento',   icon: Target,       label: 'Cumplimiento'         },
-        { href: '/doh',            icon: Package,      label: 'Inventarios DOH'      },
-        { href: '/coberturas',     icon: TrendingUp,   label: 'Coberturas'           },
-        { href: '/visto-colombia', icon: MapPin,       label: 'Colombia'             },
-        { href: '/sell-in',        icon: ShoppingCart, label: 'Ventas Sell In'       },
+        { href: '/sell-in/resumen',        icon: BarChart2,    label: 'Resumen Ejecutivo'   },
+        { href: '/proyeccion',             icon: TrendingUp,   label: 'Proyección'          },
+        { href: '/sell-in/variaciones',    icon: ArrowUpRight, label: 'YTD y Variaciones'   },
+        { href: '/sell-in',                icon: ShoppingCart, label: 'Detalle por SKU'     },
+        { href: '/sell-in/licenciamiento', icon: Tag,          label: 'Licenciamiento'      },
       ],
     },
     {
-      section: 'Dimensiones',
+      section: 'Sell Out',
       items: [
-        { href: '/productos',  icon: Package,    label: 'Productos'  },
-        { href: '/proyeccion', icon: TrendingUp, label: 'Proyección' },
-        { href: '/ofertas',    icon: Tag,        label: 'Ofertas'    },
+        { href: '/resumen',            icon: BarChart2,    label: 'Resumen Ejecutivo'  },
+        { href: '/sellout/tendencias', icon: TrendingUp,   label: 'Tendencias'         },
+        { href: '/sellout',            icon: ShoppingCart, label: 'Detalle por SKU'    },
+        { href: '/sellout/ytd',        icon: ArrowUpRight, label: 'YTD y Variaciones'  },
       ],
     },
-    { section: 'Reportes', items: [{ href: '/reportes', icon: FileText, label: 'Reportes' }] },
+    {
+      section: 'Ejecución',
+      items: [
+        { href: '/ejecucion',               icon: Activity,      label: 'Panel General'        },
+        { href: '/ejecucion/crecimiento',   icon: TrendingUp,    label: 'Crecimiento SKU'      },
+        { href: '/ejecucion/distribucion',  icon: Layers,        label: 'Distribución 75%'     },
+        { href: '/ejecucion/cobertura',     icon: MapPin,        label: 'Cobertura PDV'        },
+        { href: '/ejecucion/inventario',    icon: Package,       label: 'Inventario CEDI+PDV'  },
+        { href: '/ejecucion/precio',        icon: Tag,           label: 'Precio / Elasticidad' },
+        { href: '/ejecucion/punto-reorden', icon: AlertTriangle, label: 'Punto de Reorden'     },
+        { href: '/ejecucion/cola',          icon: List,          label: 'Long Tail 50%'        },
+        { href: '/ejecucion/som',           icon: PieChart,      label: 'Share of Market'      },
+        { href: '/ejecucion/forecast',      icon: TrendingUp,    label: 'Forecast'             },
+      ],
+    },
   ],
   mercadeo: [
     {
@@ -58,8 +70,8 @@ const MENUS: Record<string, { section: string; items: { href: string; icon: any;
     {
       section: 'Módulos',
       items: [
-        { href: '/campanas',    icon: Megaphone,  label: 'Campañas'           },
-        { href: '/share-voice', icon: Share2,     label: 'Share of Voice'     },
+        { href: '/campanas',    icon: Megaphone,  label: 'Campañas'            },
+        { href: '/share-voice', icon: Share2,     label: 'Share of Voice'      },
         { href: '/digital',     icon: TrendingUp, label: 'Rendimiento Digital' },
       ],
     },
@@ -72,7 +84,7 @@ const MENUS: Record<string, { section: string; items: { href: string; icon: any;
     {
       section: 'Logística',
       items: [
-        { href: '/logistica/inventario-pt',       icon: Package, label: 'Inventario PT Borden'        },
+        { href: '/logistica/inventario-pt', icon: Package, label: 'Inventario PT Borden' },
       ],
     },
     {
@@ -87,7 +99,12 @@ const MENUS: Record<string, { section: string; items: { href: string; icon: any;
     },
   ],
   finanzas: [
-    { section: 'Vistas', items: [{ href: '/resumen', icon: BarChart2, label: 'Resumen Ejecutivo' }] },
+    {
+      section: 'Vistas',
+      items: [
+        { href: '/resumen', icon: BarChart2, label: 'Resumen Ejecutivo' },
+      ],
+    },
     {
       section: 'Módulos',
       items: [
@@ -116,10 +133,8 @@ export default function MobileNav({ profile }: { profile?: any }) {
   const router = useRouter()
   const supabase = createClient()
 
-  // Close drawer on route change
   useEffect(() => { setOpen(false) }, [pathname])
 
-  // Prevent body scroll when open
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : ''
     return () => { document.body.style.overflow = '' }
@@ -144,7 +159,7 @@ export default function MobileNav({ profile }: { profile?: any }) {
 
   return (
     <>
-      {/* Hamburger button — visible only on mobile */}
+      {/* Hamburger button */}
       <button
         onClick={() => setOpen(true)}
         className="lg:hidden flex items-center justify-center w-11 h-11 rounded-lg transition-colors active:scale-95"
@@ -276,6 +291,22 @@ export default function MobileNav({ profile }: { profile?: any }) {
                 className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2.5 rounded-lg"
               >
                 <Settings size={16} /> Configuración
+              </Link>
+            )}
+            {profile?.role === 'superadmin' && (
+              <Link
+                href="/dashboard/configuraciones/integraciones"
+                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2.5 rounded-lg"
+              >
+                <Zap size={16} /> Integraciones
+              </Link>
+            )}
+            {profile?.role === 'superadmin' && (
+              <Link
+                href="/dashboard/configuraciones/alertas"
+                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2.5 rounded-lg"
+              >
+                <Bell size={16} /> Alertas
               </Link>
             )}
             <Link
