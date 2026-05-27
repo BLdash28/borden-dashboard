@@ -1,0 +1,135 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { pool } from '@/lib/db/pool'
+import { handleApiError } from '@/lib/api/errors'
+
+export const revalidate = 300
+
+const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
+export async function GET(req: NextRequest) {
+  try {
+    const pais     = req.nextUrl.searchParams.get('pais') ?? 'CR'
+    const categoria = req.nextUrl.searchParams.get('categoria') ?? ''
+    const catFilter = categoria ? `AND categoria = '${categoria.replace(/'/g,"''")}'` : ''
+    const paisSafe  = pais.replace(/'/g,"''")
+
+    const [ytdR, cadenaR, catR, monthlyR] = await Promise.all([
+      // YTD 2026 vs same-period 2025
+      pool.query(`
+        WITH cur AS (
+          SELECT
+            SUM(ventas_valor)    AS valor,
+            SUM(ventas_unidades) AS unidades,
+            MAX(fecha)           AS ultima_fecha
+          FROM fact_ventas_walmart
+          WHERE pais = '${paisSafe}'
+            AND EXTRACT(YEAR FROM fecha) = 2026
+            ${catFilter}
+        ),
+        prev AS (
+          SELECT
+            SUM(ventas_valor)    AS valor,
+            SUM(ventas_unidades) AS unidades
+          FROM fact_ventas_walmart
+          WHERE pais = '${paisSafe}'
+            AND EXTRACT(YEAR FROM fecha) = 2025
+            AND EXTRACT(MONTH FROM fecha) <= (
+              SELECT COALESCE(MAX(EXTRACT(MONTH FROM fecha)), 12)
+              FROM fact_ventas_walmart
+              WHERE pais = '${paisSafe}' AND EXTRACT(YEAR FROM fecha) = 2026
+            )
+            ${catFilter}
+        )
+        SELECT
+          COALESCE(cur.valor, 0)            AS ytd_2026,
+          COALESCE(cur.unidades, 0)         AS uni_2026,
+          COALESCE(prev.valor, 0)           AS ytd_2025,
+          COALESCE(prev.unidades, 0)        AS uni_2025,
+          cur.ultima_fecha,
+          CASE WHEN COALESCE(prev.valor,0) > 0
+               THEN ROUND(((cur.valor - prev.valor) / prev.valor * 100)::numeric, 1)
+               ELSE NULL END                AS delta_ytd,
+          (SELECT MAX(EXTRACT(MONTH FROM fecha))::int
+           FROM fact_ventas_walmart
+           WHERE pais = '${paisSafe}' AND EXTRACT(YEAR FROM fecha) = 2026 ${catFilter}
+          )                                  AS ultimo_mes
+        FROM cur, prev
+      `),
+      // By cadena
+      pool.query(`
+        SELECT cadena,
+          SUM(CASE WHEN EXTRACT(YEAR FROM fecha)=2026 THEN ventas_valor    ELSE 0 END) AS valor_2026,
+          SUM(CASE WHEN EXTRACT(YEAR FROM fecha)=2026 THEN ventas_unidades ELSE 0 END) AS uni_2026,
+          SUM(CASE WHEN EXTRACT(YEAR FROM fecha)=2025 THEN ventas_valor    ELSE 0 END) AS valor_2025
+        FROM fact_ventas_walmart
+        WHERE pais = '${paisSafe}' ${catFilter}
+        GROUP BY cadena
+        ORDER BY valor_2026 DESC
+      `),
+      // By categoria
+      pool.query(`
+        SELECT categoria,
+          SUM(CASE WHEN EXTRACT(YEAR FROM fecha)=2026 THEN ventas_valor    ELSE 0 END) AS valor_2026,
+          SUM(CASE WHEN EXTRACT(YEAR FROM fecha)=2026 THEN ventas_unidades ELSE 0 END) AS uni_2026
+        FROM fact_ventas_walmart
+        WHERE pais = '${paisSafe}' ${catFilter}
+        GROUP BY categoria
+        ORDER BY valor_2026 DESC
+      `),
+      // Monthly for spark (last 6 months)
+      pool.query(`
+        SELECT
+          EXTRACT(YEAR FROM fecha)::int  AS ano,
+          EXTRACT(MONTH FROM fecha)::int AS mes,
+          ROUND(SUM(ventas_valor)::numeric, 2) AS valor
+        FROM fact_ventas_walmart
+        WHERE pais = '${paisSafe}' ${catFilter}
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+      `),
+    ])
+
+    const row = ytdR.rows[0] ?? {}
+    const ultimoMes = parseInt(row.ultimo_mes ?? '0')
+
+    const monthly: Record<string, { mes: number; mes_nombre: string; y2025: number; y2026: number | null }> = {}
+    for (let m = 1; m <= 12; m++) {
+      monthly[m] = { mes: m, mes_nombre: MN[m], y2025: 0, y2026: null }
+    }
+    for (const r of monthlyR.rows) {
+      const m = parseInt(r.mes)
+      const a = parseInt(r.ano)
+      if (a === 2025) monthly[m].y2025 = parseFloat(r.valor)
+      if (a === 2026) monthly[m].y2026 = parseFloat(r.valor)
+    }
+    for (let m = ultimoMes + 1; m <= 12; m++) monthly[m].y2026 = null
+
+    return NextResponse.json({
+      ytd_2026:    parseFloat(row.ytd_2026 ?? '0'),
+      uni_2026:    parseInt(row.uni_2026 ?? '0'),
+      ytd_2025:    parseFloat(row.ytd_2025 ?? '0'),
+      uni_2025:    parseInt(row.uni_2025 ?? '0'),
+      delta_ytd:   row.delta_ytd !== null ? parseFloat(row.delta_ytd) : null,
+      ultimo_mes:  ultimoMes,
+      ultimo_mes_nombre: MN[ultimoMes] ?? '',
+      ultima_fecha: row.ultima_fecha ?? null,
+      por_cadena:  cadenaR.rows.map(r => ({
+        cadena:     r.cadena,
+        valor_2026: parseFloat(r.valor_2026 ?? '0'),
+        uni_2026:   parseInt(r.uni_2026 ?? '0'),
+        valor_2025: parseFloat(r.valor_2025 ?? '0'),
+        delta: parseFloat(r.valor_2025 ?? '0') > 0
+          ? ((parseFloat(r.valor_2026 ?? '0') - parseFloat(r.valor_2025 ?? '0')) / parseFloat(r.valor_2025)) * 100
+          : null,
+      })),
+      por_categoria: catR.rows.map(r => ({
+        categoria:  r.categoria,
+        valor_2026: parseFloat(r.valor_2026 ?? '0'),
+        uni_2026:   parseInt(r.uni_2026 ?? '0'),
+      })),
+      monthly: Object.values(monthly),
+    })
+  } catch (err) {
+    return handleApiError(err)
+  }
+}
