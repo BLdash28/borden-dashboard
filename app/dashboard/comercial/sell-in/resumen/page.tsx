@@ -166,16 +166,16 @@ export default function SellInResumen() {
   ] : []
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Sell In</p>
-          <h1 className="text-2xl font-bold text-gray-800">Resumen Ejecutivo</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Comparativo vs año anterior · Facturación propia</p>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800">Resumen Ejecutivo</h1>
+          <p className="text-xs md:text-sm text-gray-400 mt-0.5">Comparativo vs año anterior · Facturación propia</p>
         </div>
         <button onClick={() => cargar(ano, paises, cats, tipos)}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
+          className="flex items-center gap-2 px-3 md:px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Actualizar
         </button>
       </div>
@@ -204,22 +204,22 @@ export default function SellInResumen() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         {loading
           ? Array(4).fill(0).map((_,i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 animate-pulse">
+              <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 animate-pulse">
                 <div className="h-3 bg-gray-100 rounded w-2/3 mb-3"/>
                 <div className="h-7 bg-gray-100 rounded w-1/2 mb-2"/>
                 <div className="h-4 bg-gray-100 rounded w-1/3"/>
               </div>
             ))
           : kpiCards.map(k => (
-              <div key={k.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <div key={k.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{k.label}</p>
-                  <span className="text-lg">{k.icon}</span>
+                  <p className="text-[10px] md:text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{k.label}</p>
+                  <span className="text-base md:text-lg">{k.icon}</span>
                 </div>
-                <p className="text-2xl font-bold text-gray-800 mb-2">{k.value}</p>
+                <p className="text-lg md:text-2xl font-bold text-gray-800 mb-1.5 md:mb-2 break-all">{k.value}</p>
                 <div className="flex items-center gap-1.5 text-[11px] text-gray-400 flex-wrap">
                   <DeltaBadge delta={k.delta} isPct={!!(k as any).isPct} />
                   <span>vs {ano - 1}</span>
@@ -239,12 +239,13 @@ export default function SellInResumen() {
       )}
 
       {/* Gráfico de barras: mensual por año */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Venta Neta Mensual — {ano - 1} / Proyección {ano} / {ano}</h3>
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
+        <h3 className="text-xs md:text-sm font-semibold text-gray-700 mb-3 md:mb-4">Venta Neta Mensual — {ano - 1} / Proyección {ano} / {ano}</h3>
         {loading
-          ? <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
+          ? <div className="h-40 md:h-52 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
           : (
-            <ResponsiveContainer width="100%" height={220}>
+            <div className="h-[160px] md:h-[220px]">
+            <ResponsiveContainer width="100%" height="100%">
               <BarChart data={mensual} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barCategoryGap="30%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="mes" tickFormatter={m => MESES[m]} tick={{ fontSize: 11 }} />
@@ -262,18 +263,20 @@ export default function SellInResumen() {
                 <Customized component={MonthDividers} />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           )
         }
       </div>
 
       {/* Gráfico de líneas: YTD acumulado */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-1">Venta Acumulada</h3>
-        <p className="text-xs text-gray-400 mb-4">Suma corrida mes a mes</p>
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
+        <h3 className="text-xs md:text-sm font-semibold text-gray-700 mb-0.5 md:mb-1">Venta Acumulada</h3>
+        <p className="text-xs text-gray-400 mb-3 md:mb-4">Suma corrida mes a mes</p>
         {loading
-          ? <div className="h-80 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
+          ? <div className="h-52 md:h-80 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
           : (
-            <ResponsiveContainer width="100%" height={360}>
+            <div className="h-[220px] md:h-[360px]">
+            <ResponsiveContainer width="100%" height="100%">
               <LineChart data={ytdData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
@@ -312,6 +315,7 @@ export default function SellInResumen() {
                 <Customized component={LineMonthDividers} />
               </LineChart>
             </ResponsiveContainer>
+            </div>
           )
         }
       </div>

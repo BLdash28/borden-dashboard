@@ -63,6 +63,7 @@ export default function SellInPage() {
   const [loading,         setLoading]         = useState(true)
   const [sort,            setSort]            = useState<SortState>({ key: 'ingresos', dir: 'desc' })
   const [detalleExpanded, setDetalleExpanded] = useState(true)
+  const [filtrosOpen,     setFiltrosOpen]     = useState(false)
 
   const PAGE_SIZE = 500
   const initDone  = useRef(false)
@@ -260,17 +261,17 @@ export default function SellInPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-6">
 
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Ventas</p>
-          <h1 className="text-2xl font-bold text-gray-800">Ventas Sell In</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800">Ventas Sell In</h1>
         </div>
         <button
           onClick={() => triggerCargar()}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm"
+          className="flex items-center gap-2 px-3 md:px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm"
         >
           <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
           Actualizar
@@ -280,9 +281,16 @@ export default function SellInPage() {
       {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Filtros</p>
+          <button
+            className="flex items-center gap-2 text-xs font-semibold text-gray-400 uppercase tracking-widest md:cursor-default"
+            onClick={() => setFiltrosOpen(v => !v)}
+          >
+            <ChevronDown size={13} className={`md:hidden transition-transform ${filtrosOpen ? 'rotate-180' : ''}`} />
+            Filtros
+          </button>
           <button onClick={limpiar} className="text-xs text-gray-400 hover:text-gray-600 underline">Limpiar todo</button>
         </div>
+        <div className={`md:block ${filtrosOpen ? 'block' : 'hidden'}`}>
 
         {/* Período */}
         <div className="mb-3">
@@ -396,26 +404,27 @@ export default function SellInPage() {
             <div className="flex-1 min-w-[160px]" />
           </div>
         </div>
+        </div>{/* end collapsible filtros */}
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-amber-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Ingresos Totales</p>
-          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : fmt(kpi?.total_ingresos ?? 0)}</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 border-l-4 border-l-amber-500">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1 md:mb-2">Ingresos Totales</p>
+          <p className="text-xl md:text-2xl font-bold text-gray-800">{loading ? '...' : fmt(kpi?.total_ingresos ?? 0)}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-blue-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Cajas Totales</p>
-          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : fmtN(kpi?.total_unidades ?? 0)}</p>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 border-l-4 border-l-blue-500">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1 md:mb-2">Cajas Totales</p>
+          <p className="text-xl md:text-2xl font-bold text-gray-800">{loading ? '...' : fmtN(kpi?.total_unidades ?? 0)}</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 border-l-4 border-l-green-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-2">Clientes Activos</p>
-          <p className="text-2xl font-bold text-gray-800">{loading ? '...' : (kpi?.total_clientes ?? 0).toLocaleString()}</p>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 border-l-4 border-l-green-500">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1 md:mb-2">Clientes Activos</p>
+          <p className="text-xl md:text-2xl font-bold text-gray-800">{loading ? '...' : (kpi?.total_clientes ?? 0).toLocaleString()}</p>
         </div>
       </div>
 
       {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
         <div className="flex items-center justify-between mb-4">
           <button
             onClick={() => setDetalleExpanded(v => !v)}
