@@ -4,12 +4,17 @@ import { Download, RefreshCw, ChevronRight } from 'lucide-react'
 import FiltroMulti from '@/components/ui/FiltroMulti'
 
 const MESES_LABEL = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-const PAISES     = ['CR','GT','SV','NI','HN','CO']
-const PAISES_OPT = PAISES.map(p => ({ value: p }))
-const TIPOS_OPT  = [
+const PAISES_OPT  = ['CR','GT','SV','NI','HN','CO'].map(p => ({ value: p }))
+const TIPOS_OPT   = [
   { value: 'REGULAR',                 label: 'BL FOODS' },
   { value: 'LICENCIAMIENTO_HELADOS',  label: 'LICENCIAMIENTO HELADOS' },
   { value: 'LICENCIAMIENTO_COLOMBIA', label: 'LICENCIAMIENTO COLOMBIA' },
+]
+
+const TRIMESTRES = [
+  { label: 'Q1 · Ene – Abr', short: 'Q1', meses: [1,2,3,4],    headerCls: 'text-blue-700 bg-blue-50/80 border-blue-200',      subCls: 'text-blue-700 bg-blue-50/60'   },
+  { label: 'Q2 · May – Ago', short: 'Q2', meses: [5,6,7,8],    headerCls: 'text-green-700 bg-green-50/80 border-green-200',   subCls: 'text-green-700 bg-green-50/60'  },
+  { label: 'Q3 · Sep – Dic', short: 'Q3', meses: [9,10,11,12], headerCls: 'text-purple-700 bg-purple-50/80 border-purple-200', subCls: 'text-purple-700 bg-purple-50/60' },
 ]
 
 const fmt = (v: number) => {
@@ -45,6 +50,20 @@ interface Totals {
   meses: Record<number, { y2025: number; y2026: number }>
 }
 
+function qSub(trimMeses: number[], data: Record<number, MesData>, activeMeses: number[]) {
+  const ms = trimMeses.filter(m => activeMeses.includes(m))
+  const s25 = ms.reduce((s, m) => s + (data[m]?.y2025 ?? 0), 0)
+  const s26 = ms.reduce((s, m) => s + (data[m]?.y2026 ?? 0), 0)
+  return { s25, s26, v: s25 > 0 ? ((s26 - s25) / s25) * 100 : null }
+}
+
+function qSubTotals(trimMeses: number[], totals: Totals, activeMeses: number[]) {
+  const ms = trimMeses.filter(m => activeMeses.includes(m))
+  const s25 = ms.reduce((s, m) => s + (totals.meses[m]?.y2025 ?? 0), 0)
+  const s26 = ms.reduce((s, m) => s + (totals.meses[m]?.y2026 ?? 0), 0)
+  return { s25, s26, v: s25 > 0 ? ((s26 - s25) / s25) * 100 : null }
+}
+
 export default function SellInVariaciones() {
   const [dim,    setDim]    = useState<DimKey>('cliente')
   const [paises, setPaises] = useState<string[]>([])
@@ -54,7 +73,6 @@ export default function SellInVariaciones() {
   const [meses,  setMeses]  = useState<number[]>([])
   const [loading,setLoading]= useState(true)
 
-  // Drill-down: cliente → categorías
   const [expanded,       setExpanded]       = useState<Set<string>>(new Set())
   const [subRows,        setSubRows]        = useState<Record<string, VarRow[]>>({})
   const [loadingClients, setLoadingClients] = useState<Set<string>>(new Set())
@@ -111,7 +129,6 @@ export default function SellInVariaciones() {
       header.push(`${ml} 2025`, `${ml} 2026`, `Var% ${ml}`)
     })
     header.push('Total 2025', 'Total 2026', 'Var% Total')
-
     const csv = [header.join(','),
       ...rows.map(r => {
         const line: string[] = [`"${r.dim}"`]
@@ -123,7 +140,6 @@ export default function SellInVariaciones() {
         return line.join(',')
       })
     ].join('\n')
-
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
     a.download = `variaciones_sellin_${dim}_${new Date().toISOString().slice(0,10)}.csv`
@@ -134,7 +150,10 @@ export default function SellInVariaciones() {
     ? ((totals.total2026 - totals.total2025) / totals.total2025) * 100
     : null
 
-  const colSpanTotal = meses.length * 3 + 4
+  // Only show trimestres that have at least one active month
+  const visibleTrimestres = TRIMESTRES.filter(t => t.meses.some(m => meses.includes(m)))
+
+  const mesLabel = '2025 vs 2026 · Año completo'
 
   return (
     <div className="p-6 space-y-6">
@@ -143,11 +162,7 @@ export default function SellInVariaciones() {
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Sell In</p>
           <h1 className="text-2xl font-bold text-gray-800">YTD y Variaciones</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
-            {meses.length > 0
-              ? `${MESES_LABEL[meses[0]]} – ${MESES_LABEL[meses[meses.length - 1]]} · 2025 vs 2026`
-              : '2025 vs 2026'}
-          </p>
+          <p className="text-sm text-gray-400 mt-0.5">{mesLabel}</p>
         </div>
         <div className="flex gap-2">
           <button onClick={cargar}
@@ -175,7 +190,7 @@ export default function SellInVariaciones() {
               ))}
             </div>
           </div>
-          <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT} value={tipos}  onChange={setTipos}  placeholder="Todos" />
+          <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT}  value={tipos}  onChange={setTipos}  placeholder="Todos" />
           <FiltroMulti label="País"         options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
         </div>
         <div className="flex items-center gap-4 mt-3 text-[11px]">
@@ -186,58 +201,92 @@ export default function SellInVariaciones() {
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
-        {loading
-          ? <div className="h-40 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
-          : rows.length === 0
-            ? (
-              <div className="h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2">
-                <span className="text-3xl">📭</span>
-                Sin datos disponibles
-              </div>
-            )
-            : (
-              <table className="w-full text-xs" style={{ minWidth: `${200 + meses.length * 210 + 200}px` }}>
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr className="text-gray-400 uppercase tracking-widest text-[10px]">
-                    <th className="text-left py-2 px-4 w-48" rowSpan={2}>
-                      {dim === 'cliente' ? 'Cliente' : 'Categoría'}
-                    </th>
-                    {meses.map(m => (
-                      <th key={m} colSpan={3} className="text-center py-2 px-2 border-l border-gray-200">
-                        {MESES_LABEL[m]}
-                      </th>
-                    ))}
-                    <th colSpan={3} className="text-center py-2 px-2 border-l border-gray-200 text-amber-600">
-                      Total
-                    </th>
-                  </tr>
-                  <tr className="text-gray-400 uppercase tracking-widest text-[10px]">
-                    {meses.map(m => (
-                      <>
-                        <th key={`${m}-25`} className="text-right py-2 px-2 border-l border-gray-200 font-normal">2025</th>
-                        <th key={`${m}-26`} className="text-right py-2 px-2 font-normal">2026</th>
-                        <th key={`${m}-v`}  className="text-right py-2 px-2 font-normal">Var%</th>
-                      </>
-                    ))}
-                    <th className="text-right py-2 px-2 border-l border-gray-200 font-normal">2025</th>
-                    <th className="text-right py-2 px-2 font-normal">2026</th>
-                    <th className="text-right py-2 px-4 font-normal">Var%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, i) => {
-                    const isExp     = expanded.has(r.dim)
-                    const isLoading = loadingClients.has(r.dim)
-                    const canExpand = dim === 'cliente'
+      {loading ? (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm h-40 flex items-center justify-center text-gray-300 text-sm">
+          Cargando...
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2">
+          <span className="text-3xl">📭</span>
+          Sin datos disponibles.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {visibleTrimestres.map((trim, ti) => {
+            const isLast = ti === visibleTrimestres.length - 1
+            // Only include months that are actually in the YTD range
+            const trimMeses = trim.meses.filter(m => meses.includes(m))
+            const colSpanSection = 1 + trimMeses.length * 3 + 3
 
-                    return (
-                      <>
-                        <tr key={`row-${i}`}
+            return (
+              <div key={trim.label} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+                <table className="w-full text-xs border-collapse" style={{ minWidth: `${180 + trimMeses.length * 165 + 180}px`, tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '180px' }} />
+                    {trimMeses.flatMap(m => [
+                      <col key={`${m}-25`} style={{ width: '95px' }} />,
+                      <col key={`${m}-26`} style={{ width: '95px' }} />,
+                      <col key={`${m}-v`}  style={{ width: '70px' }} />,
+                    ])}
+                    <col style={{ width: '95px' }} />
+                    <col style={{ width: '95px' }} />
+                    <col style={{ width: '70px' }} />
+                  </colgroup>
+                  <thead>
+                    {/* Fila 1: Etiqueta trimestre */}
+                    <tr>
+                      <th colSpan={colSpanSection}
+                        className={`py-2 px-4 text-left text-[11px] font-semibold tracking-wide border-b ${trim.headerCls}`}>
+                        {trim.label}
+                      </th>
+                    </tr>
+                    {/* Fila 2: Meses + columna totalizadora */}
+                    <tr className="bg-gray-50 border-b border-gray-100 text-[10px] uppercase tracking-widest text-gray-400">
+                      <th className="text-left py-2 px-4 border-r border-gray-200">
+                        {dim === 'cliente' ? 'Cliente' : 'Categoría'}
+                      </th>
+                      {trimMeses.map(m => (
+                        <th key={m} colSpan={3} className="py-1.5 text-center border-l border-gray-200">
+                          {MESES_LABEL[m]}
+                        </th>
+                      ))}
+                      {isLast ? (
+                        <th colSpan={3} className="py-1.5 text-center border-l border-gray-300 text-amber-600 bg-amber-50/40 font-semibold">
+                          Total Anual
+                        </th>
+                      ) : (
+                        <th colSpan={3} className={`py-1.5 text-center border-l border-gray-300 font-semibold ${trim.subCls}`}>
+                          Sub {trim.short}
+                        </th>
+                      )}
+                    </tr>
+                    {/* Fila 3: Años */}
+                    <tr className="bg-gray-50 border-b border-gray-200 text-[10px] uppercase tracking-widest text-gray-400">
+                      <th className="py-1.5 px-4 border-r border-gray-200" />
+                      {trimMeses.flatMap(m => [
+                        <th key={`${m}-25`} className="text-right py-1.5 px-2 font-normal border-l border-gray-200">2025</th>,
+                        <th key={`${m}-26`} className="text-right py-1.5 px-1 font-normal">2026</th>,
+                        <th key={`${m}-v`}  className="text-right py-1.5 px-2 font-normal">Var%</th>,
+                      ])}
+                      <th className="text-right py-1.5 px-2 font-normal border-l border-gray-300">2025</th>
+                      <th className="text-right py-1.5 px-1 font-normal">2026</th>
+                      <th className="text-right py-1.5 px-2 font-normal">Var%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => {
+                      const isExp     = expanded.has(r.dim)
+                      const isLoading = loadingClients.has(r.dim)
+                      const canExpand = dim === 'cliente'
+                      const q = isLast
+                        ? { s25: r.total2025, s26: r.total2026, v: r.varTotal }
+                        : qSub(trim.meses, r.meses, meses)
+
+                      return [
+                        <tr key={`row-${ti}-${i}`}
                           onClick={() => canExpand && toggleClient(r.dim)}
                           className={`border-b border-gray-50 ${canExpand ? 'cursor-pointer hover:bg-amber-50/30' : 'hover:bg-amber-50/30'} ${i%2===0?'':'bg-gray-50/30'}`}>
-                          <td className="py-2 px-4 font-medium text-gray-700 max-w-[180px]">
+                          <td className="py-2 px-4 font-medium text-gray-700 border-r border-gray-100">
                             <div className="flex items-center gap-1.5">
                               {canExpand && (
                                 <ChevronRight size={12} className={`flex-shrink-0 text-gray-400 transition-transform ${isExp ? 'rotate-90' : ''}`} />
@@ -245,75 +294,85 @@ export default function SellInVariaciones() {
                               <span className="truncate">{r.dim || '—'}</span>
                             </div>
                           </td>
-                          {meses.map(m => {
+                          {trimMeses.flatMap(m => {
                             const d = r.meses[m] ?? { y2025: 0, y2026: 0, var: null }
-                            return (
-                              <>
-                                <td key={`${m}-25`} className="py-2 px-2 text-right text-gray-500 border-l border-gray-100">{fmt(d.y2025)}</td>
-                                <td key={`${m}-26`} className="py-2 px-2 text-right text-gray-700">{fmt(d.y2026)}</td>
-                                <td key={`${m}-v`}  className={`py-2 px-2 text-right ${varColor(d.var)}`}>{fmtVar(d.var)}</td>
-                              </>
-                            )
+                            return [
+                              <td key={`${m}-25`} className="py-2 px-2 text-right text-gray-500 border-l border-gray-100">{fmt(d.y2025)}</td>,
+                              <td key={`${m}-26`} className="py-2 px-1 text-right text-gray-700">{fmt(d.y2026)}</td>,
+                              <td key={`${m}-v`}  className={`py-2 px-2 text-right ${varColor(d.var)}`}>{fmtVar(d.var)}</td>,
+                            ]
                           })}
-                          <td className="py-2 px-2 text-right text-gray-500 border-l border-gray-200">{fmt(r.total2025)}</td>
-                          <td className="py-2 px-2 text-right font-bold text-gray-800">{fmt(r.total2026)}</td>
-                          <td className={`py-2 px-4 text-right ${varColor(r.varTotal)}`}>{fmtVar(r.varTotal)}</td>
-                        </tr>
+                          <td className="py-2 px-2 text-right text-gray-500 border-l border-gray-300 bg-gray-50/60">{fmt(q.s25)}</td>
+                          <td className="py-2 px-1 text-right font-semibold text-gray-800 bg-gray-50/60">{fmt(q.s26)}</td>
+                          <td className={`py-2 px-2 text-right bg-gray-50/60 ${varColor(q.v)}`}>{fmtVar(q.v)}</td>
+                        </tr>,
 
-                        {/* Sub-filas de categoría al expandir cliente */}
-                        {canExpand && isExp && (
-                          isLoading
-                            ? (
-                              <tr key={`sub-loading-${i}`} className="bg-amber-50/20">
-                                <td colSpan={colSpanTotal} className="py-2 px-8 text-xs text-gray-400">Cargando categorías…</td>
-                              </tr>
-                            )
-                            : (subRows[r.dim] ?? []).map((sub, si) => (
-                              <tr key={`sub-${i}-${si}`} className="bg-amber-50/20 border-b border-amber-100/50">
-                                <td className="py-1.5 pl-10 pr-4 text-gray-500 italic max-w-[180px] truncate">{sub.dim}</td>
-                                {meses.map(m => {
-                                  const d = sub.meses[m] ?? { y2025: 0, y2026: 0, var: null }
-                                  return (
-                                    <>
-                                      <td key={`${m}-25`} className="py-1.5 px-2 text-right text-gray-400 border-l border-gray-100 text-[11px]">{fmt(d.y2025)}</td>
-                                      <td key={`${m}-26`} className="py-1.5 px-2 text-right text-gray-600 text-[11px]">{fmt(d.y2026)}</td>
-                                      <td key={`${m}-v`}  className={`py-1.5 px-2 text-right text-[11px] ${varColor(d.var)}`}>{fmtVar(d.var)}</td>
-                                    </>
-                                  )
-                                })}
-                                <td className="py-1.5 px-2 text-right text-gray-400 border-l border-gray-200 text-[11px]">{fmt(sub.total2025)}</td>
-                                <td className="py-1.5 px-2 text-right font-semibold text-gray-700 text-[11px]">{fmt(sub.total2026)}</td>
-                                <td className={`py-1.5 px-4 text-right text-[11px] ${varColor(sub.varTotal)}`}>{fmtVar(sub.varTotal)}</td>
-                              </tr>
-                            ))
-                        )}
-                      </>
-                    )
-                  })}
-                </tbody>
-                <tfoot className="border-t-2 border-gray-300 bg-gray-50">
-                  <tr className="font-bold text-gray-800">
-                    <td className="py-2.5 px-4 text-xs uppercase tracking-widest text-gray-500">TOTAL</td>
-                    {meses.map(m => {
-                      const d = totals.meses[m] ?? { y2025: 0, y2026: 0 }
-                      const v = d.y2025 > 0 ? ((d.y2026 - d.y2025) / d.y2025) * 100 : null
-                      return (
-                        <>
-                          <td key={`${m}-25`} className="py-2.5 px-2 text-right border-l border-gray-200">{fmt(d.y2025)}</td>
-                          <td key={`${m}-26`} className="py-2.5 px-2 text-right">{fmt(d.y2026)}</td>
-                          <td key={`${m}-v`}  className={`py-2.5 px-2 text-right ${varColor(v)}`}>{fmtVar(v)}</td>
-                        </>
-                      )
+                        ...(canExpand && isExp
+                          ? isLoading
+                            ? [<tr key={`sub-loading-${ti}-${i}`} className="bg-amber-50/20">
+                                <td colSpan={colSpanSection} className="py-2 px-8 text-xs text-gray-400">Cargando categorías…</td>
+                              </tr>]
+                            : (subRows[r.dim] ?? []).map((sub, si) => {
+                                const sq = isLast
+                                  ? { s25: sub.total2025, s26: sub.total2026, v: sub.varTotal }
+                                  : qSub(trim.meses, sub.meses, meses)
+                                return (
+                                  <tr key={`sub-${ti}-${i}-${si}`} className="bg-amber-50/20 border-b border-amber-100/50">
+                                    <td className="py-1.5 pl-10 pr-4 text-gray-500 italic truncate border-r border-gray-100">{sub.dim}</td>
+                                    {trimMeses.flatMap(m => {
+                                      const d = sub.meses[m] ?? { y2025: 0, y2026: 0, var: null }
+                                      return [
+                                        <td key={`${m}-25`} className="py-1.5 px-2 text-right text-gray-400 text-[11px] border-l border-gray-100">{fmt(d.y2025)}</td>,
+                                        <td key={`${m}-26`} className="py-1.5 px-1 text-right text-gray-600 text-[11px]">{fmt(d.y2026)}</td>,
+                                        <td key={`${m}-v`}  className={`py-1.5 px-2 text-right text-[11px] ${varColor(d.var)}`}>{fmtVar(d.var)}</td>,
+                                      ]
+                                    })}
+                                    <td className="py-1.5 px-2 text-right text-gray-400 border-l border-gray-300 bg-gray-50/60 text-[11px]">{fmt(sq.s25)}</td>
+                                    <td className="py-1.5 px-1 text-right font-semibold text-gray-700 bg-gray-50/60 text-[11px]">{fmt(sq.s26)}</td>
+                                    <td className={`py-1.5 px-2 text-right bg-gray-50/60 text-[11px] ${varColor(sq.v)}`}>{fmtVar(sq.v)}</td>
+                                  </tr>
+                                )
+                              })
+                          : [])
+                      ]
                     })}
-                    <td className="py-2.5 px-2 text-right border-l border-gray-200">{fmt(totals.total2025)}</td>
-                    <td className="py-2.5 px-2 text-right">{fmt(totals.total2026)}</td>
-                    <td className={`py-2.5 px-4 text-right ${varColor(totalVar)}`}>{fmtVar(totalVar)}</td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </tbody>
+                  <tfoot className="border-t-2 border-gray-300 bg-gray-50">
+                    <tr className="font-bold text-gray-800">
+                      <td className="py-2.5 px-4 text-xs uppercase tracking-widest text-gray-500 border-r border-gray-100">TOTAL</td>
+                      {trimMeses.flatMap(m => {
+                        const d = totals.meses[m] ?? { y2025: 0, y2026: 0 }
+                        const v = d.y2025 > 0 ? ((d.y2026 - d.y2025) / d.y2025) * 100 : null
+                        return [
+                          <td key={`${m}-25`} className="py-2.5 px-2 text-right border-l border-gray-100">{fmt(d.y2025)}</td>,
+                          <td key={`${m}-26`} className="py-2.5 px-1 text-right">{fmt(d.y2026)}</td>,
+                          <td key={`${m}-v`}  className={`py-2.5 px-2 text-right ${varColor(v)}`}>{fmtVar(v)}</td>,
+                        ]
+                      })}
+                      {isLast ? (() => (
+                        <>
+                          <td className="py-2.5 px-2 text-right border-l border-gray-300 bg-gray-100/60">{fmt(totals.total2025)}</td>
+                          <td className="py-2.5 px-1 text-right bg-gray-100/60">{fmt(totals.total2026)}</td>
+                          <td className={`py-2.5 px-2 text-right bg-gray-100/60 ${varColor(totalVar)}`}>{fmtVar(totalVar)}</td>
+                        </>
+                      ))() : (() => {
+                        const qt = qSubTotals(trim.meses, totals, meses)
+                        return (
+                          <>
+                            <td className="py-2.5 px-2 text-right border-l border-gray-300 bg-gray-100/60">{fmt(qt.s25)}</td>
+                            <td className="py-2.5 px-1 text-right bg-gray-100/60">{fmt(qt.s26)}</td>
+                            <td className={`py-2.5 px-2 text-right bg-gray-100/60 ${varColor(qt.v)}`}>{fmtVar(qt.v)}</td>
+                          </>
+                        )
+                      })()}
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
             )
-        }
-      </div>
+          })}
+        </div>
+      )}
     </div>
   )
 }

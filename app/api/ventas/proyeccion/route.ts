@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
     for (const r of realRows) {
       const empKey = `${r.ano}-${r.mes}-${r.empresa}`
       realByEmpresa[empKey] = (realByEmpresa[empKey] || 0) + (Number(r.valor_real) || 0)
-      realByKey[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}-${r.cliente_nombre}`] = Number(r.valor_real) || 0
+      realByKey[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}-${r.cliente_nombre?.toLowerCase().trim()}`] = Number(r.valor_real) || 0
     }
 
     // ── Años disponibles ─────────────────────────────────────────
@@ -112,7 +112,7 @@ export async function GET(req: NextRequest) {
     `, cParams)
 
     const catRows = catDbRows.map(r => {
-      const byCliente  = realByKey[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}-${r.cliente}`]
+      const byCliente  = realByKey[`${r.ano}-${r.mes}-${r.empresa}-${r.pais}-${r.categoria}-${r.cliente?.toLowerCase().trim()}`]
       const sellinReal = byCliente ?? null
       const real_usd   = r.real_usd !== null ? Number(r.real_usd) : sellinReal
       return {

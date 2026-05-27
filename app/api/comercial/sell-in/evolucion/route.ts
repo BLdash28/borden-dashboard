@@ -7,6 +7,7 @@ export const dynamic = 'force-dynamic'
 export async function GET(req: NextRequest) {
   try {
     const sp     = req.nextUrl.searchParams
+    const ano    = parseInt(sp.get('ano') || '2026')
     const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
     const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
     const tipos  = sp.get('tipo_negocio') ? sp.get('tipo_negocio')!.split(',').filter(Boolean) : []
@@ -32,13 +33,13 @@ export async function GET(req: NextRequest) {
     const tipo = tipos.length === 1 ? tipos[0] : ''
 
     const r = await pool.query(`
-      -- fact_sales_sellin: fuente principal (2026+)
+      -- fact_sales_sellin: fuente principal
       SELECT ano, mes,
         ROUND(SUM(venta_neta)::numeric, 2)       AS ingresos,
         ROUND(SUM(cantidad_unidades)::numeric, 0) AS unidades,
         ROUND(SUM(margen_valor)::numeric, 2)      AS margen
       FROM fact_sales_sellin
-      WHERE ano IN (2024, 2025, 2026) ${extra}
+      WHERE ano IN (${ano - 1}, ${ano}) ${extra}
       GROUP BY ano, mes
 
       UNION ALL
@@ -49,7 +50,7 @@ export async function GET(req: NextRequest) {
         ROUND(SUM(unidades)::numeric, 0) AS unidades,
         0                                AS margen
       FROM ventas_sell_in
-      WHERE ano IN (2024, 2025, 2026) ${extraViejo}
+      WHERE ano IN (${ano - 1}, ${ano}) ${extraViejo}
         AND (ano, mes) NOT IN (
           SELECT DISTINCT ano, mes FROM fact_sales_sellin
         )
@@ -58,16 +59,29 @@ export async function GET(req: NextRequest) {
       ORDER BY ano, mes
     `)
 
-    // Proyecciones 2026 por mes — misma lógica que /dashboard/comercial/proyeccion
-    const pConds: string[] = [
-      'ano = 2026',
-      'categoria IS NULL',
-      `empresa IN ('LICENCIAMIENTO', 'BL FOODS')`,
-    ]
-    if (tipo) {
-      const emp = tipo.startsWith('LICENCIAMIENTO') ? 'LICENCIAMIENTO' : 'BL FOODS'
-      pConds.push(`empresa = '${emp}'`)
+    // Proyecciones: dos tipos de filas en la tabla
+    //   categoria IS NULL  → totales empresa (sin desglose de pais/cat)
+    //   categoria IS NOT NULL → filas detalladas con pais, cliente, categoria
+    // Sin filtros activos usamos las filas totales; con filtros usamos las detalladas
+    const hayFiltroDetalle = cats.length > 0 || paises.length > 0
+    const empCond = tipo
+      ? `empresa = '${(tipo.startsWith('LICENCIAMIENTO') ? 'LICENCIAMIENTO' : 'BL FOODS')}'`
+      : `empresa IN ('LICENCIAMIENTO', 'BL FOODS')`
+
+    const pConds: string[] = [`ano = ${ano}`, empCond]
+
+    if (!hayFiltroDetalle) {
+      // Sin filtros: filas nivel empresa (categoria IS NULL)
+      pConds.push('categoria IS NULL')
+    } else {
+      // Con filtros: filas detalladas (categoria IS NOT NULL)
+      pConds.push('categoria IS NOT NULL')
+      if (cats.length > 0)
+        pConds.push(`categoria IN (${cats.map(c => `'${c.replace(/'/g, "''")}'`).join(',')})`)
+      if (paises.length > 0)
+        pConds.push(`pais IN (${paises.map(p => `'${p.replace(/'/g, "''")}'`).join(',')})`)
     }
+
     const pR = await pool.query(`
       SELECT mes, ROUND(SUM(valor_usd)::numeric, 2) AS proyeccion
       FROM proyecciones
@@ -75,31 +89,35 @@ export async function GET(req: NextRequest) {
       GROUP BY mes
       ORDER BY mes
     `)
+
     const proyByMes: Record<number, number> = {}
     for (const row of pR.rows) proyByMes[parseInt(row.mes)] = parseFloat(row.proyeccion)
 
-    // Estructurar: { mes: 1..12, 2025: x, proyeccion: x, 2026: x }
+    // Estructurar: { mes: 1..12, [ano-1]: x, proyeccion: x, [ano]: x }
+    const prevKey = String(ano - 1)
+    const currKey = String(ano)
     const byMes: Record<number, Record<string, number>> = {}
-    for (let m = 1; m <= 12; m++) byMes[m] = { mes: m, 2025: 0, proyeccion: proyByMes[m] ?? 0, 2026: 0 }
+    for (let m = 1; m <= 12; m++) byMes[m] = { mes: m, [prevKey]: 0, proyeccion: proyByMes[m] ?? 0, [currKey]: 0 }
 
     for (const row of r.rows) {
-      const m = parseInt(row.mes)
-      if (byMes[m] && (row.ano === '2025' || parseInt(row.ano) === 2025)) byMes[m][2025] = parseFloat(row.ingresos)
-      if (byMes[m] && (row.ano === '2026' || parseInt(row.ano) === 2026)) byMes[m][2026] = parseFloat(row.ingresos)
+      const m   = parseInt(row.mes)
+      const a   = parseInt(row.ano)
+      if (byMes[m] && a === ano - 1) byMes[m][prevKey] = parseFloat(row.ingresos)
+      if (byMes[m] && a === ano)     byMes[m][currKey] = parseFloat(row.ingresos)
     }
 
-    // Último mes con datos en 2026
-    const ultimoMes2026 = Math.max(0, ...r.rows
-      .filter(row => parseInt(row.ano) === 2026 && parseFloat(row.ingresos) > 0)
+    // Último mes con datos en el año actual
+    const ultimoMesAno = Math.max(0, ...r.rows
+      .filter(row => parseInt(row.ano) === ano && parseFloat(row.ingresos) > 0)
       .map(row => parseInt(row.mes))
     )
 
-    // YTD acumulado — 2026 se corta en el último mes reportado
-    const ytd: Record<string, (number | null)[]> = { 2025: [], proyeccion: [], 2026: [] }
-    for (const key of ['2025', 'proyeccion', '2026'] as const) {
+    // YTD acumulado — año actual se corta en el último mes reportado
+    const ytd: Record<string, (number | null)[]> = { [prevKey]: [], proyeccion: [], [currKey]: [] }
+    for (const key of [prevKey, 'proyeccion', currKey]) {
       let acc = 0
       for (let m = 1; m <= 12; m++) {
-        if (key === '2026' && m > ultimoMes2026) {
+        if (key === currKey && m > ultimoMesAno) {
           ytd[key].push(null)
         } else {
           acc += byMes[m][key] ?? 0

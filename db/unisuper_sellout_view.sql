@@ -1,34 +1,23 @@
--- VIEW que une fact_sales_sellout + fact_ventas_unisuper
+-- VIEW que une mv_sellout_mensual (Walmart/RetailLink) + fact_sales_sellout GT (Unisuper)
+-- fact_ventas_unisuper está vacía — se eliminó ese leg
 -- Ejecutar en Supabase SQL Editor al actualizar
 
+-- Paso 1: refrescar el MV tras insertar nuevos datos GT
+-- REFRESH MATERIALIZED VIEW mv_sellout_mensual;
+
+-- Paso 2: vista con GT directo desde fact_sales_sellout (sin depender del refresh del MV)
 CREATE OR REPLACE VIEW v_sellout_mensual AS
 
-  -- RetailLink / Walmart (ya en USD, via materialized view)
+  -- Otros países via MV pre-agregado (rápido, excluye GT para evitar duplicados)
   SELECT ano, mes, pais, cadena, categoria, sku, punto_venta,
          ventas_valor, ventas_unidades
   FROM mv_sellout_mensual
+  WHERE pais <> 'GT'
 
   UNION ALL
 
-  -- Unisuper GT — datos nuevos en fact_sales_sellout (ya en USD)
-  -- Insertados por el bot unisuper_venta_diaria / venta_mensual
+  -- GT: Unisuper + Walmart Guatemala — siempre fresco desde la tabla base
   SELECT ano, mes, pais, cadena, categoria, sku, punto_venta,
          ventas_valor, ventas_unidades
   FROM fact_sales_sellout
-  WHERE pais = 'GT' AND cliente = 'Unisuper'
-
-  UNION ALL
-
-  -- Unisuper GT — datos históricos en tabla legacy (GTQ → USD ÷ 7.7)
-  -- Mantener hasta que se migre la data histórica a fact_sales_sellout
-  SELECT
-    EXTRACT(YEAR  FROM fecha)::int                    AS ano,
-    EXTRACT(MONTH FROM fecha)::int                    AS mes,
-    'GT'                                              AS pais,
-    COALESCE(NULLIF(cadena, ''), 'Unisuper')          AS cadena,
-    categoria,
-    codigo_sku                                        AS sku,
-    nombre_sucursal                                   AS punto_venta,
-    ROUND((venta_neta / 7.7)::numeric, 2)             AS ventas_valor,
-    unidades                                          AS ventas_unidades
-  FROM fact_ventas_unisuper;
+  WHERE pais = 'GT';

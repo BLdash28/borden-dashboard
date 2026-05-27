@@ -12,7 +12,10 @@ import {
   Activity, Layers, Search, AlertTriangle, List, Bell
 } from 'lucide-react'
 
-const MENUS: Record<string, { section: string; items: { href: string; icon: any; label: string }[] }[]> = {
+type NavItem = { href?: string; icon: any; label: string; children?: { href: string; label: string }[] }
+type MenuSection = { section: string; items: NavItem[] }
+
+const MENUS: Record<string, MenuSection[]> = {
   comercial: [
     {
       section: 'Sell In',
@@ -36,16 +39,26 @@ const MENUS: Record<string, { section: string; items: { href: string; icon: any;
     {
       section: 'Ejecución',
       items: [
-        { href: '/ejecucion',                 icon: Activity,      label: 'Panel General'       },
-        { href: '/ejecucion/crecimiento',     icon: TrendingUp,    label: 'Crecimiento SKU'     },
-        { href: '/ejecucion/distribucion',    icon: Layers,        label: 'Distribución 75%'    },
-        { href: '/ejecucion/cobertura',       icon: MapPin,        label: 'Cobertura PDV'       },
-        { href: '/ejecucion/inventario',      icon: Package,       label: 'Inventario CEDI+PDV' },
-        { href: '/ejecucion/precio',          icon: Tag,           label: 'Precio / Elasticidad'},
-        { href: '/ejecucion/punto-reorden',   icon: AlertTriangle, label: 'Punto de Reorden'   },
-        { href: '/ejecucion/cola',            icon: List,          label: 'Long Tail 50%'       },
-        { href: '/ejecucion/som',             icon: PieChart,      label: 'Share of Market'     },
-        { href: '/ejecucion/forecast',        icon: TrendingUp,    label: 'Forecast'            },
+        { icon: Globe2, label: 'GT', children: [
+          { href: '/dashboard/comercial/ejecucion/gt/walmart',  label: 'Walmart'  },
+          { href: '/dashboard/comercial/ejecucion/gt/unisuper', label: 'Unisuper' },
+        ]},
+        { icon: Globe2, label: 'HN', children: [
+          { href: '/dashboard/comercial/ejecucion/hn/walmart',  label: 'Walmart'  },
+        ]},
+        { icon: Globe2, label: 'NI', children: [
+          { href: '/dashboard/comercial/ejecucion/ni/walmart',  label: 'Walmart'  },
+        ]},
+        { icon: Globe2, label: 'SV', children: [
+          { href: '/dashboard/comercial/ejecucion/sv/walmart',  label: 'Walmart'  },
+          { href: '/dashboard/comercial/ejecucion/sv/selectos', label: 'Selectos' },
+        ]},
+        { icon: Globe2, label: 'CR', children: [
+          { href: '/dashboard/comercial/ejecucion/cr/walmart',  label: 'Walmart'  },
+        ]},
+        { icon: Globe2, label: 'CO', children: [
+          { href: '/dashboard/comercial/ejecucion/co/grupo-exito', label: 'Grupo Éxito' },
+        ]},
       ],
     },
     // ── Archivadas (fuera de menú, archivos intactos) ──
@@ -133,6 +146,7 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
   const supabase = createClient()
   const [deptOpen, setDeptOpen]         = useState(false)
   const [openSections, setOpenSections] = useState<Record<string,boolean>>({})
+  const [openItems, setOpenItems]       = useState<Record<string,boolean>>({})
   const [profile, setProfile]           = useState<any>(profileProp ?? null)
 
   useEffect(() => {
@@ -160,8 +174,11 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
 
   const toggleSection = (s: string) =>
     setOpenSections(prev => ({ ...prev, [s]: prev[s] === false ? true : false }))
+  const toggleItem = (key: string) =>
+    setOpenItems(prev => ({ ...prev, [key]: !prev[key] }))
 
   const isSectionOpen = (s: string) => openSections[s] !== false
+  const isItemOpen    = (key: string) => !!openItems[key]
 
   return (
     <aside className="fixed left-0 top-0 bottom-0 w-[260px] z-40 hidden lg:flex flex-col"
@@ -208,9 +225,46 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
             </button>
 
             {isSectionOpen(group.section) && group.items.map(item => {
+              if (item.children) {
+                const itemKey = group.section + ':' + item.label
+                const anyChildActive = item.children.some(c => pathname === c.href || pathname.startsWith(c.href + '/'))
+                const open = isItemOpen(itemKey)
+                return (
+                  <div key={itemKey}>
+                    <button onClick={() => toggleItem(itemKey)}
+                      className={cn(
+                        'flex items-center gap-3 px-4 py-2 mx-2 rounded-lg text-[13px] transition-all w-full',
+                        anyChildActive ? 'text-white/85' : 'text-white/45 hover:text-white/75 hover:bg-white/5'
+                      )}>
+                      <item.icon size={14} className="flex-shrink-0" />
+                      <span className="truncate font-medium">{item.label}</span>
+                      <ChevronRight size={11} className={cn('ml-auto flex-shrink-0 transition-transform', open && 'rotate-90')}
+                        style={{ color: 'rgba(255,255,255,0.3)' }} />
+                    </button>
+                    {open && item.children.map(child => {
+                      const isActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                      return (
+                        <Link key={child.href} href={child.href}
+                          className={cn(
+                            'flex items-center gap-2 pl-10 pr-4 py-1.5 mx-2 rounded-lg text-[12px] transition-all',
+                            isActive
+                              ? 'text-white bg-white/10 font-medium'
+                              : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+                          )}>
+                          <span className="truncate">{child.label}</span>
+                          {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--acc)' }} />}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )
+              }
+
               const fullHref = currentDept ? `/dashboard/${currentDept}${item.href}` : '#'
               const isActive = pathname === fullHref ||
-                (pathname.startsWith(fullHref + '/') && fullHref !== `/dashboard/${currentDept}/sell-in`)
+                (pathname.startsWith(fullHref + '/') &&
+                  fullHref !== `/dashboard/${currentDept}/sell-in` &&
+                  fullHref !== `/dashboard/${currentDept}/sellout`)
               return (
                 <Link key={item.href} href={fullHref}
                   className={cn(

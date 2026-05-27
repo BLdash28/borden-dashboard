@@ -6,16 +6,19 @@ export const revalidate = 300
 
 export async function GET(req: NextRequest) {
   try {
-    const sp     = req.nextUrl.searchParams
-    const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
-    const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
+    const sp      = req.nextUrl.searchParams
+    const paises  = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
+    const cats    = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
+    const cadenas = sp.get('cadena')    ? sp.get('cadena')!.split(',').filter(Boolean)    : []
+    const sortBy  = sp.get('sort') ?? 'var_2625'
 
     const inC = (col: string, vals: string[]) =>
       `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const filters: string[] = []
-    if (paises.length) filters.push(inC('pais', paises))
-    if (cats.length)   filters.push(inC('categoria', cats))
+    if (paises.length)  filters.push(inC('pais', paises))
+    if (cats.length)    filters.push(inC('categoria', cats))
+    if (cadenas.length) filters.push(inC('cadena', cadenas))
     const and = filters.length ? 'AND ' + filters.join(' AND ') : ''
 
     const r = await pool.query(`

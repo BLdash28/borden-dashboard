@@ -1,7 +1,7 @@
 'use client'
 import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { RefreshCw, Download } from 'lucide-react'
+import { RefreshCw, Download, ChevronDown, ChevronRight } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -60,8 +60,9 @@ export default function SellInPage() {
   const [total,   setTotal]   = useState(0)
   const [kpi,     setKpi]     = useState<{ total_ingresos: number; total_unidades: number; total_clientes: number } | null>(null)
   const [page,    setPage]    = useState(1)
-  const [loading, setLoading] = useState(true)
-  const [sort,    setSort]    = useState<SortState>({ key: 'ingresos', dir: 'desc' })
+  const [loading,         setLoading]         = useState(true)
+  const [sort,            setSort]            = useState<SortState>({ key: 'ingresos', dir: 'desc' })
+  const [detalleExpanded, setDetalleExpanded] = useState(true)
 
   const PAGE_SIZE = 500
   const initDone  = useRef(false)
@@ -267,22 +268,13 @@ export default function SellInPage() {
           <p className="text-xs text-gray-400 uppercase tracking-widest">Ventas</p>
           <h1 className="text-2xl font-bold text-gray-800">Ventas Sell In</h1>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={descargarCSV}
-            disabled={rows.length === 0}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm disabled:opacity-40"
-          >
-            <Download size={14} /> CSV
-          </button>
-          <button
-            onClick={() => triggerCargar()}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm"
-          >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-            Actualizar
-          </button>
-        </div>
+        <button
+          onClick={() => triggerCargar()}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm"
+        >
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          Actualizar
+        </button>
       </div>
 
       {/* Filtros */}
@@ -425,17 +417,30 @@ export default function SellInPage() {
       {/* Tabla */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-700">
-            Detalle Sell In
-            {total > 0 && (
-              <span className="ml-2 text-xs text-gray-400 font-normal">
-                ({((page - 1) * PAGE_SIZE + 1).toLocaleString()}–{Math.min(page * PAGE_SIZE, total).toLocaleString()} de {total.toLocaleString()})
-              </span>
-            )}
-          </h3>
+          <button
+            onClick={() => setDetalleExpanded(v => !v)}
+            className="flex items-center gap-2 text-left hover:opacity-70 transition-opacity"
+          >
+            {detalleExpanded ? <ChevronDown size={15} className="text-gray-400 flex-shrink-0" /> : <ChevronRight size={15} className="text-gray-400 flex-shrink-0" />}
+            <h3 className="font-semibold text-gray-700">
+              Detalle Sell In
+              {total > 0 && (
+                <span className="ml-2 text-xs text-gray-400 font-normal">
+                  ({((page - 1) * PAGE_SIZE + 1).toLocaleString()}–{Math.min(page * PAGE_SIZE, total).toLocaleString()} de {total.toLocaleString()})
+                </span>
+              )}
+            </h3>
+          </button>
+          <button
+            onClick={descargarCSV}
+            disabled={rows.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 shadow-sm disabled:opacity-40"
+          >
+            <Download size={13} /> CSV
+          </button>
         </div>
 
-        {loading
+        {detalleExpanded && (loading
           ? <div className="h-40 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
           : rows.length === 0
             ? <div className="h-40 flex items-center justify-center text-gray-400 text-sm">Sin datos para los filtros seleccionados</div>
@@ -502,7 +507,7 @@ export default function SellInPage() {
                   </div>
                 )}
               </>
-        }
+        )}
       </div>
     </div>
   )

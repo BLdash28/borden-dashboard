@@ -1,29 +1,21 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { Download, RefreshCw } from 'lucide-react'
+import { Download, RefreshCw, ChevronRight } from 'lucide-react'
 import FiltroMulti from '@/components/ui/FiltroMulti'
 
-const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-const PAISES = ['CR','GT','SV','NI','HN','CO']
-const PAISES_OPT = PAISES.map(p => ({ value: p }))
-const MESES_OPT  = Array.from({length:12},(_,i)=>i+1).map(m => ({ value: String(m), label: MESES[m] }))
+const MESES_LABEL = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+const PAISES      = ['CR','GT','SV','NI','HN','CO']
+const PAISES_OPT  = PAISES.map(p => ({ value: p }))
+
+const TRIMESTRES = [
+  { label: 'Q1 · Ene – Abr', short: 'Q1', meses: [1,2,3,4],    headerCls: 'text-blue-700 bg-blue-50/80 border-blue-200',      subCls: 'text-blue-700 bg-blue-50/60'   },
+  { label: 'Q2 · May – Ago', short: 'Q2', meses: [5,6,7,8],    headerCls: 'text-green-700 bg-green-50/80 border-green-200',   subCls: 'text-green-700 bg-green-50/60'  },
+  { label: 'Q3 · Sep – Dic', short: 'Q3', meses: [9,10,11,12], headerCls: 'text-purple-700 bg-purple-50/80 border-purple-200', subCls: 'text-purple-700 bg-purple-50/60' },
+]
 
 const fmt = (v: number) => {
-  if (!isFinite(v) || v === 0) return '—'
-  if (v >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M'
-  if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'K'
-  return '$' + v.toFixed(2)
-}
-
-type DimKey = 'pais' | 'cadena' | 'categoria' | 'sku'
-
-interface VarRow {
-  dim:      string
-  y2024:    number
-  y2025:    number
-  y2026:    number
-  var_2524: number | null
-  var_2625: number | null
+  if (!isFinite(v)) return '—'
+  return '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
 function varColor(v: number | null) {
@@ -38,42 +30,108 @@ function fmtVar(v: number | null) {
   return (v >= 0 ? '+' : '') + v.toFixed(1) + '%'
 }
 
-const DIM_LABELS: Record<DimKey, string> = {
-  pais: 'País', cadena: 'Cadena', categoria: 'Categoría', sku: 'SKU'
+type DimKey = 'cliente' | 'categoria'
+
+interface MesData { y2025: number; y2026: number; var: number | null }
+interface VarRow {
+  dim: string
+  meses: Record<number, MesData>
+  total2025: number
+  total2026: number
+  varTotal: number | null
+}
+interface Totals {
+  total2025: number
+  total2026: number
+  meses: Record<number, { y2025: number; y2026: number }>
+}
+
+function qSub(meses: number[], data: Record<number, MesData>) {
+  const s25 = meses.reduce((s, m) => s + (data[m]?.y2025 ?? 0), 0)
+  const s26 = meses.reduce((s, m) => s + (data[m]?.y2026 ?? 0), 0)
+  return { s25, s26, v: s25 > 0 ? ((s26 - s25) / s25) * 100 : null }
+}
+
+function qSubTotals(meses: number[], totals: Totals) {
+  const s25 = meses.reduce((s, m) => s + (totals.meses[m]?.y2025 ?? 0), 0)
+  const s26 = meses.reduce((s, m) => s + (totals.meses[m]?.y2026 ?? 0), 0)
+  return { s25, s26, v: s25 > 0 ? ((s26 - s25) / s25) * 100 : null }
 }
 
 export default function SellOutYTD() {
-  const [dim,    setDim]    = useState<DimKey>('pais')
+  const [dim,    setDim]    = useState<DimKey>('cliente')
   const [paises, setPaises] = useState<string[]>([])
-  const [meses,  setMeses]  = useState<string[]>([])
   const [rows,   setRows]   = useState<VarRow[]>([])
-  const [totals, setTotals] = useState({ y2024: 0, y2025: 0, y2026: 0 })
+  const [totals, setTotals] = useState<Totals>({ total2025: 0, total2026: 0, meses: {} })
   const [loading,setLoading]= useState(true)
 
-  const cargar = useCallback(async (d: DimKey, ps: string[], ms: string[]) => {
+  const [expanded,       setExpanded]       = useState<Set<string>>(new Set())
+  const [subRows,        setSubRows]        = useState<Record<string, VarRow[]>>({})
+  const [loadingClients, setLoadingClients] = useState<Set<string>>(new Set())
+
+  const buildQs = useCallback((extra?: Record<string, string>) => {
+    const qs = new URLSearchParams({ dim })
+    if (paises.length) qs.set('pais', paises.join(','))
+    if (extra) Object.entries(extra).forEach(([k, v]) => qs.set(k, v))
+    return qs
+  }, [dim, paises])
+
+  const cargar = useCallback(async () => {
     setLoading(true)
+    setExpanded(new Set())
+    setSubRows({})
     try {
-      const qs = new URLSearchParams({ dim: d })
-      if (ps.length) qs.set('pais', ps.join(','))
-      if (ms.length) qs.set('meses', ms.join(','))
-      const res = await fetch('/api/comercial/sellout/variaciones?' + qs)
+      const res = await fetch('/api/comercial/sellout/ytd?' + buildQs())
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const j = await res.json()
       setRows(j.rows ?? [])
-      setTotals(j.totals ?? { y2024: 0, y2025: 0, y2026: 0 })
+      setTotals(j.totals ?? { total2025: 0, total2026: 0, meses: {} })
     } catch {
       setRows([])
     } finally { setLoading(false) }
-  }, [])
+  }, [buildQs])
 
-  useEffect(() => { cargar(dim, paises, meses) }, [cargar, dim, paises, meses])
+  useEffect(() => { cargar() }, [cargar])
+
+  const toggleClient = useCallback(async (clientName: string) => {
+    if (expanded.has(clientName)) {
+      setExpanded(prev => { const s = new Set(prev); s.delete(clientName); return s })
+      return
+    }
+    setExpanded(prev => new Set([...prev, clientName]))
+    if (subRows[clientName]) return
+
+    setLoadingClients(prev => new Set([...prev, clientName]))
+    try {
+      const qs = buildQs({ dim: 'categoria', cliente: clientName })
+      const res = await fetch('/api/comercial/sellout/ytd?' + qs)
+      const j   = await res.json()
+      setSubRows(prev => ({ ...prev, [clientName]: j.rows ?? [] }))
+    } finally {
+      setLoadingClients(prev => { const s = new Set(prev); s.delete(clientName); return s })
+    }
+  }, [expanded, subRows, buildQs])
+
+  const totalVar = totals.total2025 > 0 ? ((totals.total2026 - totals.total2025) / totals.total2025) * 100 : null
 
   const descargarCSV = () => {
-    const h = [DIM_LABELS[dim], '2024', 'Var 25/24 %', '2025', 'Var 26/25 %', '2026']
-    const csv = [h.join(','),
-      ...rows.map(r => [`"${r.dim}"`, r.y2024.toFixed(2),
-        fmtVar(r.var_2524), r.y2025.toFixed(2), fmtVar(r.var_2625),
-        r.y2026.toFixed(2)].join(','))
+    const allMeses = [1,2,3,4,5,6,7,8,9,10,11,12]
+    const header = [dim === 'cliente' ? 'Cliente' : 'Categoría']
+    allMeses.forEach(m => {
+      const ml = MESES_LABEL[m]
+      header.push(`${ml} 2025`, `${ml} 2026`, `Var% ${ml}`)
+    })
+    header.push('Total 2025', 'Total 2026', 'Var% Total')
+    const csv = [header.join(','),
+      ...rows.map(r => {
+        const line: string[] = [`"${r.dim}"`]
+        allMeses.forEach(m => {
+          const d = r.meses[m] ?? { y2025: 0, y2026: 0, var: null }
+          line.push(d.y2025.toFixed(2), d.y2026.toFixed(2), fmtVar(d.var))
+        })
+        line.push(r.total2025.toFixed(2), r.total2026.toFixed(2), fmtVar(r.varTotal))
+        return line.join(',')
+      })
     ].join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
@@ -81,45 +139,41 @@ export default function SellOutYTD() {
     a.click()
   }
 
-  const totalVar2524 = totals.y2024 > 0 ? ((totals.y2025 - totals.y2024) / totals.y2024) * 100 : null
-  const totalVar2625 = totals.y2025 > 0 ? ((totals.y2026 - totals.y2025) / totals.y2025) * 100 : null
-
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Sell Out</p>
           <h1 className="text-2xl font-bold text-gray-800">YTD y Variaciones</h1>
-          <p className="text-sm text-gray-400 mt-0.5">Comparativo 2024 · 2025 · 2026</p>
+          <p className="text-sm text-gray-400 mt-0.5">2025 vs 2026 · Año completo</p>
         </div>
-        <button onClick={descargarCSV} disabled={rows.length === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm disabled:opacity-40">
-          <Download size={14} /> Exportar CSV
-        </button>
-      </div>
-
-      {/* Filtros */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* Dimensión */}
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-            {(['pais','cadena','categoria','sku'] as DimKey[]).map(d => (
-              <button key={d} onClick={() => setDim(d)}
-                className={`px-4 py-2 text-sm font-medium transition-colors ${dim===d?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                {DIM_LABELS[d]}
-              </button>
-            ))}
-          </div>
-          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
-          <FiltroMulti label="Meses" options={MESES_OPT} value={meses} onChange={setMeses} placeholder="Todos (YTD)" />
-          <button onClick={() => cargar(dim, paises, meses)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-gray-100 rounded-lg text-sm text-gray-600 hover:bg-gray-200">
+        <div className="flex gap-2">
+          <button onClick={cargar}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </button>
+          <button onClick={descargarCSV} disabled={rows.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm disabled:opacity-40">
+            <Download size={14} /> Exportar CSV
+          </button>
         </div>
+      </div>
 
-        {/* Leyenda */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div>
+            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Vista</p>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+              {(['cliente','categoria'] as DimKey[]).map(d => (
+                <button key={d} onClick={() => setDim(d)}
+                  className={`px-4 py-2 text-sm font-medium transition-colors ${dim===d?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  {d === 'cliente' ? 'Por Cliente' : 'Por Categoría'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
+        </div>
         <div className="flex items-center gap-4 mt-3 text-[11px]">
           <span className="text-gray-400">Variación:</span>
           <span className="text-green-600 font-semibold">● &gt;+5% Bueno</span>
@@ -128,55 +182,175 @@ export default function SellOutYTD() {
         </div>
       </div>
 
-      {/* Tabla */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
-        {loading
-          ? <div className="h-40 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
-          : rows.length === 0
-            ? (
-              <div className="h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2">
-                <span className="text-3xl">📭</span>
-                Sin datos de Sell-Out disponibles.
+      {loading ? (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm h-40 flex items-center justify-center text-gray-300 text-sm">
+          Cargando...
+        </div>
+      ) : rows.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm h-40 flex flex-col items-center justify-center text-gray-400 text-sm gap-2">
+          <span className="text-3xl">📭</span>
+          Sin datos de Sell-Out disponibles.
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {TRIMESTRES.map((trim, ti) => {
+            const isLast = ti === TRIMESTRES.length - 1
+            // 1 col cliente + 4 meses × 3 cols + 3 cols totalizadora
+            const colSpanSection = 1 + trim.meses.length * 3 + 3
+
+            return (
+              <div key={trim.label} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
+                <table className="w-full text-xs border-collapse" style={{ minWidth: `${180 + trim.meses.length * 165 + 180}px`, tableLayout: 'fixed' }}>
+                  <colgroup>
+                    <col style={{ width: '180px' }} />
+                    {trim.meses.flatMap(m => [
+                      <col key={`${m}-25`} style={{ width: '95px' }} />,
+                      <col key={`${m}-26`} style={{ width: '95px' }} />,
+                      <col key={`${m}-v`}  style={{ width: '70px' }} />,
+                    ])}
+                    <col style={{ width: '95px' }} />
+                    <col style={{ width: '95px' }} />
+                    <col style={{ width: '70px' }} />
+                  </colgroup>
+                  <thead>
+                    {/* Fila 1: Etiqueta trimestre */}
+                    <tr>
+                      <th colSpan={colSpanSection}
+                        className={`py-2 px-4 text-left text-[11px] font-semibold tracking-wide border-b ${trim.headerCls}`}>
+                        {trim.label}
+                      </th>
+                    </tr>
+                    {/* Fila 2: Meses + columna totalizadora */}
+                    <tr className="bg-gray-50 border-b border-gray-100 text-[10px] uppercase tracking-widest text-gray-400">
+                      <th className="text-left py-2 px-4 border-r border-gray-200">
+                        {dim === 'cliente' ? 'Cliente' : 'Categoría'}
+                      </th>
+                      {trim.meses.map(m => (
+                        <th key={m} colSpan={3} className="py-1.5 text-center border-l border-gray-200">
+                          {MESES_LABEL[m]}
+                        </th>
+                      ))}
+                      {isLast ? (
+                        <th colSpan={3} className="py-1.5 text-center border-l border-gray-300 text-amber-600 bg-amber-50/40 font-semibold">
+                          Total Anual
+                        </th>
+                      ) : (
+                        <th colSpan={3} className={`py-1.5 text-center border-l border-gray-300 font-semibold ${trim.subCls}`}>
+                          Sub {trim.short}
+                        </th>
+                      )}
+                    </tr>
+                    {/* Fila 3: Años — flatMap para evitar problemas con fragments */}
+                    <tr className="bg-gray-50 border-b border-gray-200 text-[10px] uppercase tracking-widest text-gray-400">
+                      <th className="py-1.5 px-4 border-r border-gray-200" />
+                      {trim.meses.flatMap(m => [
+                        <th key={`${m}-25`} className="text-right py-1.5 px-2 font-normal border-l border-gray-200">2025</th>,
+                        <th key={`${m}-26`} className="text-right py-1.5 px-1 font-normal">2026</th>,
+                        <th key={`${m}-v`}  className="text-right py-1.5 px-2 font-normal">Var%</th>,
+                      ])}
+                      <th className="text-right py-1.5 px-2 font-normal border-l border-gray-300">2025</th>
+                      <th className="text-right py-1.5 px-1 font-normal">2026</th>
+                      <th className="text-right py-1.5 px-2 font-normal">Var%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, i) => {
+                      const isExp     = expanded.has(r.dim)
+                      const isLoading = loadingClients.has(r.dim)
+                      const canExpand = dim === 'cliente'
+                      const q = isLast
+                        ? { s25: r.total2025, s26: r.total2026, v: r.varTotal }
+                        : qSub(trim.meses, r.meses)
+
+                      return [
+                        <tr key={`row-${ti}-${i}`}
+                          onClick={() => canExpand && toggleClient(r.dim)}
+                          className={`border-b border-gray-50 ${canExpand ? 'cursor-pointer hover:bg-amber-50/30' : 'hover:bg-amber-50/30'} ${i%2===0?'':'bg-gray-50/30'}`}>
+                          <td className="py-2 px-4 font-medium text-gray-700 border-r border-gray-100">
+                            <div className="flex items-center gap-1.5">
+                              {canExpand && (
+                                <ChevronRight size={12} className={`flex-shrink-0 text-gray-400 transition-transform ${isExp ? 'rotate-90' : ''}`} />
+                              )}
+                              <span className="truncate">{r.dim || '—'}</span>
+                            </div>
+                          </td>
+                          {trim.meses.flatMap(m => {
+                            const d = r.meses[m] ?? { y2025: 0, y2026: 0, var: null }
+                            return [
+                              <td key={`${m}-25`} className="py-2 px-2 text-right text-gray-500 border-l border-gray-100">{fmt(d.y2025)}</td>,
+                              <td key={`${m}-26`} className="py-2 px-1 text-right text-gray-700">{fmt(d.y2026)}</td>,
+                              <td key={`${m}-v`}  className={`py-2 px-2 text-right ${varColor(d.var)}`}>{fmtVar(d.var)}</td>,
+                            ]
+                          })}
+                          <td className="py-2 px-2 text-right text-gray-500 border-l border-gray-300 bg-gray-50/60">{fmt(q.s25)}</td>
+                          <td className="py-2 px-1 text-right font-semibold text-gray-800 bg-gray-50/60">{fmt(q.s26)}</td>
+                          <td className={`py-2 px-2 text-right bg-gray-50/60 ${varColor(q.v)}`}>{fmtVar(q.v)}</td>
+                        </tr>,
+
+                        ...(canExpand && isExp
+                          ? isLoading
+                            ? [<tr key={`sub-loading-${ti}-${i}`} className="bg-amber-50/20">
+                                <td colSpan={colSpanSection} className="py-2 px-8 text-xs text-gray-400">Cargando categorías…</td>
+                              </tr>]
+                            : (subRows[r.dim] ?? []).map((sub, si) => {
+                                const sq = isLast
+                                  ? { s25: sub.total2025, s26: sub.total2026, v: sub.varTotal }
+                                  : qSub(trim.meses, sub.meses)
+                                return (
+                                  <tr key={`sub-${ti}-${i}-${si}`} className="bg-amber-50/20 border-b border-amber-100/50">
+                                    <td className="py-1.5 pl-10 pr-4 text-gray-500 italic truncate border-r border-gray-100">{sub.dim}</td>
+                                    {trim.meses.flatMap(m => {
+                                      const d = sub.meses[m] ?? { y2025: 0, y2026: 0, var: null }
+                                      return [
+                                        <td key={`${m}-25`} className="py-1.5 px-2 text-right text-gray-400 text-[11px] border-l border-gray-100">{fmt(d.y2025)}</td>,
+                                        <td key={`${m}-26`} className="py-1.5 px-1 text-right text-gray-600 text-[11px]">{fmt(d.y2026)}</td>,
+                                        <td key={`${m}-v`}  className={`py-1.5 px-2 text-right text-[11px] ${varColor(d.var)}`}>{fmtVar(d.var)}</td>,
+                                      ]
+                                    })}
+                                    <td className="py-1.5 px-2 text-right text-gray-400 border-l border-gray-300 bg-gray-50/60 text-[11px]">{fmt(sq.s25)}</td>
+                                    <td className="py-1.5 px-1 text-right font-semibold text-gray-700 bg-gray-50/60 text-[11px]">{fmt(sq.s26)}</td>
+                                    <td className={`py-1.5 px-2 text-right bg-gray-50/60 text-[11px] ${varColor(sq.v)}`}>{fmtVar(sq.v)}</td>
+                                  </tr>
+                                )
+                              })
+                          : [])
+                      ]
+                    })}
+                  </tbody>
+                  <tfoot className="border-t-2 border-gray-300 bg-gray-50">
+                    <tr className="font-bold text-gray-800">
+                      <td className="py-2.5 px-4 text-xs uppercase tracking-widest text-gray-500 border-r border-gray-100">TOTAL</td>
+                      {trim.meses.flatMap(m => {
+                        const d = totals.meses[m] ?? { y2025: 0, y2026: 0 }
+                        const v = d.y2025 > 0 ? ((d.y2026 - d.y2025) / d.y2025) * 100 : null
+                        return [
+                          <td key={`${m}-25`} className="py-2.5 px-2 text-right border-l border-gray-100">{fmt(d.y2025)}</td>,
+                          <td key={`${m}-26`} className="py-2.5 px-1 text-right">{fmt(d.y2026)}</td>,
+                          <td key={`${m}-v`}  className={`py-2.5 px-2 text-right ${varColor(v)}`}>{fmtVar(v)}</td>,
+                        ]
+                      })}
+                      {isLast ? (() => {
+                        return <>
+                          <td className="py-2.5 px-2 text-right border-l border-gray-300 bg-gray-100/60">{fmt(totals.total2025)}</td>
+                          <td className="py-2.5 px-1 text-right bg-gray-100/60">{fmt(totals.total2026)}</td>
+                          <td className={`py-2.5 px-2 text-right bg-gray-100/60 ${varColor(totalVar)}`}>{fmtVar(totalVar)}</td>
+                        </>
+                      })() : (() => {
+                        const qt = qSubTotals(trim.meses, totals)
+                        return <>
+                          <td className="py-2.5 px-2 text-right border-l border-gray-300 bg-gray-100/60">{fmt(qt.s25)}</td>
+                          <td className="py-2.5 px-1 text-right bg-gray-100/60">{fmt(qt.s26)}</td>
+                          <td className={`py-2.5 px-2 text-right bg-gray-100/60 ${varColor(qt.v)}`}>{fmtVar(qt.v)}</td>
+                        </>
+                      })()}
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             )
-            : (
-              <table className="w-full text-xs min-w-[650px]">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr className="text-gray-400 uppercase tracking-widest text-[10px]">
-                    <th className="text-left py-3 px-4 w-52">{DIM_LABELS[dim]}</th>
-                    <th className="text-right py-3 px-3">2024</th>
-                    <th className="text-right py-3 px-3">Var %</th>
-                    <th className="text-right py-3 px-3">2025</th>
-                    <th className="text-right py-3 px-3">Var %</th>
-                    <th className="text-right py-3 px-4">2026</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, i) => (
-                    <tr key={i} className={`border-b border-gray-50 hover:bg-amber-50/30 ${i%2===0?'':'bg-gray-50/30'}`}>
-                      <td className="py-2 px-4 font-medium text-gray-700 max-w-[200px] truncate">{r.dim || '—'}</td>
-                      <td className="py-2 px-3 text-right text-gray-500">{fmt(r.y2024)}</td>
-                      <td className={`py-2 px-3 text-right ${varColor(r.var_2524)}`}>{fmtVar(r.var_2524)}</td>
-                      <td className="py-2 px-3 text-right text-gray-600">{fmt(r.y2025)}</td>
-                      <td className={`py-2 px-3 text-right ${varColor(r.var_2625)}`}>{fmtVar(r.var_2625)}</td>
-                      <td className="py-2 px-4 text-right font-bold text-gray-800">{fmt(r.y2026)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot className="border-t-2 border-gray-300 bg-gray-50">
-                  <tr className="font-bold text-gray-800">
-                    <td className="py-2.5 px-4 text-xs uppercase tracking-widest text-gray-500">TOTAL</td>
-                    <td className="py-2.5 px-3 text-right">{fmt(totals.y2024)}</td>
-                    <td className={`py-2.5 px-3 text-right ${varColor(totalVar2524)}`}>{fmtVar(totalVar2524)}</td>
-                    <td className="py-2.5 px-3 text-right">{fmt(totals.y2025)}</td>
-                    <td className={`py-2.5 px-3 text-right ${varColor(totalVar2625)}`}>{fmtVar(totalVar2625)}</td>
-                    <td className="py-2.5 px-4 text-right">{fmt(totals.y2026)}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            )
-        }
-      </div>
+          })}
+        </div>
+      )}
     </div>
   )
 }

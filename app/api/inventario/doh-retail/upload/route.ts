@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 
     // Borrar semana+pais anteriores y re-insertar
     await pool.query(
-      'DELETE FROM inventario_doh_retail WHERE semana = $1 AND pais = $2',
+      'DELETE FROM inventario_walmart WHERE semana = $1 AND pais = $2',
       [semana, pais]
     )
 
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
     ])
 
     await pool.query(
-      `INSERT INTO inventario_doh_retail
+      `INSERT INTO inventario_walmart
          (semana,pais,item_nbr,item,item_type,item_status,
           inventario,ordenes,transito,wharehouse,
           inv_cedi_cajas,inv_cedi_unds,ventas_periodo,dias_periodo)

@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+dist/
+build/
+*.csv
+*.xlsx
+*.xls
+*.xlsm
+~$*
+*.py
+*.sql
+files/
+files.zip
+.claude/
+*.log
+tsconfig.tsbuildinfo

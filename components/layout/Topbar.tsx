@@ -46,7 +46,7 @@ export default function Topbar({ profile }: { profile?: any }) {
       <MobileNav profile={profile} />
 
       {/* Page title */}
-      <div className="flex-1 font-display font-bold text-[15px] truncate" style={{ color: 'var(--t1)' }}>
+      <div className="flex-1 font-display font-bold text-[19px] truncate" style={{ color: 'var(--t1)' }}>
         {getTitle()}
       </div>
 

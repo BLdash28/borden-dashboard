@@ -2,23 +2,25 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const revalidate = 300
+export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
   try {
     const sp     = req.nextUrl.searchParams
     const ano    = parseInt(sp.get('ano') || '2026')
-    const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
-    const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
-    const tipos  = sp.get('tipo_negocio') ? sp.get('tipo_negocio')!.split(',').filter(Boolean) : []
+    const paises   = sp.get('pais')          ? sp.get('pais')!.split(',').filter(Boolean)          : []
+    const cats     = sp.get('categoria')     ? sp.get('categoria')!.split(',').filter(Boolean)     : []
+    const tipos    = sp.get('tipo_negocio')  ? sp.get('tipo_negocio')!.split(',').filter(Boolean)  : []
+    const clientes = sp.get('cliente')       ? sp.get('cliente')!.split(',').filter(Boolean)       : []
 
     const inC = (col: string, vals: string[]) =>
       `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const extraConds: string[] = []
-    if (paises.length) extraConds.push(inC('pais', paises))
-    if (cats.length)   extraConds.push(inC('categoria', cats))
-    if (tipos.length)  extraConds.push(inC('tipo_negocio', tipos))
+    if (paises.length)   extraConds.push(inC('pais', paises))
+    if (cats.length)     extraConds.push(inC('categoria', cats))
+    if (tipos.length)    extraConds.push(inC('tipo_negocio', tipos))
+    if (clientes.length) extraConds.push(inC('cliente_nombre', clientes))
     const extra = extraConds.length ? 'AND ' + extraConds.join(' AND ') : ''
 
     // Último mes con datos del año actual (corte YTD)
@@ -36,20 +38,24 @@ export async function GET(req: NextRequest) {
         SELECT
           COALESCE(SUM(venta_neta),     0) AS ingresos,
           COALESCE(SUM(cantidad_cajas), 0) AS cajas,
+          COALESCE(SUM(margen_valor),   0) AS margen,
+          COALESCE(AVG(margen_pct),     0) AS margen_pct_avg,
           COUNT(DISTINCT cliente_nombre)   AS clientes,
           COUNT(DISTINCT sku)              AS skus
         FROM fact_sales_sellin
-        WHERE ano = ${ano} ${extra}
+        WHERE ano = ${ano} AND mes <= ${ultimoMes} ${extra}
       `),
       pool.query(`
         SELECT
           COALESCE(SUM(venta_neta),     0) AS ingresos,
-          COALESCE(SUM(cantidad_cajas), 0) AS cajas
+          COALESCE(SUM(cantidad_cajas), 0) AS cajas,
+          COALESCE(SUM(margen_valor),   0) AS margen,
+          COALESCE(AVG(margen_pct),     0) AS margen_pct_avg
         FROM (
-          SELECT venta_neta, cantidad_cajas FROM fact_sales_sellin
+          SELECT venta_neta, cantidad_cajas, margen_valor, margen_pct FROM fact_sales_sellin
           WHERE ano = ${ano - 1} AND mes <= ${ultimoMes} ${extra}
           UNION ALL
-          SELECT ingresos AS venta_neta, 0 AS cantidad_cajas FROM ventas_sell_in
+          SELECT ingresos AS venta_neta, 0 AS cantidad_cajas, 0 AS margen_valor, NULL AS margen_pct FROM ventas_sell_in
           WHERE ano = ${ano - 1} AND mes <= ${ultimoMes}
             ${paises.length ? 'AND ' + inC('pais', paises) : ''}
             ${cats.length   ? 'AND ' + inC('categoria', cats) : ''}
@@ -64,12 +70,21 @@ export async function GET(req: NextRequest) {
     const delta = (c: number, p: number) =>
       p > 0 ? ((c - p) / p) * 100 : c > 0 ? 100 : 0
 
+    const curIngresos   = parseFloat(cur.ingresos)
+    const curMargen     = parseFloat(cur.margen)
+    const prevMargen    = parseFloat(prev.margen)
+    const margenPct     = parseFloat(cur.margen_pct_avg)  * 100
+    const margenPctPrev = parseFloat(prev.margen_pct_avg) * 100
+
     return NextResponse.json({
       ano,
       ultimoMes,
       kpis: {
-        ingresos: { valor: parseFloat(cur.ingresos), delta: delta(parseFloat(cur.ingresos), parseFloat(prev.ingresos)) },
-        cajas:    { valor: parseFloat(cur.cajas),    delta: delta(parseFloat(cur.cajas),    parseFloat(prev.cajas)) },
+        ingresos:   { valor: curIngresos,                delta: delta(curIngresos, parseFloat(prev.ingresos)) },
+        cajas:      { valor: parseFloat(cur.cajas),      delta: delta(parseFloat(cur.cajas), parseFloat(prev.cajas)) },
+        margen:     { valor: curMargen,                  delta: delta(curMargen, prevMargen) },
+        margen_pct: margenPct,
+        margen_pct_delta: margenPct - margenPctPrev,
         clientes: parseInt(cur.clientes),
         skus:     parseInt(cur.skus),
       },

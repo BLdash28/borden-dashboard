@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
 
     // Semanas disponibles
     const { rows: semanaRows } = await pool.query<{ semana: number; pais: string }>(
-      'SELECT DISTINCT semana, pais FROM inventario_doh_retail ORDER BY semana DESC'
+      'SELECT DISTINCT semana, pais FROM inventario_walmart ORDER BY semana DESC'
     )
 
     // Si no viene semana, usar la más reciente
@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
              inventario, ordenes, transito, wharehouse,
              inv_cedi_cajas, inv_cedi_unds,
              ventas_periodo, dias_periodo
-      FROM inventario_doh_retail
+      FROM inventario_walmart
       WHERE ${where.join(' AND ')}
       ORDER BY inventario DESC
     `, params)

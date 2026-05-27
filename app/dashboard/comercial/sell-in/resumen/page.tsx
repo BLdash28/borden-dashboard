@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback } from 'react'
-import { TrendingUp, TrendingDown, Minus, RefreshCw, Pencil, Save, X } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Customized,
@@ -31,7 +31,8 @@ const fmtN = (v: number) => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e
 
 interface Kpi { valor: number; delta: number }
 interface KpiData {
-  ingresos: Kpi; cajas: Kpi
+  ingresos: Kpi; cajas: Kpi; margen: Kpi
+  margen_pct: number; margen_pct_delta: number
   clientes: number; skus: number
 }
 
@@ -98,11 +99,6 @@ export default function SellInResumen() {
   const [ytd,     setYtd]     = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const [metas,     setMetas]     = useState<number[]>(Array(12).fill(0))
-  const [editando,  setEditando]  = useState(false)
-  const [editVals,  setEditVals]  = useState<string[]>(Array(12).fill(''))
-  const [guardando, setGuardando] = useState(false)
-
   const cargar = useCallback(async (a: number, ps: string[], cs: string[], ts: string[]) => {
     setLoading(true)
     try {
@@ -123,27 +119,7 @@ export default function SellInResumen() {
     } finally { setLoading(false) }
   }, [])
 
-  const cargarMetas = useCallback(async (a: number) => {
-    const r = await fetch(`/api/comercial/sell-in/metas?ano=${a}`)
-    if (!r.ok) return
-    const { metas: m } = await r.json()
-    setMetas(m)
-    setEditVals(m.map((v: number) => v > 0 ? String(v) : ''))
-  }, [])
-
-  const guardarMetas = async () => {
-    setGuardando(true)
-    const vals = editVals.map(v => parseFloat(v.replace(/,/g, '')) || 0)
-    const r = await fetch('/api/comercial/sell-in/metas', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ano, metas: vals }),
-    })
-    if (r.ok) { setMetas(vals); setEditando(false) }
-    setGuardando(false)
-  }
-
-  useEffect(() => { cargar(ano, paises, cats, tipos); cargarMetas(ano) }, [cargar, cargarMetas, ano, paises, cats, tipos])
+  useEffect(() => { cargar(ano, paises, cats, tipos) }, [cargar, ano, paises, cats, tipos])
 
   const handlePaisChange = (ps: string[]) => {
     setPaises(ps)
@@ -164,43 +140,29 @@ export default function SellInResumen() {
     return row
   })
 
+  const prevKey = String(ano - 1)
+  const currKey = String(ano)
+
   // Escala del eje Y — ticks cada $500,000
   const { ytdYMax, ytdTicks } = (() => {
     let max = 0
     for (const d of ytdData) {
-      if (d['2025'] != null) max = Math.max(max, d['2025'])
-      if (d['2026'] != null) max = Math.max(max, d['2026'])
-      if (d['proyeccion'] != null) max = Math.max(max, d['proyeccion'])
+      if (d[prevKey]       != null) max = Math.max(max, d[prevKey])
+      if (d[currKey]       != null) max = Math.max(max, d[currKey])
+      if (d['proyeccion']  != null) max = Math.max(max, d['proyeccion'])
     }
     if (max === 0) return { ytdYMax: undefined, ytdTicks: undefined }
-    const step   = 500_000
+    const step    = 500_000
     const ceiling = Math.ceil(max * 1.05 / step) * step
-    const ticks  = Array.from({ length: Math.floor(ceiling / step) + 1 }, (_, i) => i * step)
+    const ticks   = Array.from({ length: Math.floor(ceiling / step) + 1 }, (_, i) => i * step)
     return { ytdYMax: ceiling, ytdTicks: ticks }
   })()
 
-  const metasData = Array.from({ length: 12 }, (_, i) => ({
-    mes:  MESES[i + 1],
-    real: ytdData[i]['2026'] ?? null,
-    meta: metas[i] > 0 ? metas[i] : null,
-  }))
-
-  const { metasYMax, metasTicks } = (() => {
-    let max = 0
-    for (const d of metasData) {
-      if (d.real != null) max = Math.max(max, d.real)
-      if (d.meta != null) max = Math.max(max, d.meta)
-    }
-    if (max === 0) return { metasYMax: undefined, metasTicks: undefined }
-    const step    = 500_000
-    const ceiling = Math.ceil(max * 1.1 / step) * step
-    const ticks   = Array.from({ length: Math.floor(ceiling / step) + 1 }, (_, i) => i * step)
-    return { metasYMax: ceiling, metasTicks: ticks }
-  })()
-
   const kpiCards = kpi ? [
-    { label: 'Venta Neta YTD', value: '$' + kpi.ingresos.valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.ingresos.delta, icon: '💰' },
-    { label: 'Cajas YTD',      value: Math.round(kpi.cajas.valor).toLocaleString('en-US'), delta: kpi.cajas.delta, icon: '📦' },
+    { label: 'Venta Neta YTD',    value: '$' + kpi.ingresos.valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.ingresos.delta, icon: '💰', sub: null },
+    { label: 'Utilidad Bruta YTD', value: '$' + kpi.margen.valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.margen.delta, icon: '💵', sub: null },
+    { label: 'Margen Promedio YTD', value: kpi.margen_pct.toFixed(1) + '%', delta: kpi.margen_pct_delta, icon: '📊', sub: null, isPct: true },
+    { label: 'Cajas YTD',          value: Math.round(kpi.cajas.valor).toLocaleString('en-US'), delta: kpi.cajas.delta, icon: '📦', sub: null },
   ] : []
 
   return (
@@ -242,9 +204,9 @@ export default function SellInResumen() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {loading
-          ? Array(2).fill(0).map((_,i) => (
+          ? Array(4).fill(0).map((_,i) => (
               <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 animate-pulse">
                 <div className="h-3 bg-gray-100 rounded w-2/3 mb-3"/>
                 <div className="h-7 bg-gray-100 rounded w-1/2 mb-2"/>
@@ -258,9 +220,11 @@ export default function SellInResumen() {
                   <span className="text-lg">{k.icon}</span>
                 </div>
                 <p className="text-2xl font-bold text-gray-800 mb-2">{k.value}</p>
-                <div className="flex items-center gap-1.5 text-[11px] text-gray-400">
-                  <DeltaBadge delta={k.delta} />
+                <div className="flex items-center gap-1.5 text-[11px] text-gray-400 flex-wrap">
+                  <DeltaBadge delta={k.delta} isPct={!!(k as any).isPct} />
                   <span>vs {ano - 1}</span>
+                  {k.sub && <span className="text-gray-300">·</span>}
+                  {k.sub && <span>{k.sub}</span>}
                 </div>
               </div>
             ))
@@ -276,7 +240,7 @@ export default function SellInResumen() {
 
       {/* Gráfico de barras: mensual por año */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Venta Neta Mensual — 2025 / Proyección 2026 / 2026</h3>
+        <h3 className="text-sm font-semibold text-gray-700 mb-4">Venta Neta Mensual — {ano - 1} / Proyección {ano} / {ano}</h3>
         {loading
           ? <div className="h-52 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
           : (
@@ -292,9 +256,9 @@ export default function SellInResumen() {
                   allowEscapeViewBox={{ y: true }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey={2025}          name="2025"       fill={COLORS[2025]}       radius={[3,3,0,0]} maxBarSize={22} />
-                <Bar dataKey="proyeccion"    name="Proyección 2026" fill={COLORS.proyeccion}  radius={[3,3,0,0]} maxBarSize={22} />
-                <Bar dataKey={2026}          name="2026"       fill={COLORS[2026]}       radius={[3,3,0,0]} maxBarSize={22} />
+                <Bar dataKey={prevKey}       name={prevKey}              fill={COLORS[2025]}      radius={[3,3,0,0]} maxBarSize={22} />
+                <Bar dataKey="proyeccion"    name={`Proyección ${ano}`}  fill={COLORS.proyeccion} radius={[3,3,0,0]} maxBarSize={22} />
+                <Bar dataKey={currKey}       name={currKey}              fill={COLORS[2026]}      radius={[3,3,0,0]} maxBarSize={22} />
                 <Customized component={MonthDividers} />
               </BarChart>
             </ResponsiveContainer>
@@ -322,18 +286,18 @@ export default function SellInResumen() {
                 />
                 <Tooltip content={({ active, payload, label }) => {
                   if (!active || !payload?.length) return null
-                  const v2025 = payload.find(p => p.dataKey === '2025')?.value as number | null
-                  const v2026 = payload.find(p => p.dataKey === '2026')?.value as number | null
-                  const pct = v2025 && v2026 && v2025 > 0 ? ((v2026 - v2025) / v2025) * 100 : null
+                  const vPrev = payload.find(p => p.dataKey === prevKey)?.value as number | null
+                  const vCurr = payload.find(p => p.dataKey === currKey)?.value as number | null
+                  const pct = vPrev && vCurr && vPrev > 0 ? ((vCurr - vPrev) / vPrev) * 100 : null
                   return (
                     <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs">
                       <p className="font-semibold text-gray-700 mb-1">{MESES_FULL[MESES.indexOf(label)] ?? label}</p>
                       {payload.map((p: any) => (
                         <p key={p.dataKey} style={{ color: p.stroke }} className="leading-5">
                           {p.name}: {p.value != null ? fmtFull(p.value) : '—'}
-                          {p.dataKey === '2026' && pct != null && (
+                          {p.dataKey === currKey && pct != null && (
                             <span className={`ml-1.5 font-semibold ${pct >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                              ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}% vs 2025)
+                              ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}% vs {ano - 1})
                             </span>
                           )}
                         </p>
@@ -342,9 +306,9 @@ export default function SellInResumen() {
                   )
                 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="2025"       name="2025"            stroke={COLORS[2025]}      strokeWidth={2} dot={false} connectNulls={false} />
-                <Line type="monotone" dataKey="proyeccion" name="Proyección 2026"  stroke={COLORS.proyeccion} strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="5 3" />
-                <Line type="monotone" dataKey="2026"       name="2026"            stroke={COLORS[2026]}      strokeWidth={2} dot={false} connectNulls={false} />
+                <Line type="monotone" dataKey={prevKey}      name={prevKey}             stroke={COLORS[2025]}      strokeWidth={2} dot={false} connectNulls={false} />
+                <Line type="monotone" dataKey="proyeccion"   name={`Proyección ${ano}`} stroke={COLORS.proyeccion} strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="5 3" />
+                <Line type="monotone" dataKey={currKey}      name={currKey}             stroke={COLORS[2026]}      strokeWidth={2} dot={false} connectNulls={false} />
                 <Customized component={LineMonthDividers} />
               </LineChart>
             </ResponsiveContainer>
@@ -352,96 +316,6 @@ export default function SellInResumen() {
         }
       </div>
 
-      {/* Gráfico: Venta Acumulada Proyectada */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-start justify-between mb-1">
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700">Venta Acumulada Proyectada</h3>
-            <p className="text-xs text-gray-400 mb-4">Real 2026 vs meta mensual acumulada</p>
-          </div>
-          {!editando ? (
-            <button onClick={() => setEditando(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-              <Pencil size={11} /> Editar metas
-            </button>
-          ) : (
-            <div className="flex gap-2">
-              <button onClick={() => { setEditando(false); setEditVals(metas.map(v => v > 0 ? String(v) : '')) }}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50">
-                <X size={11} /> Cancelar
-              </button>
-              <button onClick={guardarMetas} disabled={guardando}
-                className="flex items-center gap-1 px-3 py-1.5 text-xs text-white bg-amber-500 rounded-lg hover:bg-amber-600 disabled:opacity-50">
-                <Save size={11} /> {guardando ? 'Guardando...' : 'Guardar'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {loading
-          ? <div className="h-64 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
-          : (
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={metasData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                <YAxis
-                  tickFormatter={v => v >= 1_000_000 ? '$' + (v / 1_000_000).toFixed(1) + 'M' : '$' + (v / 1_000).toFixed(0) + 'K'}
-                  tick={{ fontSize: 11 }}
-                  width={60}
-                  domain={[0, metasYMax ?? 'auto']}
-                  ticks={metasTicks}
-                />
-                <Tooltip content={({ active, payload, label }) => {
-                  if (!active || !payload?.length) return null
-                  const real = payload.find(p => p.dataKey === 'real')?.value as number | null
-                  const meta = payload.find(p => p.dataKey === 'meta')?.value as number | null
-                  const pct  = real && meta && meta > 0 ? (real / meta) * 100 : null
-                  return (
-                    <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs">
-                      <p className="font-semibold text-gray-700 mb-1">{MESES_FULL[MESES.indexOf(label)] ?? label}</p>
-                      {payload.map((p: any) => (
-                        <p key={p.dataKey} style={{ color: p.stroke }} className="leading-5">
-                          {p.name}: {p.value != null ? fmtFull(p.value) : '—'}
-                        </p>
-                      ))}
-                      {pct != null && (
-                        <p className={`mt-1 font-semibold ${pct >= 100 ? 'text-green-600' : 'text-red-500'}`}>
-                          Avance: {pct.toFixed(1)}%
-                        </p>
-                      )}
-                    </div>
-                  )
-                }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey="real" name="Real 2026" stroke={COLORS[2026]} strokeWidth={2} dot={false} connectNulls={false} />
-                <Line type="monotone" dataKey="meta" name="Meta"      stroke="#10b981"       strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="5 3" />
-                <Customized component={LineMonthDividers} />
-              </LineChart>
-            </ResponsiveContainer>
-          )
-        }
-
-        {editando && (
-          <div className="mt-4 border-t pt-4">
-            <p className="text-xs text-gray-400 mb-3">Meta acumulada por mes (USD) — ingresa el total acumulado hasta cada mes</p>
-            <div className="grid grid-cols-6 sm:grid-cols-12 gap-2">
-              {MESES.slice(1).map((mes, i) => (
-                <div key={mes} className="flex flex-col gap-1">
-                  <label className="text-[10px] text-center text-gray-400 font-medium">{mes}</label>
-                  <input
-                    type="text"
-                    value={editVals[i]}
-                    onChange={e => { const v = [...editVals]; v[i] = e.target.value; setEditVals(v) }}
-                    placeholder="0"
-                    className="w-full text-center text-xs px-1 py-1.5 border border-gray-200 rounded-md outline-none focus:border-amber-400"
-                  />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   )
 }

@@ -16,7 +16,7 @@ export async function GET() {
       `SELECT semana, pais, item_nbr, item, item_type, item_status,
               inventario, ordenes, transito, wharehouse,
               inv_cedi_cajas, inv_cedi_unds, ventas_periodo, dias_periodo
-       FROM inventario_doh_retail
+       FROM inventario_walmart
        ORDER BY semana, pais, item_nbr`
     )
 
@@ -26,7 +26,7 @@ export async function GET() {
     let total = 0
     for (let i = 0; i < rows.length; i += BATCH) {
       const { error } = await supabase
-        .from('inventario_doh_retail')
+        .from('inventario_walmart')
         .upsert(rows.slice(i, i + BATCH), { onConflict: 'semana,pais,item_nbr' })
       if (error) throw new Error(error.message)
       total += Math.min(BATCH, rows.length - i)

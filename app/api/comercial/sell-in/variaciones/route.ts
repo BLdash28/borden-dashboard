@@ -15,13 +15,8 @@ export async function GET(req: NextRequest) {
     const tipos    = sp.get('tipo_negocio') ? sp.get('tipo_negocio')!.split(',').filter(Boolean) : []
     const clientes = sp.get('cliente')      ? sp.get('cliente')!.split(',').filter(Boolean)      : []
 
-    // YTD: Ene → último mes cerrado del año actual
-    const ultimoMesCerrado = new Date().getMonth()
-    if (ultimoMesCerrado === 0) {
-      return NextResponse.json({ rows: [], totals: { total2025: 0, total2026: 0, meses: {} }, meses: [], dim })
-    }
-
-    const meses    = Array.from({ length: ultimoMesCerrado }, (_, i) => i + 1)
+    // Año completo — 12 meses
+    const meses    = Array.from({ length: 12 }, (_, i) => i + 1)
     const mesSql   = `mes IN (${meses.join(',')})`
     const paisCond = paises.length ? 'AND ' + inC('pais',         paises) : ''
     const tipoCond = tipos.length  ? 'AND ' + inC('tipo_negocio', tipos)  : ''
