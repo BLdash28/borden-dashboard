@@ -17,6 +17,7 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
   const [openSections, setOpenSections] = useState<Record<string,boolean>>({})
   const [openItems, setOpenItems]       = useState<Record<string,boolean>>({})
   const [profile, setProfile]           = useState<any>(profileProp ?? null)
+  const [footerOpen, setFooterOpen]     = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -153,73 +154,84 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
       </nav>
 
       {/* Footer */}
-      <div className="px-4 py-4 border-t border-white/5 flex-shrink-0">
-        {profile && (
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0"
-              style={{ background: 'var(--acc)' }}>
-              {(profile.full_name?.[0] || 'U').toUpperCase()}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-[14px] font-semibold text-white/85 truncate">{profile.full_name || 'Usuario'}</div>
-              <div className="text-[11px] uppercase tracking-wide text-white/35">{profile.role}</div>
-            </div>
+      <div className="border-t border-white/5 flex-shrink-0">
+        <button
+          onClick={() => setFooterOpen(v => !v)}
+          className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors"
+        >
+          {profile ? (
+            <>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0"
+                style={{ background: 'var(--acc)' }}>
+                {(profile.full_name?.[0] || 'U').toUpperCase()}
+              </div>
+              <div className="min-w-0 flex-1 text-left">
+                <div className="text-[13px] font-semibold text-white/85 truncate">{profile.full_name || 'Usuario'}</div>
+                <div className="text-[10px] uppercase tracking-wide text-white/35">{profile.role}</div>
+              </div>
+            </>
+          ) : (
+            <div className="flex-1" />
+          )}
+          <ChevronDown size={13} className={cn('flex-shrink-0 transition-transform text-white/30', footerOpen && 'rotate-180')} />
+        </button>
+
+        {footerOpen && (
+          <div className="px-3 pb-3 space-y-0.5">
+            {isAdmin && (
+              <Link
+                href="/dashboard/admin/usuarios"
+                className={cn(
+                  'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
+                  pathname.includes('/admin/usuarios') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
+                )}>
+                <Settings size={14} /> Configuración
+              </Link>
+            )}
+            {profile?.role === 'superadmin' && (
+              <Link
+                href="/dashboard/configuraciones/integraciones"
+                className={cn(
+                  'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
+                  pathname.includes('/configuraciones/integraciones') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
+                )}>
+                <Zap size={14} /> Integraciones
+              </Link>
+            )}
+            {profile?.role === 'superadmin' && (
+              <Link
+                href="/dashboard/configuraciones/reporteria"
+                className={cn(
+                  'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
+                  pathname.includes('/configuraciones/reporteria') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
+                )}>
+                <FileText size={14} /> Reportería
+              </Link>
+            )}
+            {profile?.role === 'superadmin' && (
+              <Link
+                href="/dashboard/configuraciones/alertas"
+                className={cn(
+                  'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
+                  pathname.includes('/configuraciones/alertas') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
+                )}>
+                <Bell size={14} /> Alertas
+              </Link>
+            )}
+            <Link
+              href="/dashboard/admin/seguridad"
+              className={cn(
+                'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
+                pathname.includes('/seguridad') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
+              )}>
+              <Shield size={14} /> Seguridad
+            </Link>
+            <button onClick={handleLogout}
+              className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-red-400 transition-colors w-full px-2 py-2 rounded-lg">
+              <LogOut size={14} /> Cerrar sesión
+            </button>
           </div>
         )}
-        <div className="space-y-1">
-          {isAdmin && (
-            <Link
-              href="/dashboard/admin/usuarios"
-              className={cn(
-                'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
-                pathname.includes('/admin/usuarios') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
-              )}>
-              <Settings size={14} /> Configuración
-            </Link>
-          )}
-          {profile?.role === 'superadmin' && (
-            <Link
-              href="/dashboard/configuraciones/integraciones"
-              className={cn(
-                'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
-                pathname.includes('/configuraciones/integraciones') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
-              )}>
-              <Zap size={14} /> Integraciones
-            </Link>
-          )}
-          {profile?.role === 'superadmin' && (
-            <Link
-              href="/dashboard/configuraciones/reporteria"
-              className={cn(
-                'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
-                pathname.includes('/configuraciones/reporteria') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
-              )}>
-              <FileText size={14} /> Reportería
-            </Link>
-          )}
-          {profile?.role === 'superadmin' && (
-            <Link
-              href="/dashboard/configuraciones/alertas"
-              className={cn(
-                'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
-                pathname.includes('/configuraciones/alertas') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
-              )}>
-              <Bell size={14} /> Alertas
-            </Link>
-          )}
-          <Link
-            href="/dashboard/admin/seguridad"
-            className={cn(
-              'flex items-center gap-2.5 text-[13px] transition-colors w-full px-2 py-2 rounded-lg',
-              pathname.includes('/seguridad') ? 'text-white/75' : 'text-white/35 hover:text-white/60'
-            )}>
-            <Shield size={14} /> Seguridad
-          </Link>
-          <button onClick={handleLogout}
-            className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-red-400 transition-colors w-full px-2 py-2 rounded-lg">
-            <LogOut size={14} /> Cerrar sesión
-          </button>
-        </div>
       </div>
     </aside>
   )

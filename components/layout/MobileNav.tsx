@@ -14,6 +14,7 @@ export default function MobileNav({ profile }: { profile?: any }) {
   const [deptOpen, setDeptOpen] = useState(false)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
   const [openItems, setOpenItems] = useState<Record<string, boolean>>({})
+  const [footerOpen, setFooterOpen] = useState(false)
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -205,67 +206,78 @@ export default function MobileNav({ profile }: { profile?: any }) {
         </nav>
 
         {/* Footer */}
-        <div className="px-4 py-4 border-t border-white/5 flex-shrink-0">
-          {profile && (
-            <div className="flex items-center gap-3 mb-4">
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0"
-                style={{ background: 'var(--acc)' }}
+        <div className="border-t border-white/5 flex-shrink-0">
+          <button
+            onClick={() => setFooterOpen(v => !v)}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 active:bg-white/10 transition-colors"
+          >
+            {profile ? (
+              <>
+                <div
+                  className="w-9 h-9 rounded-full flex items-center justify-center text-[13px] font-bold text-white flex-shrink-0"
+                  style={{ background: 'var(--acc)' }}
+                >
+                  {(profile.full_name?.[0] || 'U').toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1 text-left">
+                  <div className="text-[14px] font-semibold text-white/85 truncate">{profile.full_name || 'Usuario'}</div>
+                  <div className="text-[11px] uppercase tracking-wide text-white/35">{profile.role}</div>
+                </div>
+              </>
+            ) : (
+              <div className="flex-1" />
+            )}
+            <ChevronDown size={14} className={cn('flex-shrink-0 transition-transform text-white/30', footerOpen && 'rotate-180')} />
+          </button>
+
+          {footerOpen && (
+            <div className="px-3 pb-3 space-y-0.5">
+              {isAdmin && (
+                <Link
+                  href="/dashboard/admin/usuarios"
+                  className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
+                >
+                  <Settings size={16} /> Configuración
+                </Link>
+              )}
+              {profile?.role === 'superadmin' && (
+                <Link
+                  href="/dashboard/configuraciones/integraciones"
+                  className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
+                >
+                  <Zap size={16} /> Integraciones
+                </Link>
+              )}
+              {profile?.role === 'superadmin' && (
+                <Link
+                  href="/dashboard/configuraciones/reporteria"
+                  className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
+                >
+                  <FileText size={16} /> Reportería
+                </Link>
+              )}
+              {profile?.role === 'superadmin' && (
+                <Link
+                  href="/dashboard/configuraciones/alertas"
+                  className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
+                >
+                  <Bell size={16} /> Alertas
+                </Link>
+              )}
+              <Link
+                href="/dashboard/admin/seguridad"
+                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
               >
-                {(profile.full_name?.[0] || 'U').toUpperCase()}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[14px] font-semibold text-white/85 truncate">{profile.full_name || 'Usuario'}</div>
-                <div className="text-[11px] uppercase tracking-wide text-white/35">{profile.role}</div>
-              </div>
+                <Shield size={16} /> Seguridad
+              </Link>
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-red-400 transition-colors w-full px-2 py-2 rounded-lg"
+              >
+                <LogOut size={16} /> Cerrar sesión
+              </button>
             </div>
           )}
-          <div className="space-y-1">
-            {isAdmin && (
-              <Link
-                href="/dashboard/admin/usuarios"
-                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
-              >
-                <Settings size={16} /> Configuración
-              </Link>
-            )}
-            {profile?.role === 'superadmin' && (
-              <Link
-                href="/dashboard/configuraciones/integraciones"
-                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
-              >
-                <Zap size={16} /> Integraciones
-              </Link>
-            )}
-            {profile?.role === 'superadmin' && (
-              <Link
-                href="/dashboard/configuraciones/reporteria"
-                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
-              >
-                <FileText size={16} /> Reportería
-              </Link>
-            )}
-            {profile?.role === 'superadmin' && (
-              <Link
-                href="/dashboard/configuraciones/alertas"
-                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
-              >
-                <Bell size={16} /> Alertas
-              </Link>
-            )}
-            <Link
-              href="/dashboard/admin/seguridad"
-              className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
-            >
-              <Shield size={16} /> Seguridad
-            </Link>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-red-400 transition-colors w-full px-2 py-2 rounded-lg"
-            >
-              <LogOut size={16} /> Cerrar sesión
-            </button>
-          </div>
         </div>
       </div>
     </>
