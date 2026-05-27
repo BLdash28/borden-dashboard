@@ -10,43 +10,56 @@ import {
   Package, Globe2, Tag, Store, ShoppingBag,
   FileText, LogOut, ChevronDown, ChevronRight, FileCheck, Settings, Shield,
   Box, Megaphone, Share2, DollarSign, CreditCard, Scale, PieChart, Zap, MapPin,
-  Activity, Layers, Search, AlertTriangle, List, Bell,
+  Bell,
 } from 'lucide-react'
 
-const MENUS: Record<string, { section: string; items: { href: string; icon: any; label: string }[] }[]> = {
+type NavItem = { href?: string; icon: any; label: string; children?: { href: string; label: string }[] }
+type MenuSection = { section: string; items: NavItem[] }
+
+const MENUS: Record<string, MenuSection[]> = {
   comercial: [
     {
       section: 'Sell In',
       items: [
-        { href: '/sell-in/resumen',        icon: BarChart2,    label: 'Resumen Ejecutivo'   },
-        { href: '/proyeccion',             icon: TrendingUp,   label: 'Proyección'          },
-        { href: '/sell-in/variaciones',    icon: ArrowUpRight, label: 'YTD y Variaciones'   },
-        { href: '/sell-in',                icon: ShoppingCart, label: 'Detalle por SKU'     },
-        { href: '/sell-in/licenciamiento', icon: Tag,          label: 'Licenciamiento'      },
+        { href: '/sell-in/resumen',        icon: BarChart2,    label: 'Resumen Ejecutivo'  },
+        { href: '/proyeccion',             icon: TrendingUp,   label: 'Proyección'         },
+        { href: '/sell-in/variaciones',    icon: ArrowUpRight, label: 'YTD y Variaciones'  },
+        { href: '/sell-in',                icon: ShoppingCart, label: 'Detalle por SKU'    },
+        { href: '/sell-in/licenciamiento', icon: Tag,          label: 'Licenciamiento'     },
       ],
     },
     {
       section: 'Sell Out',
       items: [
-        { href: '/resumen',            icon: BarChart2,    label: 'Resumen Ejecutivo'  },
-        { href: '/sellout/tendencias', icon: TrendingUp,   label: 'Tendencias'         },
-        { href: '/sellout',            icon: ShoppingCart, label: 'Detalle por SKU'    },
-        { href: '/sellout/ytd',        icon: ArrowUpRight, label: 'YTD y Variaciones'  },
+        { href: '/resumen',            icon: BarChart2,    label: 'Resumen Ejecutivo' },
+        { href: '/sellout/tendencias', icon: TrendingUp,   label: 'Tendencias'        },
+        { href: '/sellout',            icon: ShoppingCart, label: 'Detalle por SKU'   },
+        { href: '/sellout/ytd',        icon: ArrowUpRight, label: 'YTD y Variaciones' },
       ],
     },
     {
       section: 'Ejecución',
       items: [
-        { href: '/ejecucion',               icon: Activity,      label: 'Panel General'        },
-        { href: '/ejecucion/crecimiento',   icon: TrendingUp,    label: 'Crecimiento SKU'      },
-        { href: '/ejecucion/distribucion',  icon: Layers,        label: 'Distribución 75%'     },
-        { href: '/ejecucion/cobertura',     icon: MapPin,        label: 'Cobertura PDV'        },
-        { href: '/ejecucion/inventario',    icon: Package,       label: 'Inventario CEDI+PDV'  },
-        { href: '/ejecucion/precio',        icon: Tag,           label: 'Precio / Elasticidad' },
-        { href: '/ejecucion/punto-reorden', icon: AlertTriangle, label: 'Punto de Reorden'     },
-        { href: '/ejecucion/cola',          icon: List,          label: 'Long Tail 50%'        },
-        { href: '/ejecucion/som',           icon: PieChart,      label: 'Share of Market'      },
-        { href: '/ejecucion/forecast',      icon: TrendingUp,    label: 'Forecast'             },
+        { icon: Globe2, label: 'GT', children: [
+          { href: '/dashboard/comercial/ejecucion/gt/walmart',  label: 'Walmart'  },
+          { href: '/dashboard/comercial/ejecucion/gt/unisuper', label: 'Unisuper' },
+        ]},
+        { icon: Globe2, label: 'HN', children: [
+          { href: '/dashboard/comercial/ejecucion/hn/walmart', label: 'Walmart' },
+        ]},
+        { icon: Globe2, label: 'NI', children: [
+          { href: '/dashboard/comercial/ejecucion/ni/walmart', label: 'Walmart' },
+        ]},
+        { icon: Globe2, label: 'SV', children: [
+          { href: '/dashboard/comercial/ejecucion/sv/walmart',  label: 'Walmart'  },
+          { href: '/dashboard/comercial/ejecucion/sv/selectos', label: 'Selectos' },
+        ]},
+        { icon: Globe2, label: 'CR', children: [
+          { href: '/dashboard/comercial/ejecucion/cr/walmart', label: 'Walmart' },
+        ]},
+        { icon: Globe2, label: 'CO', children: [
+          { href: '/dashboard/comercial/ejecucion/co/grupo-exito', label: 'Grupo Éxito' },
+        ]},
       ],
     },
   ],
@@ -70,9 +83,9 @@ const MENUS: Record<string, { section: string; items: { href: string; icon: any;
     {
       section: 'Módulos',
       items: [
-        { href: '/campanas',    icon: Megaphone,  label: 'Campañas'            },
-        { href: '/share-voice', icon: Share2,     label: 'Share of Voice'      },
-        { href: '/digital',     icon: TrendingUp, label: 'Rendimiento Digital' },
+        { href: '/campanas',    icon: Megaphone,  label: 'Campañas'             },
+        { href: '/share-voice', icon: Share2,     label: 'Share of Voice'       },
+        { href: '/digital',     icon: TrendingUp, label: 'Rendimiento Digital'  },
       ],
     },
   ],
@@ -129,6 +142,7 @@ export default function MobileNav({ profile }: { profile?: any }) {
   const [open, setOpen] = useState(false)
   const [deptOpen, setDeptOpen] = useState(false)
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({})
+  const [openItems, setOpenItems] = useState<Record<string, boolean>>({})
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
@@ -156,6 +170,10 @@ export default function MobileNav({ profile }: { profile?: any }) {
   const isSectionOpen = (s: string) => openSections[s] !== false
   const toggleSection = (s: string) =>
     setOpenSections(prev => ({ ...prev, [s]: !isSectionOpen(s) }))
+
+  const isItemOpen = (key: string) => !!openItems[key]
+  const toggleItem = (key: string) =>
+    setOpenItems(prev => ({ ...prev, [key]: !prev[key] }))
 
   return (
     <>
@@ -244,15 +262,62 @@ export default function MobileNav({ profile }: { profile?: any }) {
                   style={{ color: 'rgba(255,255,255,0.3)' }}
                 />
               </button>
+
               {isSectionOpen(group.section) && group.items.map(item => {
+                if (item.children) {
+                  const itemKey = group.section + ':' + item.label
+                  const anyChildActive = item.children.some(c => pathname === c.href || pathname.startsWith(c.href + '/'))
+                  const expanded = isItemOpen(itemKey)
+                  return (
+                    <div key={itemKey}>
+                      <button
+                        onClick={() => toggleItem(itemKey)}
+                        className={cn(
+                          'flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg text-[14px] transition-all w-full',
+                          anyChildActive ? 'text-white/85' : 'text-white/45 hover:text-white/75 hover:bg-white/5 active:bg-white/10'
+                        )}
+                      >
+                        <item.icon size={16} className="flex-shrink-0" />
+                        <span className="truncate font-medium">{item.label}</span>
+                        <ChevronRight
+                          size={11}
+                          className={cn('ml-auto flex-shrink-0 transition-transform', expanded && 'rotate-90')}
+                          style={{ color: 'rgba(255,255,255,0.3)' }}
+                        />
+                      </button>
+                      {expanded && item.children.map(child => {
+                        const isActive = pathname === child.href || pathname.startsWith(child.href + '/')
+                        return (
+                          <Link
+                            key={child.href}
+                            href={child.href}
+                            className={cn(
+                              'flex items-center gap-2 pl-10 pr-4 py-2 mx-2 rounded-lg text-[13px] transition-all',
+                              isActive
+                                ? 'text-white bg-white/10 font-medium'
+                                : 'text-white/40 hover:text-white/70 hover:bg-white/5 active:bg-white/10'
+                            )}
+                          >
+                            <span className="truncate">{child.label}</span>
+                            {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: 'var(--acc)' }} />}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  )
+                }
+
                 const fullHref = currentDept ? `/dashboard/${currentDept}${item.href}` : '#'
-                const isActive = pathname === fullHref || pathname.startsWith(fullHref + '/')
+                const isActive = pathname === fullHref ||
+                  (pathname.startsWith(fullHref + '/') &&
+                    fullHref !== `/dashboard/${currentDept}/sell-in` &&
+                    fullHref !== `/dashboard/${currentDept}/sellout`)
                 return (
                   <Link
                     key={item.href}
                     href={fullHref}
                     className={cn(
-                      'flex items-center gap-3 px-4 py-3 mx-2 rounded-lg text-[14px] transition-all',
+                      'flex items-center gap-3 px-4 py-2.5 mx-2 rounded-lg text-[14px] transition-all',
                       isActive
                         ? 'text-white bg-white/10 font-medium'
                         : 'text-white/45 hover:text-white/75 hover:bg-white/5 active:bg-white/10'
@@ -288,7 +353,7 @@ export default function MobileNav({ profile }: { profile?: any }) {
             {isAdmin && (
               <Link
                 href="/dashboard/admin/usuarios"
-                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2.5 rounded-lg"
+                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
               >
                 <Settings size={16} /> Configuración
               </Link>
@@ -296,28 +361,36 @@ export default function MobileNav({ profile }: { profile?: any }) {
             {profile?.role === 'superadmin' && (
               <Link
                 href="/dashboard/configuraciones/integraciones"
-                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2.5 rounded-lg"
+                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
               >
                 <Zap size={16} /> Integraciones
               </Link>
             )}
             {profile?.role === 'superadmin' && (
               <Link
+                href="/dashboard/configuraciones/reporteria"
+                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
+              >
+                <FileText size={16} /> Reportería
+              </Link>
+            )}
+            {profile?.role === 'superadmin' && (
+              <Link
                 href="/dashboard/configuraciones/alertas"
-                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2.5 rounded-lg"
+                className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
               >
                 <Bell size={16} /> Alertas
               </Link>
             )}
             <Link
               href="/dashboard/admin/seguridad"
-              className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2.5 rounded-lg"
+              className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-white/60 transition-colors w-full px-2 py-2 rounded-lg"
             >
               <Shield size={16} /> Seguridad
             </Link>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-red-400 transition-colors w-full px-2 py-2.5 rounded-lg"
+              className="flex items-center gap-2.5 text-[13px] text-white/35 hover:text-red-400 transition-colors w-full px-2 py-2 rounded-lg"
             >
               <LogOut size={16} /> Cerrar sesión
             </button>
