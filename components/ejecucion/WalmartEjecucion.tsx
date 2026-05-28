@@ -44,6 +44,18 @@ const CADENA_COLORS: Record<string, string> = {
   'MAXIBODEGA':            '#9333ea',
 }
 
+export const WALMART_RPTCODES: Record<string, { cadena: string; formato: string }[]> = {
+  HM: [{ cadena: 'WALMART',             formato: 'HIPERMERCADO' }],
+  PI: [{ cadena: 'PALI',                formato: 'DESCUENTOS'   }],
+  ME: [{ cadena: 'MAS X MENOS',         formato: 'SUPERMERCADO' }],
+  MI: [{ cadena: 'MAXI PALI',           formato: 'BODEGAS'      },
+       { cadena: 'MAXI DESPENSA',        formato: 'BODEGAS'      }],
+  DF: [{ cadena: 'DESPENSA FAMILIAR',   formato: 'DESCUENTOS'   }],
+  LJ: [{ cadena: 'LA DESPENSA DON JUAN',formato: 'SUPERMERCADO' }],
+  PZ: [{ cadena: 'PAIZ',                formato: 'SUPERMERCADO' }],
+  LN: [{ cadena: 'LA UNION',            formato: 'SUPERMERCADO' }],
+}
+
 const CADENAS_POR_PAIS: Record<string, string[]> = {
   CR: ['WALMART', 'MAS X MENOS', 'MAXI PALI', 'PALI'],
   GT: ['WALMART', 'DESPENSA FAMILIAR', 'PAIZ'],
