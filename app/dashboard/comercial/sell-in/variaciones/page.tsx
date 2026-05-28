@@ -1,7 +1,9 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { Download, RefreshCw, ChevronRight } from 'lucide-react'
 import FiltroMulti from '@/components/ui/FiltroMulti'
+
+const STORAGE_KEY = 'bl_sellin_var_v1'
 
 const MESES_LABEL = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const PAISES_OPT  = ['CR','GT','SV','NI','HN','CO'].map(p => ({ value: p }))
@@ -68,6 +70,7 @@ export default function SellInVariaciones() {
   const [dim,    setDim]    = useState<DimKey>('cliente')
   const [paises, setPaises] = useState<string[]>([])
   const [tipos,  setTipos]  = useState<string[]>(['REGULAR'])
+  const initDone = useRef(false)
   const [rows,   setRows]   = useState<VarRow[]>([])
   const [totals, setTotals] = useState<Totals>({ total2025: 0, total2026: 0, meses: {} })
   const [meses,  setMeses]  = useState<number[]>([])
@@ -102,6 +105,21 @@ export default function SellInVariaciones() {
   }, [buildQs])
 
   useEffect(() => { cargar() }, [cargar])
+
+  useEffect(() => {
+    if (initDone.current) return
+    initDone.current = true
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        const s = JSON.parse(raw)
+        if (s.dim)            setDim(s.dim)
+        if (s.paises?.length) setPaises(s.paises)
+        if (s.tipos?.length)  setTipos(s.tipos)
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const toggleClient = useCallback(async (clientName: string) => {
     if (expanded.has(clientName)) {
@@ -183,15 +201,24 @@ export default function SellInVariaciones() {
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Vista</p>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               {(['cliente','categoria'] as DimKey[]).map(d => (
-                <button key={d} onClick={() => setDim(d)}
+                <button key={d} onClick={() => {
+                  setDim(d)
+                  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ dim: d, paises, tipos })) } catch {}
+                }}
                   className={`px-4 py-2 text-sm font-medium transition-colors ${dim===d?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
                   {d === 'cliente' ? 'Por Cliente' : 'Por Categoría'}
                 </button>
               ))}
             </div>
           </div>
-          <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT}  value={tipos}  onChange={setTipos}  placeholder="Todos" />
-          <FiltroMulti label="País"         options={PAISES_OPT} value={paises} onChange={setPaises} placeholder="Todos los países" />
+          <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT}  value={tipos}  onChange={ts => {
+            setTipos(ts)
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ dim, paises, tipos: ts })) } catch {}
+          }} placeholder="Todos" />
+          <FiltroMulti label="País"         options={PAISES_OPT} value={paises} onChange={ps => {
+            setPaises(ps)
+            try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ dim, paises: ps, tipos })) } catch {}
+          }} placeholder="Todos los países" />
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px]">
           <span className="text-gray-400">Variación:</span>

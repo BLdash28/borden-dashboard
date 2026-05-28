@@ -4,6 +4,19 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { RefreshCw, Download, ChevronDown, ChevronRight } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
 
+const STORAGE_KEY = 'bl_sellin_v1'
+function readStorage() {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as {
+      fAnos?: string[]; fMeses?: string[]; fPaises?: string[]; fCats?: string[]
+      fClientes?: string[]; fCanales?: string[]; fSkus?: string[]
+    }
+  } catch { return null }
+}
+
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
 const toNum = (v: unknown): number => {
@@ -38,15 +51,15 @@ export default function SellInPage() {
   // Period
   const [mesMap, setMesMap] = useState<Record<number, number[]>>({})
   const [anos,   setAnos]   = useState<number[]>([])
-  const [fAnos,  setFAnos]  = useState<string[]>([])
-  const [fMeses, setFMeses] = useState<string[]>([])
+  const [fAnos,  setFAnos]  = useState<string[]>(() => readStorage()?.fAnos  ?? [])
+  const [fMeses, setFMeses] = useState<string[]>(() => readStorage()?.fMeses ?? [])
 
   // Filters
-  const [fPaises,   setFPaises]   = useState<string[]>([])
-  const [fCats,     setFCats]     = useState<string[]>([])
-  const [fClientes, setFClientes] = useState<string[]>([])
-  const [fCanales,  setFCanales]  = useState<string[]>([])
-  const [fSkus,     setFSkus]     = useState<string[]>([])
+  const [fPaises,   setFPaises]   = useState<string[]>(() => readStorage()?.fPaises   ?? [])
+  const [fCats,     setFCats]     = useState<string[]>(() => readStorage()?.fCats     ?? [])
+  const [fClientes, setFClientes] = useState<string[]>(() => readStorage()?.fClientes ?? [])
+  const [fCanales,  setFCanales]  = useState<string[]>(() => readStorage()?.fCanales  ?? [])
+  const [fSkus,     setFSkus]     = useState<string[]>(() => readStorage()?.fSkus     ?? [])
 
   // Options
   const [paisOpts,    setPaisOpts]    = useState<string[]>([])
@@ -68,10 +81,11 @@ export default function SellInPage() {
   const PAGE_SIZE = 500
   const initDone  = useRef(false)
 
-  // ── Cargar períodos disponibles ─────────────────────────────────────────────
+  // ── Cargar períodos disponibles + estado inicial ────────────────────────────
   useEffect(() => {
     if (initDone.current) return
     initDone.current = true
+    cargar(fAnos, fMeses, fPaises, fCats, fClientes, fCanales, fSkus, 1)
     fetch('/api/ventas/resumen?tipo=periodos')
       .then(r => r.json())
       .then(j => {
@@ -85,6 +99,7 @@ export default function SellInPage() {
         setMesMap(mm)
         setAnos(Object.keys(mm).map(Number).sort((a, b) => b - a))
       })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── helpers para fetch de opciones ─────────────────────────────────────────
@@ -191,19 +206,34 @@ export default function SellInPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => { cargar([], [], [], [], [], [], [], 1) }, [cargar])
+  const saveStorage = (
+    anos = fAnos, meses = fMeses, paises = fPaises, cats = fCats,
+    clientes = fClientes, canales = fCanales, skus = fSkus
+  ) => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        fAnos: anos, fMeses: meses, fPaises: paises, fCats: cats,
+        fClientes: clientes, fCanales: canales, fSkus: skus,
+      }))
+    } catch {}
+  }
 
   const triggerCargar = (
     anos     = fAnos,    meses    = fMeses,
     paises   = fPaises,  cats     = fCats,
     clientes = fClientes, canales = fCanales,
     skus     = fSkus,    pg       = 1
-  ) => { setPage(pg); cargar(anos, meses, paises, cats, clientes, canales, skus, pg) }
+  ) => {
+    setPage(pg)
+    saveStorage(anos, meses, paises, cats, clientes, canales, skus)
+    cargar(anos, meses, paises, cats, clientes, canales, skus, pg)
+  }
 
   const limpiar = () => {
     setFAnos([]); setFMeses([])
     setFPaises([]); setFCats([]); setFClientes([]); setFCanales([]); setFSkus([])
     setPage(1)
+    localStorage.removeItem(STORAGE_KEY)
     cargar([], [], [], [], [], [], [], 1)
   }
 

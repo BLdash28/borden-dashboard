@@ -1,11 +1,16 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Customized,
 } from 'recharts'
 import FiltroMulti from '@/components/ui/FiltroMulti'
+
+const STORAGE_KEY = 'bl_sellin_res_v1'
+function saveStorage(ano: number, paises: string[], cats: string[], tipos: string[]) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ano, paises, cats, tipos })) } catch {}
+}
 
 const MESES      = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const MESES_FULL = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
@@ -93,6 +98,7 @@ export default function SellInResumen() {
   const [paises, setPaises] = useState<string[]>([])
   const [cats,   setCats]   = useState<string[]>([])
   const [tipos,  setTipos]  = useState<string[]>(['REGULAR'])
+  const initDone = useRef(false)
 
   const [kpi,     setKpi]     = useState<KpiData | null>(null)
   const [mensual, setMensual] = useState<any[]>([])
@@ -119,16 +125,38 @@ export default function SellInResumen() {
     } finally { setLoading(false) }
   }, [])
 
+  useEffect(() => {
+    if (initDone.current) return
+    initDone.current = true
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) {
+        const s = JSON.parse(raw)
+        if (s.ano)            setAno(s.ano)
+        if (s.paises?.length) setPaises(s.paises)
+        if (s.cats?.length)   setCats(s.cats)
+        if (s.tipos?.length)  setTipos(s.tipos)
+      }
+    } catch {}
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => { cargar(ano, paises, cats, tipos) }, [cargar, ano, paises, cats, tipos])
 
   const handlePaisChange = (ps: string[]) => {
     setPaises(ps)
     if (ps.includes('CO')) {
-      setTipos(prev => prev.includes('LICENCIAMIENTO_COLOMBIA') ? prev : [...prev, 'LICENCIAMIENTO_COLOMBIA'])
-      setCats(prev => prev.includes('Quesos') ? prev : [...prev, 'Quesos'])
+      const newTipos = tipos.includes('LICENCIAMIENTO_COLOMBIA') ? tipos : [...tipos, 'LICENCIAMIENTO_COLOMBIA']
+      const newCats  = cats.includes('Quesos') ? cats : [...cats, 'Quesos']
+      setTipos(newTipos)
+      setCats(newCats)
+      saveStorage(ano, ps, newCats, newTipos)
     } else {
-      setTipos(prev => prev.filter(t => t !== 'LICENCIAMIENTO_COLOMBIA'))
-      setCats(prev => prev.filter(c => c !== 'Quesos'))
+      const newTipos = tipos.filter(t => t !== 'LICENCIAMIENTO_COLOMBIA')
+      const newCats  = cats.filter(c => c !== 'Quesos')
+      setTipos(newTipos)
+      setCats(newCats)
+      saveStorage(ano, ps, newCats, newTipos)
     }
   }
 
@@ -187,7 +215,7 @@ export default function SellInResumen() {
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Año</p>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               {[2025, 2026].map(a => (
-                <button key={a} onClick={() => setAno(a)}
+                <button key={a} onClick={() => { setAno(a); saveStorage(a, paises, cats, tipos) }}
                   className={`px-4 py-1.5 text-sm font-medium transition-colors ${ano===a?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
                   {a}
                 </button>
@@ -197,9 +225,18 @@ export default function SellInResumen() {
           <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={handlePaisChange} placeholder="Todos" />
           <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT} value={tipos} onChange={ts => {
             setTipos(ts)
-            if (ts.includes('LICENCIAMIENTO_COLOMBIA')) setCats(prev => prev.includes('Quesos') ? prev : [...prev, 'Quesos'])
+            if (ts.includes('LICENCIAMIENTO_COLOMBIA')) {
+              const newCats = cats.includes('Quesos') ? cats : [...cats, 'Quesos']
+              setCats(newCats)
+              saveStorage(ano, paises, newCats, ts)
+            } else {
+              saveStorage(ano, paises, cats, ts)
+            }
           }} placeholder="Todos" />
-          <FiltroMulti label="Categoría" options={CATS_OPT} value={cats} onChange={setCats} placeholder="Todas" />
+          <FiltroMulti label="Categoría" options={CATS_OPT} value={cats} onChange={cs => {
+            setCats(cs)
+            saveStorage(ano, paises, cs, tipos)
+          }} placeholder="Todas" />
         </div>
       </div>
 
