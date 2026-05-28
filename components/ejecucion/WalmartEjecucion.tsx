@@ -188,6 +188,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [topSkus,     setTopSkus]     = useState<any[]>([])
   const [inv,         setInv]         = useState<any>(null)
   const [evolMedida,       setEvolMedida]       = useState<'valor' | 'unidades'>('valor')
+  const [evolVista,        setEvolVista]        = useState<'mensual' | 'diaria'>('mensual')
   const [evolCat,          setEvolCat]          = useState('')
   const [evolDesde,        setEvolDesde]        = useState('')
   const [evolHasta,        setEvolHasta]        = useState('')
@@ -196,6 +197,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [evolYearFilter,   setEvolYearFilter]   = useState('')
   const [evolCadenaLine,   setEvolCadenaLine]   = useState('')
   const [evolCpFilter,     setEvolCpFilter]     = useState('')
+  const [evolDiario,       setEvolDiario]       = useState<any>(null)
 
   const loadedRef = useRef<Record<string, boolean>>({})
   const setL = (k: string, v: boolean) => setLoading(p => ({ ...p, [k]: v }))
@@ -255,6 +257,21 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         .then(r => r.json()).then(setInv).finally(() => setL(section, false))
     }
   }, [section, div, cadenaFilter, topN, evolCat, evolTopN]) // eslint-disable-line
+
+  // Fetch daily data when vista=diaria or date range changes
+  useEffect(() => {
+    if (section !== 'evolucion' || evolVista !== 'diaria') return
+    const p = new URLSearchParams({ pais })
+    if (evolCat) p.set('categoria', evolCat)
+    if (evolDesde) p.set('desde', evolDesde + '-01')
+    if (evolHasta) {
+      const [y, m] = evolHasta.split('-').map(Number)
+      const lastDay = new Date(y, m, 0).getDate()
+      p.set('hasta', `${evolHasta}-${String(lastDay).padStart(2, '0')}`)
+    }
+    fetch(`/api/comercial/ejecucion/walmart/daily?${p}`)
+      .then(r => r.json()).then(d => setEvolDiario(d))
+  }, [evolVista, evolCat, evolDesde, evolHasta, section]) // eslint-disable-line
 
   // ── Resumen ──────────────────────────────────────────────────────────────
 
@@ -472,7 +489,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
     const handleReset = () => {
       setEvolCat(''); setCadenaFilter(''); setEvolMedida('valor')
-      setEvolDesde(''); setEvolHasta('')
+      setEvolVista('mensual'); setEvolDesde(''); setEvolHasta('')
       setEvolYearFilter(''); setEvolCadenaLine(''); setEvolCpFilter('')
     }
 
@@ -493,6 +510,15 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
           {/* Controls */}
           <div className="flex items-center gap-x-3 gap-y-2 flex-wrap text-xs mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
+            <span className="text-gray-400 font-medium">Vista:</span>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+              {(['mensual', 'diaria'] as const).map(v => (
+                <button key={v} onClick={() => setEvolVista(v)}
+                  className={`px-3 py-1.5 font-medium transition-colors ${evolVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  {v.charAt(0).toUpperCase() + v.slice(1)}
+                </button>
+              ))}
+            </div>
             <span className="text-gray-400 font-medium">Categoría:</span>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               {[{ key: '', label: 'Todas' }, { key: 'Quesos', label: 'Queso' }, { key: 'Leches', label: 'Leche' }].map(c => (
@@ -540,7 +566,38 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             </button>
           </div>
 
-          {series.length === 0 ? (
+          {evolVista === 'diaria' ? (
+            evolDiario?.series?.length > 0 ? (
+              <>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-xs text-gray-500 font-medium">
+                    {evolDiario.series.length} días · Total: {fmtFull(evolDiario.series.reduce((s: number, r: any) => s + (evolMedida === 'valor' ? r.valor : r.unidades), 0))}
+                  </span>
+                </div>
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={evolDiario.series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10 }}
+                      interval={Math.max(0, Math.floor(evolDiario.series.length / 20) - 1)} />
+                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 11 }} width={55} />
+                    <Tooltip
+                      labelFormatter={(l: string) => l}
+                      formatter={(v: number) => [
+                        evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'),
+                        evolMedida === 'valor' ? 'Venta ($)' : 'Unidades',
+                      ]}
+                    />
+                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'valor' : 'unidades'}
+                      stroke="#c8873a" strokeWidth={1.5} dot={false} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              </>
+            ) : (
+              <div className="h-[280px] bg-gray-50 rounded-lg animate-pulse flex items-center justify-center">
+                <span className="text-xs text-gray-300">Cargando datos diarios...</span>
+              </div>
+            )
+          ) : series.length === 0 ? (
             <div className="py-16 text-center">
               <p className="text-3xl mb-2">📭</p>
               <p className="text-sm font-semibold text-gray-600">Sin datos de sell-out para {paisNombre}</p>
