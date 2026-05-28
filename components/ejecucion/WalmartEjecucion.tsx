@@ -53,11 +53,11 @@ const CADENAS_POR_PAIS: Record<string, string[]> = {
 }
 
 const COBERTURA_POR_PAIS: Record<string, { total: number; formatos: Record<string, number> }> = {
-  CR: { total: 347, formatos: { 'Walmart Supercenter': 15, 'Mas X Menos': 39, 'Maxi Pali': 60, 'Pali': 233 } },
-  GT: { total: 283, formatos: { 'Walmart Supercenter': 12, 'Despensa Familiar': 194, 'Maxi Despensa': 50, 'Paiz': 27 } },
-  HN: { total: 114, formatos: { 'Walmart Supercenter': 4, 'Despensa Familiar': 74, 'Maxi Despensa': 28, 'Paiz': 8 } },
-  NI: { total: 106, formatos: { 'Walmart Supercenter': 2, 'La Unión': 9, 'Maxi Pali': 22, 'Pali': 73 } },
-  SV: { total: 102, formatos: { 'Walmart Supercenter': 6, 'Despensa Familiar': 63, 'La Despensa Don Juan': 17, 'Maxi Despensa': 16 } },
+  CR: { total: 347, formatos: { 'WALMART': 15, 'MAS X MENOS': 39, 'MAXI PALI': 60, 'PALI': 233 } },
+  GT: { total: 283, formatos: { 'WALMART': 12, 'DESPENSA FAMILIAR': 194, 'MAXI DESPENSA': 50, 'PAIZ': 27 } },
+  HN: { total: 114, formatos: { 'WALMART': 4, 'DESPENSA FAMILIAR': 74, 'MAXI DESPENSA': 28, 'PAIZ': 8 } },
+  NI: { total: 106, formatos: { 'WALMART': 2, 'LA UNION': 9, 'MAXI PALI': 22, 'PALI': 73 } },
+  SV: { total: 102, formatos: { 'WALMART': 6, 'DESPENSA FAMILIAR': 63, 'LA DESPENSA DON JUAN': 17, 'MAXI DESPENSA': 16 } },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -515,7 +515,6 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
   function Cobertura() {
     const cob = COBERTURA_POR_PAIS[pais]
-    const cadenaList = CADENAS_POR_PAIS[pais] ?? []
     return (
       <div className="space-y-5">
         {/* Static coverage reference */}
@@ -533,8 +532,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             </div>
             <div className={`grid grid-cols-2 md:grid-cols-${Math.min(Object.keys(cob.formatos).length, 4)} gap-3`}>
               {Object.entries(cob.formatos).map(([formato, n]) => {
-                const colorKey = cadenaList.find(c => c.toLowerCase().includes(formato.split(' ')[0].toLowerCase())) ?? ''
-                const color = CADENA_COLORS[colorKey] ?? '#6b7280'
+                const color = CADENA_COLORS[formato] ?? '#6b7280'
                 const pct = Math.round(n / cob.total * 100)
                 return (
                   <div key={formato} className="bg-gray-50 rounded-lg p-3">
