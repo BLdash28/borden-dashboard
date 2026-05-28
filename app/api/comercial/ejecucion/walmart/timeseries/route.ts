@@ -13,11 +13,11 @@ export async function GET(req: NextRequest) {
     const categoria = sp.get('categoria') ?? ''
     const cadena    = sp.get('cadena')    ?? ''
     const paisSafe  = pais.replace(/'/g,"''")
-    const catFilter   = categoria ? `AND categoria = '${categoria.replace(/'/g,"''")}'` : ''
-    const cadenaFilter = cadena ? `AND cadena = '${cadena.replace(/'/g,"''")}'` : ''
+    const catFilter    = categoria ? `AND categoria = '${categoria.replace(/'/g,"''")}'` : ''
+    const cadenaFilter = cadena    ? `AND cadena = '${cadena.replace(/'/g,"''")}'`       : ''
 
-    const [monthlyR, byCadenaR, byCatR] = await Promise.all([
-      // Overall monthly 2025 + 2026
+    const [monthlyR, byCadenaR, byCatR, baselineR] = await Promise.all([
+      // Overall monthly 2024/2025/2026
       pool.query(`
         SELECT
           EXTRACT(YEAR  FROM fecha)::int  AS ano,
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
         FROM fact_ventas_walmart
         WHERE pais = '${paisSafe}' ${catFilter} ${cadenaFilter}
-          AND EXTRACT(YEAR FROM fecha) IN (2025, 2026)
+          AND fecha >= '2024-01-01' AND fecha < '2027-01-01'
         GROUP BY 1, 2
         ORDER BY 1, 2
       `),
@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(ventas_valor)::numeric, 2) AS valor
         FROM fact_ventas_walmart
         WHERE pais = '${paisSafe}'
-          AND EXTRACT(YEAR FROM fecha) = 2026
+          AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
           ${catFilter}
         GROUP BY cadena, mes
         ORDER BY cadena, mes
@@ -51,20 +51,44 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(ventas_valor)::numeric, 2) AS valor
         FROM fact_ventas_walmart
         WHERE pais = '${paisSafe}'
-          AND EXTRACT(YEAR FROM fecha) = 2026
+          AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
           ${cadenaFilter}
         GROUP BY categoria, mes
         ORDER BY categoria, mes
       `),
+      // Baseline: avg monthly value for months ≥$5K from Oct 2025 onwards
+      pool.query(`
+        WITH monthly AS (
+          SELECT
+            EXTRACT(MONTH FROM fecha)::int AS mes,
+            SUM(ventas_valor)    AS valor_mes,
+            SUM(ventas_unidades) AS uni_mes
+          FROM fact_ventas_walmart
+          WHERE pais = '${paisSafe}'
+            AND fecha >= '2025-10-01' AND fecha < '2027-01-01'
+            ${catFilter} ${cadenaFilter}
+          GROUP BY 1
+          HAVING SUM(ventas_valor) >= 5000
+        )
+        SELECT
+          COALESCE(AVG(valor_mes), 0) AS avg_val,
+          COALESCE(AVG(uni_mes),   0) AS avg_uni
+        FROM monthly
+      `),
     ])
 
-    // Build overall monthly series
-    const byMes: Record<number, { mes: number; mes_nombre: string; y2025: number; y2026: number | null; u2025: number; u2026: number | null }> = {}
+    const baseline_val = parseFloat(baselineR.rows[0]?.avg_val ?? '0') || 0
+    const baseline_uni = parseFloat(baselineR.rows[0]?.avg_uni ?? '0') || 0
+
+    // Build overall monthly series (2024/2025/2026)
+    type Row = { mes: number; mes_nombre: string; y2024: number; y2025: number; y2026: number | null; u2024: number; u2025: number; u2026: number | null }
+    const byMes: Record<number, Row> = {}
     for (let m = 1; m <= 12; m++) {
-      byMes[m] = { mes: m, mes_nombre: MN[m], y2025: 0, y2026: null, u2025: 0, u2026: null }
+      byMes[m] = { mes: m, mes_nombre: MN[m], y2024: 0, y2025: 0, y2026: null, u2024: 0, u2025: 0, u2026: null }
     }
     for (const r of monthlyR.rows) {
       const m = parseInt(r.mes); const a = parseInt(r.ano)
+      if (a === 2024) { byMes[m].y2024 = parseFloat(r.valor); byMes[m].u2024 = parseFloat(r.unidades) }
       if (a === 2025) { byMes[m].y2025 = parseFloat(r.valor); byMes[m].u2025 = parseFloat(r.unidades) }
       if (a === 2026) { byMes[m].y2026 = parseFloat(r.valor); byMes[m].u2026 = parseFloat(r.unidades) }
     }
@@ -96,13 +120,33 @@ export async function GET(req: NextRequest) {
       byCatSeries[m][r.categoria] = parseFloat(r.valor)
     }
 
+    // OOS detection: months with <30% of baseline
+    const oosMeses: string[] = []
+    for (let m = 1; m <= ultimoMes; m++) {
+      if (baseline_val > 0 && (byMes[m].y2026 ?? 0) < baseline_val * 0.3) {
+        oosMeses.push(MN[m])
+      }
+    }
+
+    // YTD
+    const ytd2026 = Object.values(byMes).filter(r => r.mes <= ultimoMes).reduce((s, r) => s + (r.y2026 ?? 0), 0)
+    const ytd2025 = Object.values(byMes).filter(r => r.mes <= ultimoMes).reduce((s, r) => s + r.y2025, 0)
+    const delta_ytd = ytd2025 > 0 ? ((ytd2026 - ytd2025) / ytd2025) * 100 : (ytd2026 > 0 ? 100 : 0)
+
     return NextResponse.json({
-      series:           Object.values(byMes),
+      series:            Object.values(byMes),
+      baseline_val,
+      baseline_uni,
+      ytd_2026:          ytd2026,
+      ytd_2025:          ytd2025,
+      delta_ytd,
+      oos_meses:         oosMeses,
+      ultimo_mes:        ultimoMes,
+      ultimo_mes_nombre: MN[ultimoMes] ?? '',
       cadenas,
-      byCadena:         Object.values(byCadenaSeries),
-      categorias:       cats,
-      byCategorias:     Object.values(byCatSeries),
-      ultimo_mes:       ultimoMes,
+      byCadena:          Object.values(byCadenaSeries),
+      categorias:        cats,
+      byCategorias:      Object.values(byCatSeries),
     })
   } catch (err) {
     return handleApiError(err)

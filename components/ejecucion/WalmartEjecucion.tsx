@@ -4,7 +4,7 @@ import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, Cell,
+  ResponsiveContainer, Legend, Cell, ReferenceLine,
 } from 'recharts'
 
 // ── Config ────────────────────────────────────────────────────────────────
@@ -180,11 +180,22 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [loading,      setLoading]      = useState<Record<string, boolean>>({})
 
   // Data
-  const [sellout,  setSellout]  = useState<any>(null)
-  const [sellin,   setSellin]   = useState<any>(null)
-  const [ts,       setTs]       = useState<any>(null)
-  const [topSkus,  setTopSkus]  = useState<any[]>([])
-  const [inv,      setInv]      = useState<any>(null)
+  const [sellout,     setSellout]     = useState<any>(null)
+  const [sellin,      setSellin]      = useState<any>(null)
+  const [ts,          setTs]          = useState<any>(null)
+  const [evoTop5,     setEvoTop5]     = useState<any>(null)
+  const [comparativo, setComparativo] = useState<any>(null)
+  const [topSkus,     setTopSkus]     = useState<any[]>([])
+  const [inv,         setInv]         = useState<any>(null)
+  const [evolMedida,       setEvolMedida]       = useState<'valor' | 'unidades'>('valor')
+  const [evolCat,          setEvolCat]          = useState('')
+  const [evolDesde,        setEvolDesde]        = useState('')
+  const [evolHasta,        setEvolHasta]        = useState('')
+  const [evolTopN,         setEvolTopN]         = useState(5)
+  const [evolSkuFilter,    setEvolSkuFilter]    = useState('')
+  const [evolYearFilter,   setEvolYearFilter]   = useState('')
+  const [evolCadenaLine,   setEvolCadenaLine]   = useState('')
+  const [evolCpFilter,     setEvolCpFilter]     = useState('')
 
   const loadedRef = useRef<Record<string, boolean>>({})
   const setL = (k: string, v: boolean) => setLoading(p => ({ ...p, [k]: v }))
@@ -225,8 +236,13 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
     } else if (section === 'evolucion') {
       setL('evolucion', true)
-      fetch(`/api/comercial/ejecucion/walmart/timeseries?${baseQ}${cadQ}`)
-        .then(r => r.json()).then(setTs).finally(() => setL('evolucion', false))
+      const catQ2 = evolCat ? `&categoria=${encodeURIComponent(evolCat)}` : ''
+      Promise.all([
+        fetch(`/api/comercial/ejecucion/walmart/timeseries?pais=${pais}${catQ2}${cadQ}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/evo-top5?pais=${pais}${catQ2}&top=${evolTopN > 5 ? 100 : 5}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/comparativo?pais=${pais}&cliente=${clienteSellin}`).then(r => r.json()),
+      ]).then(([tsData, t5Data, cpData]) => { setTs(tsData); setEvoTop5(t5Data); setComparativo(cpData) })
+        .finally(() => setL('evolucion', false))
 
     } else if (section === 'pareto') {
       setL('pareto', true)
@@ -238,7 +254,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       fetch(`/api/comercial/ejecucion/walmart/inventario?${baseQ}`)
         .then(r => r.json()).then(setInv).finally(() => setL(section, false))
     }
-  }, [section, div, cadenaFilter, topN]) // eslint-disable-line
+  }, [section, div, cadenaFilter, topN, evolCat, evolTopN]) // eslint-disable-line
 
   // ── Resumen ──────────────────────────────────────────────────────────────
 
@@ -415,107 +431,430 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
   function Evolucion() {
     const L = isL('evolucion')
-    if (L) return <div className="space-y-4"><ChartSkeleton /><ChartSkeleton /></div>
+    if (L) return <div className="space-y-4"><ChartSkeleton /><ChartSkeleton /><ChartSkeleton /></div>
 
-    const series  = (ts?.series   ?? []).filter((m: any) => m.y2025 > 0 || m.y2026 !== null)
-    const cadenas = ts?.cadenas   ?? []
-    const byCad   = (ts?.byCadena ?? []).filter((m: any) => cadenas.some((c: string) => (m[c] ?? 0) > 0))
-    const cats    = ts?.categorias ?? []
-    const byCat   = (ts?.byCategorias ?? []).filter((m: any) => cats.some((c: string) => (m[c] ?? 0) > 0))
+    const MN12 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+    const desdeMonth = evolDesde ? parseInt(evolDesde.split('-')[1]) : 1
+    const hastaMonth = evolHasta ? parseInt(evolHasta.split('-')[1]) : 12
+
+    const allSeries = (ts?.series ?? []).filter((m: any) => m.y2025 > 0 || m.y2026 !== null || m.y2024 > 0)
+    const series    = allSeries.filter((m: any) => m.mes >= desdeMonth && m.mes <= hastaMonth)
+    const cadenas   = ts?.cadenas ?? []
+    const byCad     = (ts?.byCadena ?? []).filter((m: any) => cadenas.some((c: string) => (m[c] ?? 0) > 0))
+    const skus      = evoTop5?.skus ?? []
+
+    // Generate N perceptually distinct colors spread across the hue wheel
+    const makeColors = (n: number) => {
+      const base = ['#e63946','#f4a261','#2a9d8f','#457b9d','#8338ec','#06d6a0','#fb5607','#3a86ff','#ffbe0b','#ff006e',
+                    '#118ab2','#ef476f','#06b6d4','#84cc16','#8b5cf6','#f59e0b','#10b981','#c8873a','#a78bfa','#f43f5e']
+      if (n <= base.length) return base.slice(0, n)
+      return Array.from({ length: n }, (_, i) => `hsl(${Math.round(i * 360 / n)}, 68%, 48%)`)
+    }
+    const SKU_COLORS = makeColors(skus.length || 10)
+
+    // Top5 chart data
+    const top5Series: Record<number, Record<string, any>> = {}
+    for (let m = 1; m <= 12; m++) top5Series[m] = { mes: m, mes_nombre: MN12[m] }
+    for (const sku of skus) {
+      for (const pt of sku.series) {
+        top5Series[pt.mes][sku.descripcion] = evolMedida === 'valor' ? pt.valor : pt.unidades
+      }
+    }
+    const top5Data = Object.values(top5Series).filter(r => skus.some((s: any) => (r[s.descripcion] ?? 0) > 0))
+
+    // Comparativo (sell-in vs sell-out por categoria)
+    const cpQuesos = comparativo?.quesos ?? []
+    const cpLeches = comparativo?.leches ?? []
+
+    const yFmt = (v: number) => evolMedida === 'valor'
+      ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
+      : (v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v))
+
+    const handleReset = () => {
+      setEvolCat(''); setCadenaFilter(''); setEvolMedida('valor')
+      setEvolDesde(''); setEvolHasta('')
+      setEvolYearFilter(''); setEvolCadenaLine(''); setEvolCpFilter('')
+    }
+
+    const toggleYear = (key: string) => setEvolYearFilter(p => p === key ? '' : key)
+    const toggleCadenaLine = (c: string) => setEvolCadenaLine(p => p === c ? '' : c)
+    const toggleCpFilter = (k: string) => setEvolCpFilter(p => p === k ? '' : k)
 
     return (
       <div className="space-y-5">
 
-        {/* Filters */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex flex-wrap gap-4 items-end">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Cadena</p>
+        {/* ── Main evolution chart ── */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-sm font-semibold text-gray-800">📈 Evolución de Ventas — Portafolio Activo</h3>
+            <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">SELLOUT</span>
+          </div>
+          <p className="text-xs text-gray-400 mb-3">{evolCat || 'Todas las categorías'} · Walmart {paisNombre}</p>
+
+          {/* Controls */}
+          <div className="flex items-center gap-x-3 gap-y-2 flex-wrap text-xs mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
+            <span className="text-gray-400 font-medium">Categoría:</span>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+              {[{ key: '', label: 'Todas' }, { key: 'Quesos', label: 'Queso' }, { key: 'Leches', label: 'Leche' }].map(c => (
+                <button key={c.key} onClick={() => setEvolCat(c.key)}
+                  className={`px-3 py-1.5 font-medium transition-colors ${evolCat === c.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+            <span className="text-gray-400 font-medium">Medida:</span>
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+              {([['valor', 'Valor $'], ['unidades', 'Unidades']] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setEvolMedida(k)}
+                  className={`px-3 py-1.5 font-medium transition-colors ${evolMedida === k ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            <span className="text-gray-400 font-medium">Cadena:</span>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden flex-wrap">
               <button onClick={() => setCadenaFilter('')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${cadenaFilter === '' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                className={`px-3 py-1.5 font-medium transition-colors ${cadenaFilter === '' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                 Todas
               </button>
-              {(ts?.cadenas ?? []).map((c: string) => (
+              {cadenas.map((c: string) => (
                 <button key={c} onClick={() => setCadenaFilter(c)}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${cadenaFilter === c ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  className={`px-3 py-1.5 font-medium transition-colors ${cadenaFilter === c ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                   {c}
                 </button>
               ))}
             </div>
+            <span className="text-gray-400 font-medium">Desde:</span>
+            <input type="month" value={evolDesde} min="2024-01" max="2026-12"
+              onChange={e => setEvolDesde(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400"
+            />
+            <span className="text-gray-400 font-medium">Hasta:</span>
+            <input type="month" value={evolHasta} min="2024-01" max="2026-12"
+              onChange={e => setEvolHasta(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400"
+            />
+            <button onClick={handleReset}
+              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
+              ↺ Reset
+            </button>
           </div>
+
+          {series.length === 0 ? (
+            <div className="py-16 text-center">
+              <p className="text-3xl mb-2">📭</p>
+              <p className="text-sm font-semibold text-gray-600">Sin datos de sell-out para {paisNombre}</p>
+              <p className="text-xs text-gray-400 mt-1">Los datos de sell-out Walmart {pais} aún no han sido cargados.</p>
+            </div>
+          ) : (
+            <>
+              {/* YTD + OOS banners */}
+              {ts && (
+                <div className="flex gap-3 mb-4 flex-wrap">
+                  <div className={`flex-1 min-w-[180px] rounded-lg px-4 py-2.5 border ${ts.delta_ytd >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                    <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${ts.delta_ytd >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                      Crecimiento YTD Sell-Out vs 2025
+                    </p>
+                    <p className={`text-lg font-bold ${ts.delta_ytd >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                      {ts.ytd_2025 === 0 ? 'Sin datos 2025' : `${ts.delta_ytd > 0 ? '+' : ''}${ts.delta_ytd.toFixed(1)}%`}
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">
+                      {fmtFull(ts.ytd_2026)} · 2026 YTD {ts.ultimo_mes_nombre ? `Ene–${ts.ultimo_mes_nombre}` : ''}
+                    </p>
+                  </div>
+                  {ts.oos_meses?.length > 0 ? (
+                    <div className="flex-1 min-w-[180px] rounded-lg px-4 py-2.5 bg-orange-50 border border-orange-100">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-orange-700 mb-0.5">⚠️ Alerta OOS Detectada</p>
+                      <p className="text-sm font-bold text-orange-700">{ts.oos_meses.length} mes{ts.oos_meses.length !== 1 ? 'es' : ''} con quiebre</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">{ts.oos_meses.join(' + ')} bajo el 30% del baseline</p>
+                    </div>
+                  ) : (
+                    <div className="flex-1 min-w-[180px] rounded-lg px-4 py-2.5 bg-emerald-50 border border-emerald-100">
+                      <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-0.5">✅ Sin Quiebres de Stock</p>
+                      <p className="text-sm font-bold text-emerald-700">Abastecimiento continuo</p>
+                      <p className="text-[10px] text-gray-500 mt-0.5">Todos los meses sobre el 30% del baseline</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
+                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 11 }} width={55} />
+                  <Tooltip formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]} />
+                  {ts?.baseline_val > 0 && evolMedida === 'valor' && (
+                    <ReferenceLine y={ts.baseline_val} stroke="#f59e0b" strokeDasharray="4 4"
+                      label={{ value: 'Baseline', fontSize: 9, fill: '#f59e0b', position: 'insideTopRight' }} />
+                  )}
+                  {(!evolYearFilter || evolYearFilter === 'y2024') && (
+                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
+                      stroke="#d1d5db" strokeWidth={evolYearFilter === 'y2024' ? 2.5 : 1.5}
+                      dot={evolYearFilter === 'y2024' ? { r: 3 } : false}
+                      strokeDasharray={evolYearFilter ? undefined : '4 4'}
+                      connectNulls onClick={() => toggleYear('y2024')}
+                      style={{ cursor: 'pointer' }} />
+                  )}
+                  {(!evolYearFilter || evolYearFilter === 'y2025') && (
+                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
+                      stroke="#60a5fa" strokeWidth={evolYearFilter === 'y2025' ? 2.5 : 2}
+                      dot={evolYearFilter === 'y2025' ? { r: 3 } : false}
+                      connectNulls onClick={() => toggleYear('y2025')}
+                      style={{ cursor: 'pointer' }} />
+                  )}
+                  {(!evolYearFilter || evolYearFilter === 'y2026') && (
+                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
+                      stroke="#c8873a" strokeWidth={evolYearFilter === 'y2026' ? 3 : 2.5}
+                      dot={{ r: evolYearFilter === 'y2026' ? 4 : 3, fill: '#c8873a' }}
+                      connectNulls onClick={() => toggleYear('y2026')}
+                      style={{ cursor: 'pointer' }} />
+                  )}
+                </LineChart>
+              </ResponsiveContainer>
+
+              <div className="flex items-center gap-3 mt-3 text-[10px] flex-wrap">
+                {[
+                  { key: 'y2024', label: '2024', color: '#d1d5db', dash: true },
+                  { key: 'y2025', label: '2025', color: '#60a5fa', dash: false },
+                  { key: 'y2026', label: '2026 YTD', color: '#c8873a', dash: false },
+                ].map(({ key, label, color, dash }) => {
+                  const active = !evolYearFilter || evolYearFilter === key
+                  return (
+                    <button key={key} onClick={() => toggleYear(key)}
+                      className={`flex items-center gap-1.5 transition-opacity ${active ? 'opacity-100' : 'opacity-30'}`}>
+                      <span className={`w-5 h-0.5 inline-block ${dash ? 'border-t-2 border-dashed' : ''}`}
+                        style={{ background: dash ? 'transparent' : color, borderColor: color }} />
+                      <span style={{ color: active ? '#6b7280' : '#d1d5db' }}>{label}</span>
+                    </button>
+                  )
+                })}
+                {ts?.baseline_val > 0 && evolMedida === 'valor' && (
+                  <span className="flex items-center gap-1.5 text-gray-400">
+                    <span className="w-5 h-0.5 border-t-2 border-dashed border-amber-400 inline-block" />
+                    Baseline {fmtFull(ts.baseline_val)}/mes
+                  </span>
+                )}
+                {evolYearFilter && (
+                  <button onClick={() => setEvolYearFilter('')}
+                    className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 text-[10px] font-medium">
+                    ✕ ver todos
+                  </button>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
-        {series.length === 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
-            <p className="text-3xl mb-2">📭</p>
-            <p className="text-sm font-semibold text-gray-600">Sin datos de sell-out para {paisNombre}</p>
-            <p className="text-xs text-gray-400 mt-1">Los datos de sell-out Walmart {pais} aún no han sido cargados.</p>
-          </div>
-        )}
-
-        {/* 2025 vs 2026 */}
-        {series.length > 0 && (
+        {/* ── Top N SKUs ── */}
+        {skus.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">Sell-Out Mensual — 2025 vs 2026</h3>
-            <p className="text-xs text-gray-400 mb-4">{currentCat || 'Total'}{cadenaFilter ? ` · ${cadenaFilter}` : ' · Todas las cadenas'}</p>
-            <div className="h-[260px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={series} barGap={2}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
-                  <Tooltip formatter={(v: any) => fmtFull(v)} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="y2025" name="2025" fill="#cbd5e1" radius={[2,2,0,0]} />
-                  <Bar dataKey="y2026" name="2026" fill="#c8873a" radius={[2,2,0,0]} />
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="flex items-start justify-between gap-2 mb-1">
+              <h3 className="text-sm font-semibold text-gray-800">
+                🏆 {evolTopN === 5 ? 'Top 5 SKUs' : `${skus.length} SKUs`} — Evolución Mensual 2026
+              </h3>
+              {evolSkuFilter && (
+                <button onClick={() => setEvolSkuFilter('')}
+                  className="flex-shrink-0 text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium hover:bg-amber-200 transition-colors">
+                  ✕ Mostrando solo 1 — ver todas
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mb-3">
+              Por venta acumulada · Walmart {paisNombre}
+              {evolSkuFilter ? '' : ' · Clic en una línea para aislar'}
+            </p>
+            {/* Controls */}
+            <div className="flex items-center gap-x-3 gap-y-2 flex-wrap text-xs mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
+              <span className="text-gray-400 font-medium">Medida:</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {([['valor', 'Valor ($)'], ['unidades', 'Unidades']] as const).map(([k, l]) => (
+                  <button key={k} onClick={() => setEvolMedida(k)}
+                    className={`px-3 py-1.5 font-medium transition-colors ${evolMedida === k ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <span className="text-gray-400 font-medium">Categoría:</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {[{ key: '', label: 'Todas' }, { key: 'Quesos', label: 'Queso' }, { key: 'Leches', label: 'Leche' }].map(c => (
+                  <button key={c.key} onClick={() => { setEvolCat(c.key); setEvolSkuFilter('') }}
+                    className={`px-3 py-1.5 font-medium transition-colors ${evolCat === c.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-gray-400 font-medium">Mostrar:</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                <button onClick={() => { setEvolTopN(5); setEvolSkuFilter('') }}
+                  className={`px-3 py-1.5 font-medium transition-colors ${evolTopN === 5 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  Top 5
+                </button>
+                <button onClick={() => { setEvolTopN(100); setEvolSkuFilter('') }}
+                  className={`px-3 py-1.5 font-medium transition-colors ${evolTopN !== 5 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  {evolTopN !== 5 && skus.length ? `Todos (${skus.length})` : 'Todos'}
+                </button>
+              </div>
+            </div>
+
+            {/* Chart — no built-in Legend, custom one below */}
+            <ResponsiveContainer width="100%" height={evolSkuFilter ? 320 : evolTopN === 5 ? 280 : Math.max(560, skus.length * 14)}>
+              <LineChart data={top5Data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={yFmt} tick={{ fontSize: 11 }} width={55} />
+                <Tooltip formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]} />
+                {skus.map((sku: any, i: number) => {
+                  const color = SKU_COLORS[i % SKU_COLORS.length]
+                  if (evolSkuFilter && evolSkuFilter !== sku.descripcion) return null
+                  return (
+                    <Line key={sku.sku} type="monotone" dataKey={sku.descripcion}
+                      stroke={color}
+                      strokeWidth={evolSkuFilter ? 3 : evolTopN === 5 ? 2 : 2}
+                      dot={evolTopN === 5 || evolSkuFilter ? { r: 4, fill: color } : { r: 3, fill: color }}
+                      activeDot={{ r: 6, fill: color }}
+                      connectNulls
+                      onClick={() => setEvolSkuFilter(p => p === sku.descripcion ? '' : sku.descripcion)}
+                      style={{ cursor: 'pointer' }} />
+                  )
+                })}
+              </LineChart>
+            </ResponsiveContainer>
+
+            {/* Custom clickable legend */}
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {skus.map((sku: any, i: number) => {
+                const color = SKU_COLORS[i % SKU_COLORS.length]
+                const isActive = !evolSkuFilter || evolSkuFilter === sku.descripcion
+                return (
+                  <button
+                    key={sku.sku}
+                    onClick={() => setEvolSkuFilter(prev => prev === sku.descripcion ? '' : sku.descripcion)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all select-none ${
+                      isActive
+                        ? 'border-gray-200 text-gray-700 bg-white hover:bg-gray-50'
+                        : 'border-gray-100 text-gray-300 bg-gray-50 hover:bg-gray-100'
+                    }`}
+                  >
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors"
+                      style={{ background: isActive ? color : '#d1d5db' }} />
+                    {sku.descripcion}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* By cadena */}
+        {/* ── 2026 por Cadena (line) ── */}
         {!cadenaFilter && byCad.length > 0 && cadenas.length > 1 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">2026 por Cadena</h3>
-            <p className="text-xs text-gray-400 mb-4">Sell-out mensual separado por formato</p>
-            <div className="h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={byCad} barGap={2}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
-                  <Tooltip formatter={(v: any) => v !== null ? fmtFull(v) : '—'} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {cadenas.map((c: string) => (
-                    <Bar key={c} dataKey={c} name={c} fill={CADENA_COLORS[c] ?? '#6b7280'} radius={[2,2,0,0]} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-semibold text-gray-700">2026 por Cadena</h3>
+              {evolCadenaLine && (
+                <button onClick={() => setEvolCadenaLine('')}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium">
+                  ✕ ver todas
+                </button>
+              )}
+            </div>
+            <p className="text-xs text-gray-400 mb-4">Sell-out mensual por formato · clic en una línea para aislar</p>
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={byCad} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
+                <Tooltip formatter={(v: any) => v !== null ? fmtFull(v) : '—'} />
+                {cadenas.map((c: string) => {
+                  if (evolCadenaLine && evolCadenaLine !== c) return null
+                  return (
+                    <Line key={c} type="monotone" dataKey={c} name={c}
+                      stroke={CADENA_COLORS[c] ?? '#6b7280'}
+                      strokeWidth={evolCadenaLine === c ? 2.5 : 2}
+                      dot={{ r: 3 }} connectNulls
+                      onClick={() => toggleCadenaLine(c)}
+                      style={{ cursor: 'pointer' }} />
+                  )
+                })}
+              </LineChart>
+            </ResponsiveContainer>
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {cadenas.map((c: string) => {
+                const color = CADENA_COLORS[c] ?? '#6b7280'
+                const active = !evolCadenaLine || evolCadenaLine === c
+                return (
+                  <button key={c} onClick={() => toggleCadenaLine(c)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-opacity select-none ${
+                      active ? 'border-gray-200 text-gray-700 bg-white' : 'border-gray-100 text-gray-300 bg-gray-50'
+                    }`}>
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: active ? color : '#d1d5db' }} />
+                    {c}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* By categoria (Total only) */}
-        {div === 'TOTAL' && cats.length > 1 && byCat.length > 0 && (
+        {/* ── Sell-In vs Sell-Out · Comparativo mensual ── */}
+        {(cpQuesos.length > 0 || cpLeches.length > 0) && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">2026 por Categoría</h3>
-            <p className="text-xs text-gray-400 mb-4">Quesos vs Leches</p>
-            <div className="h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={byCat} barGap={2}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
-                  <Tooltip formatter={(v: any) => v !== null ? fmtFull(v) : '—'} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {cats.map((c: string) => (
-                    <Bar key={c} dataKey={c} name={c}
-                      fill={c === 'Quesos' ? '#c8873a' : '#3b82f6'}
-                      stackId="a" radius={[2,2,0,0]} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
+            <h3 className="text-sm font-semibold text-gray-700 mb-1">Sell-In vs Sell-Out · Comparativo Mensual</h3>
+            <p className="text-xs text-gray-400 mb-1">
+              Sell-In = facturación BL Foods → {clienteSellin} (CIF). Sell-Out = venta al consumidor desde sell-out reportado.
+            </p>
+            {evolCpFilter && (
+              <div className="mt-1 mb-3">
+                <button onClick={() => setEvolCpFilter('')}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium">
+                  ✕ ver ambas líneas
+                </button>
+              </div>
+            )}
+            <div className="space-y-4 mt-4">
+              {[{ label: '🧀 Quesos', data: cpQuesos }, { label: '🥛 Leches', data: cpLeches }]
+                .filter(g => g.data.length > 0)
+                .map(g => (
+                  <div key={g.label}>
+                    <p className="text-xs font-semibold text-gray-600 mb-2">{g.label}</p>
+                    <ResponsiveContainer width="100%" height={180}>
+                      <LineChart data={g.data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
+                        <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
+                        <Tooltip formatter={(v: number, name: string) => [fmtFull(v), name]} />
+                        {(!evolCpFilter || evolCpFilter === 'sellin') && (
+                          <Line type="monotone" dataKey="sellin" name="Sell-In"
+                            stroke="#94a3b8" strokeWidth={evolCpFilter === 'sellin' ? 2.5 : 2}
+                            dot={{ r: 3 }} connectNulls
+                            onClick={() => toggleCpFilter('sellin')}
+                            style={{ cursor: 'pointer' }} />
+                        )}
+                        {(!evolCpFilter || evolCpFilter === 'sellout') && (
+                          <Line type="monotone" dataKey="sellout" name="Sell-Out"
+                            stroke="#c8873a" strokeWidth={evolCpFilter === 'sellout' ? 2.5 : 2}
+                            dot={{ r: 3 }} connectNulls
+                            onClick={() => toggleCpFilter('sellout')}
+                            style={{ cursor: 'pointer' }} />
+                        )}
+                      </LineChart>
+                    </ResponsiveContainer>
+                    <div className="flex gap-2 mt-2">
+                      {[{ key: 'sellin', label: 'Sell-In', color: '#94a3b8' }, { key: 'sellout', label: 'Sell-Out', color: '#c8873a' }].map(({ key, label, color }) => {
+                        const active = !evolCpFilter || evolCpFilter === key
+                        return (
+                          <button key={key} onClick={() => toggleCpFilter(key)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-opacity select-none ${
+                              active ? 'border-gray-200 text-gray-700 bg-white' : 'border-gray-100 text-gray-300 bg-gray-50'
+                            }`}>
+                            <span className="w-2.5 h-2.5 rounded-full" style={{ background: active ? color : '#d1d5db' }} />
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
             </div>
           </div>
         )}
