@@ -31,13 +31,33 @@ const SECTIONS = [
 ]
 
 const CADENA_COLORS: Record<string, string> = {
-  'WALMART':     '#0071CE',
-  'MAS X MENOS': '#F4821F',
-  'MAXI PALI':   '#E53935',
-  'WALMART GT':  '#0071CE',
-  'LA TORRE':    '#16a34a',
-  'MAXIBODEGA':  '#9333ea',
-  'DESPENSA':    '#0891b2',
+  'WALMART':               '#0071CE',
+  'MAS X MENOS':           '#F4821F',
+  'MAXI PALI':             '#E53935',
+  'PALI':                  '#f87171',
+  'DESPENSA FAMILIAR':     '#16a34a',
+  'LA DESPENSA DON JUAN':  '#15803d',
+  'MAXI DESPENSA':         '#0891b2',
+  'PAIZ':                  '#7c3aed',
+  'LA UNION':              '#d97706',
+  'LA TORRE':              '#059669',
+  'MAXIBODEGA':            '#9333ea',
+}
+
+const CADENAS_POR_PAIS: Record<string, string[]> = {
+  CR: ['WALMART', 'MAS X MENOS', 'MAXI PALI', 'PALI'],
+  GT: ['WALMART', 'DESPENSA FAMILIAR', 'PAIZ'],
+  HN: ['WALMART', 'DESPENSA FAMILIAR', 'MAXI DESPENSA', 'PAIZ'],
+  NI: ['WALMART', 'LA UNION', 'MAXI PALI'],
+  SV: ['WALMART', 'LA DESPENSA DON JUAN', 'MAXI DESPENSA'],
+}
+
+const COBERTURA_POR_PAIS: Record<string, { total: number; formatos: Record<string, number> }> = {
+  CR: { total: 347, formatos: { 'Walmart Supercenter': 15, 'Mas X Menos': 39, 'Maxi Pali': 60, 'Pali': 233 } },
+  GT: { total: 283, formatos: { 'Walmart Supercenter': 12, 'Despensa Familiar': 194, 'Maxi Despensa': 50, 'Paiz': 27 } },
+  HN: { total: 114, formatos: { 'Walmart Supercenter': 4, 'Despensa Familiar': 74, 'Maxi Despensa': 28, 'Paiz': 8 } },
+  NI: { total: 106, formatos: { 'Walmart Supercenter': 2, 'La Unión': 9, 'Maxi Pali': 22, 'Pali': 73 } },
+  SV: { total: 102, formatos: { 'Walmart Supercenter': 6, 'Despensa Familiar': 63, 'La Despensa Don Juan': 17, 'Maxi Despensa': 16 } },
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -493,6 +513,65 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
   // ── Inventarios / Cobertura ───────────────────────────────────────────────
 
+  function Cobertura() {
+    const cob = COBERTURA_POR_PAIS[pais]
+    const cadenaList = CADENAS_POR_PAIS[pais] ?? []
+    return (
+      <div className="space-y-5">
+        {/* Static coverage reference */}
+        {cob && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">Puntos de Venta — {paisNombre}</h3>
+                <p className="text-xs text-gray-400">Cobertura total de la red Walmart Group</p>
+              </div>
+              <div className="text-right">
+                <p className="text-2xl font-bold text-gray-800">{cob.total}</p>
+                <p className="text-xs text-gray-400">tiendas totales</p>
+              </div>
+            </div>
+            <div className={`grid grid-cols-2 md:grid-cols-${Math.min(Object.keys(cob.formatos).length, 4)} gap-3`}>
+              {Object.entries(cob.formatos).map(([formato, n]) => {
+                const colorKey = cadenaList.find(c => c.toLowerCase().includes(formato.split(' ')[0].toLowerCase())) ?? ''
+                const color = CADENA_COLORS[colorKey] ?? '#6b7280'
+                const pct = Math.round(n / cob.total * 100)
+                return (
+                  <div key={formato} className="bg-gray-50 rounded-lg p-3">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                      <p className="text-xs font-medium text-gray-600 truncate">{formato}</p>
+                    </div>
+                    <p className="text-xl font-bold text-gray-800">{n}</p>
+                    <div className="mt-1.5 bg-gray-200 rounded-full h-1">
+                      <div className="h-1 rounded-full" style={{ width: `${pct}%`, background: color }} />
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1">{pct}% de la red</p>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+        {/* Live inventory when available */}
+        {inv?.disponible ? (
+          <Inventarios />
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 flex items-start gap-4">
+            <div className="text-3xl">📦</div>
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-1">Snapshot de Inventario por Tienda</p>
+              <p className="text-sm text-gray-400">Disponible cuando se cargue el inventario PDV en <code className="bg-gray-100 px-1 rounded text-xs">inventario_walmart</code>.</p>
+              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-700 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" /> Pendiente de datos
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   function Inventarios() {
     const L = isL('inventarios') || isL('cobertura')
     if (L) return <CardSkeleton cols={4} />
@@ -568,12 +647,12 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex flex-wrap gap-4 items-end">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Cadena</p>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+            <div className="flex rounded-lg border border-gray-200 overflow-hidden flex-wrap">
               <button onClick={() => setCadenaFilter('')}
                 className={`px-3 py-1.5 text-xs font-medium transition-colors ${cadenaFilter === '' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                 Todas
               </button>
-              {['WALMART','MAS X MENOS','MAXI PALI'].map(c => (
+              {(CADENAS_POR_PAIS[pais] ?? []).map(c => (
                 <button key={c} onClick={() => setCadenaFilter(c)}
                   className={`px-3 py-1.5 text-xs font-medium transition-colors ${cadenaFilter === c ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                   {c}
@@ -701,7 +780,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     switch (section) {
       case 'resumen':         return Resumen()
       case 'evolucion':       return Evolucion()
-      case 'cobertura':       return inv?.disponible ? Inventarios() : <ProximamentePlaceholder section="cobertura" />
+      case 'cobertura':       return Cobertura()
       case 'inventarios':     return Inventarios()
       case 'pareto':          return Pareto()
       case 'pedidos':         return <ProximamentePlaceholder section="pedidos" />
@@ -748,9 +827,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             </div>
           </div>
           <div className="flex items-center gap-3 ml-auto text-xs text-gray-400 flex-wrap">
-            {Object.entries(CADENA_COLORS).slice(0, 4).map(([name, color]) => (
+            {(CADENAS_POR_PAIS[pais] ?? []).map(name => (
               <span key={name} className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: color }} />
+                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CADENA_COLORS[name] ?? '#6b7280' }} />
                 {name}
               </span>
             ))}
