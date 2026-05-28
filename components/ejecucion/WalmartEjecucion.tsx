@@ -189,7 +189,6 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [inv,         setInv]         = useState<any>(null)
   const [evolMedida,       setEvolMedida]       = useState<'valor' | 'unidades'>('valor')
   const [evolVista,        setEvolVista]        = useState<'mensual' | 'diaria'>('mensual')
-  const [evolCat,          setEvolCat]          = useState('')
   const [evolDesde,        setEvolDesde]        = useState('')
   const [evolHasta,        setEvolHasta]        = useState('')
   const [evolTopN,         setEvolTopN]         = useState(5)
@@ -202,6 +201,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const loadedRef = useRef<Record<string, boolean>>({})
   const setL = (k: string, v: boolean) => setLoading(p => ({ ...p, [k]: v }))
   const isL  = (k: string) => !!loading[k]
+  const saveFilter = (key: string, val: string) => localStorage.setItem(`${storageKey}-${key}`, val)
 
   const currentCat = DIVS.find(d => d.key === div)?.cat ?? ''
 
@@ -219,6 +219,16 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     if (target) setSection(target)
     const savedDiv = localStorage.getItem(`${storageKey}-div`)
     if (savedDiv && DIVS.some(d => d.key === savedDiv)) setDiv(savedDiv)
+    const savedVista = localStorage.getItem(`${storageKey}-vista`)
+    if (savedVista === 'mensual' || savedVista === 'diaria') setEvolVista(savedVista)
+    const savedMedida = localStorage.getItem(`${storageKey}-medida`)
+    if (savedMedida === 'valor' || savedMedida === 'unidades') setEvolMedida(savedMedida)
+    const savedCadena = localStorage.getItem(`${storageKey}-cadena`)
+    if (savedCadena !== null) setCadenaFilter(savedCadena)
+    const savedDesde = localStorage.getItem(`${storageKey}-desde`)
+    if (savedDesde) setEvolDesde(savedDesde)
+    const savedHasta = localStorage.getItem(`${storageKey}-hasta`)
+    if (savedHasta) setEvolHasta(savedHasta)
   }, []) // eslint-disable-line
 
   useEffect(() => {
@@ -238,10 +248,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
     } else if (section === 'evolucion') {
       setL('evolucion', true)
-      const catQ2 = evolCat ? `&categoria=${encodeURIComponent(evolCat)}` : ''
       Promise.all([
-        fetch(`/api/comercial/ejecucion/walmart/timeseries?pais=${pais}${catQ2}${cadQ}`).then(r => r.json()),
-        fetch(`/api/comercial/ejecucion/walmart/evo-top5?pais=${pais}${catQ2}&top=${evolTopN > 5 ? 100 : 5}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/timeseries?pais=${pais}${catQ}${cadQ}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/evo-top5?pais=${pais}${catQ}&top=${evolTopN > 5 ? 100 : 5}`).then(r => r.json()),
         fetch(`/api/comercial/ejecucion/walmart/comparativo?pais=${pais}&cliente=${clienteSellin}`).then(r => r.json()),
       ]).then(([tsData, t5Data, cpData]) => { setTs(tsData); setEvoTop5(t5Data); setComparativo(cpData) })
         .finally(() => setL('evolucion', false))
@@ -256,13 +265,14 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       fetch(`/api/comercial/ejecucion/walmart/inventario?${baseQ}`)
         .then(r => r.json()).then(setInv).finally(() => setL(section, false))
     }
-  }, [section, div, cadenaFilter, topN, evolCat, evolTopN]) // eslint-disable-line
+  }, [section, div, cadenaFilter, topN, evolTopN]) // eslint-disable-line
 
   // Fetch daily data when vista=diaria or date range changes
   useEffect(() => {
     if (section !== 'evolucion' || evolVista !== 'diaria') return
+    const cat = DIVS.find(d => d.key === div)?.cat ?? ''
     const p = new URLSearchParams({ pais })
-    if (evolCat) p.set('categoria', evolCat)
+    if (cat) p.set('categoria', cat)
     if (evolDesde) p.set('desde', evolDesde + '-01')
     if (evolHasta) {
       const [y, m] = evolHasta.split('-').map(Number)
@@ -271,7 +281,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     }
     fetch(`/api/comercial/ejecucion/walmart/daily?${p}`)
       .then(r => r.json()).then(d => setEvolDiario(d))
-  }, [evolVista, evolCat, evolDesde, evolHasta, section]) // eslint-disable-line
+  }, [evolVista, div, evolDesde, evolHasta, section]) // eslint-disable-line
 
   // ── Resumen ──────────────────────────────────────────────────────────────
 
@@ -487,12 +497,6 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
       : (v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v))
 
-    const handleReset = () => {
-      setEvolCat(''); setCadenaFilter(''); setEvolMedida('valor')
-      setEvolVista('mensual'); setEvolDesde(''); setEvolHasta('')
-      setEvolYearFilter(''); setEvolCadenaLine(''); setEvolCpFilter('')
-    }
-
     const toggleYear = (key: string) => setEvolYearFilter(p => p === key ? '' : key)
     const toggleCadenaLine = (c: string) => setEvolCadenaLine(p => p === c ? '' : c)
     const toggleCpFilter = (k: string) => setEvolCpFilter(p => p === k ? '' : k)
@@ -506,65 +510,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             <h3 className="text-sm font-semibold text-gray-800">📈 Evolución de Ventas — Portafolio Activo</h3>
             <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">SELLOUT</span>
           </div>
-          <p className="text-xs text-gray-400 mb-3">{evolCat || 'Todas las categorías'} · Walmart {paisNombre}</p>
-
-          {/* Controls */}
-          <div className="flex items-center gap-x-3 gap-y-2 flex-wrap text-xs mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
-            <span className="text-gray-400 font-medium">Vista:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {(['mensual', 'diaria'] as const).map(v => (
-                <button key={v} onClick={() => setEvolVista(v)}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {v.charAt(0).toUpperCase() + v.slice(1)}
-                </button>
-              ))}
-            </div>
-            <span className="text-gray-400 font-medium">Categoría:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {[{ key: '', label: 'Todas' }, { key: 'Quesos', label: 'Queso' }, { key: 'Leches', label: 'Leche' }].map(c => (
-                <button key={c.key} onClick={() => setEvolCat(c.key)}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolCat === c.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {c.label}
-                </button>
-              ))}
-            </div>
-            <span className="text-gray-400 font-medium">Medida:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {([['valor', 'Valor $'], ['unidades', 'Unidades']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setEvolMedida(k)}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolMedida === k ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {l}
-                </button>
-              ))}
-            </div>
-            <span className="text-gray-400 font-medium">Cadena:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden flex-wrap">
-              <button onClick={() => setCadenaFilter('')}
-                className={`px-3 py-1.5 font-medium transition-colors ${cadenaFilter === '' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                Todas
-              </button>
-              {cadenas.map((c: string) => (
-                <button key={c} onClick={() => setCadenaFilter(c)}
-                  className={`px-3 py-1.5 font-medium transition-colors ${cadenaFilter === c ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {c}
-                </button>
-              ))}
-            </div>
-            <span className="text-gray-400 font-medium">Desde:</span>
-            <input type="month" value={evolDesde} min="2024-01" max="2026-12"
-              onChange={e => setEvolDesde(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400"
-            />
-            <span className="text-gray-400 font-medium">Hasta:</span>
-            <input type="month" value={evolHasta} min="2024-01" max="2026-12"
-              onChange={e => setEvolHasta(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400"
-            />
-            <button onClick={handleReset}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
-              ↺ Reset
-            </button>
-          </div>
+          <p className="text-xs text-gray-400 mb-3">{currentCat || 'Todas las categorías'} · Walmart {paisNombre}</p>
 
           {evolVista === 'diaria' ? (
             evolDiario?.series?.length > 0 ? (
@@ -723,24 +669,6 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             </p>
             {/* Controls */}
             <div className="flex items-center gap-x-3 gap-y-2 flex-wrap text-xs mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
-              <span className="text-gray-400 font-medium">Medida:</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {([['valor', 'Valor ($)'], ['unidades', 'Unidades']] as const).map(([k, l]) => (
-                  <button key={k} onClick={() => setEvolMedida(k)}
-                    className={`px-3 py-1.5 font-medium transition-colors ${evolMedida === k ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-              <span className="text-gray-400 font-medium">Categoría:</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {[{ key: '', label: 'Todas' }, { key: 'Quesos', label: 'Queso' }, { key: 'Leches', label: 'Leche' }].map(c => (
-                  <button key={c.key} onClick={() => { setEvolCat(c.key); setEvolSkuFilter('') }}
-                    className={`px-3 py-1.5 font-medium transition-colors ${evolCat === c.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {c.label}
-                  </button>
-                ))}
-              </div>
               <span className="text-gray-400 font-medium">Mostrar:</span>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden">
                 <button onClick={() => { setEvolTopN(5); setEvolSkuFilter('') }}
@@ -1217,28 +1145,99 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         </button>
       </div>
 
-      {/* ── División + leyenda cadenas ── */}
+      {/* ── Filtros globales ── */}
       <div className="px-6 pt-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-4 flex-wrap">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">División</p>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {DIVS.map(d => (
-                <button key={d.key}
-                  onClick={() => { setDiv(d.key); localStorage.setItem(`${storageKey}-div`, d.key) }}
-                  className={`px-4 py-1.5 text-sm font-medium transition-colors ${div === d.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {d.label}
-                </button>
-              ))}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+          <div className="flex items-center gap-x-4 gap-y-3 flex-wrap text-xs">
+
+            {/* División */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-widest text-gray-400">División</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {DIVS.map(d => (
+                  <button key={d.key}
+                    onClick={() => { setDiv(d.key); saveFilter('div', d.key) }}
+                    className={`px-4 py-1.5 font-medium transition-colors ${div === d.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {d.label}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="flex items-center gap-3 ml-auto text-xs text-gray-400 flex-wrap">
-            {(CADENAS_POR_PAIS[pais] ?? []).map(name => (
-              <span key={name} className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full inline-block" style={{ background: CADENA_COLORS[name] ?? '#6b7280' }} />
-                {name}
-              </span>
-            ))}
+
+            {/* Vista */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-widest text-gray-400">Vista</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {(['mensual', 'diaria'] as const).map(v => (
+                  <button key={v} onClick={() => { setEvolVista(v); saveFilter('vista', v) }}
+                    className={`px-3 py-1.5 font-medium transition-colors ${evolVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {v.charAt(0).toUpperCase() + v.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Medida */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-widest text-gray-400">Medida</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {([['valor', 'Valor $'], ['unidades', 'Unidades']] as const).map(([k, l]) => (
+                  <button key={k} onClick={() => { setEvolMedida(k); saveFilter('medida', k) }}
+                    className={`px-3 py-1.5 font-medium transition-colors ${evolMedida === k ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Cadena */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-widest text-gray-400">Cadena</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden flex-wrap">
+                <button onClick={() => { setCadenaFilter(''); saveFilter('cadena', '') }}
+                  className={`px-3 py-1.5 font-medium transition-colors ${cadenaFilter === '' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  Todas
+                </button>
+                {(CADENAS_POR_PAIS[pais] ?? []).map(name => (
+                  <button key={name} onClick={() => { setCadenaFilter(name); saveFilter('cadena', name) }}
+                    className={`px-3 py-1.5 font-medium transition-colors ${cadenaFilter === name ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Periodo */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-widest text-gray-400">Período</span>
+              <div className="flex items-center gap-2">
+                <input type="month" value={evolDesde} min="2024-01" max="2026-12"
+                  onChange={e => { setEvolDesde(e.target.value); saveFilter('desde', e.target.value) }}
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 text-xs"
+                />
+                <span className="text-gray-400">–</span>
+                <input type="month" value={evolHasta} min="2024-01" max="2026-12"
+                  onChange={e => { setEvolHasta(e.target.value); saveFilter('hasta', e.target.value) }}
+                  className="border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 text-xs"
+                />
+              </div>
+            </div>
+
+            {/* Reset */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-widest text-gray-400 invisible">Reset</span>
+              <button
+                onClick={() => {
+                  setDiv('TOTAL'); setEvolVista('mensual'); setEvolMedida('valor')
+                  setCadenaFilter(''); setEvolDesde(''); setEvolHasta('')
+                  setEvolYearFilter(''); setEvolCadenaLine(''); setEvolCpFilter(''); setEvolSkuFilter('')
+                  ;['div','vista','medida','cadena','desde','hasta'].forEach(k => localStorage.removeItem(`${storageKey}-${k}`))
+                }}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
+                ↺ Reset
+              </button>
+            </div>
+
           </div>
         </div>
       </div>
