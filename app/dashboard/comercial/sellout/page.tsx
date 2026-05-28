@@ -313,8 +313,8 @@ export default function SelloutPage() {
   }, [fAnos, mesMap])
 
   const fmtFull = (n: number) =>
-    isNaN(n) || !isFinite(n) ? '$0' :
-    '$' + Math.round(n).toLocaleString('en-US')
+    isNaN(n) || !isFinite(n) ? '$0.00' :
+    '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
   const totalPages = Math.ceil(total / PAGE_SIZE)
 
