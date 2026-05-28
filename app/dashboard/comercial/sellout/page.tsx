@@ -144,9 +144,8 @@ export default function SelloutPage() {
     })
   }, [fAnos, fMeses, fCats, fPaises])
 
-  // ── Cascade: fPaises → clienteOpts (lazy) ────────────────────────────────
+  // ── clienteOpts: always load, filtered by current selections ────────────
   useEffect(() => {
-    if (!fPaises.length && !fCats.length) { setClienteOpts([]); setFClientes([]); return }
     const p = new URLSearchParams({ dim: 'cliente' })
     if (fAnos.length)   p.set('anos',       fAnos.join(','))
     if (fMeses.length)  p.set('meses',      fMeses.join(','))
