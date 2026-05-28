@@ -38,6 +38,18 @@ type SortKey = 'ventas_valor' | 'ventas_unidades' | 'pct' | 'mes' | 'dia' | 'pai
 interface SortState { key: SortKey; dir: 'asc' | 'desc' }
 
 const CURRENT_YEAR = String(new Date().getFullYear())
+const STORAGE_KEY  = 'bl_sellout_v1'
+
+function readStorage() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as {
+      fAnos?: string[]; fMeses?: string[]; fPaises?: string[]; fCats?: string[]
+      fSubcats?: string[]; fClientes?: string[]; buscar?: string; sort?: SortState
+    }
+  } catch { return null }
+}
 
 export default function SelloutPage() {
   // Period state
@@ -89,10 +101,32 @@ export default function SelloutPage() {
   const PAGE_SIZE = 500
   const initDone  = useRef(false)
 
-  // ── Load period map ──────────────────────────────────────────────────────
+  // ── Init: load localStorage + period map ─────────────────────────────────
   useEffect(() => {
     if (initDone.current) return
     initDone.current = true
+
+    // Restore filters from localStorage
+    const stored = readStorage()
+    let iAnos = [CURRENT_YEAR], iMeses: string[] = [], iPaises: string[] = []
+    let iCats: string[] = [], iSubcats: string[] = [], iClientes: string[] = []
+    let iBuscar = '', iSort: SortState = { key: 'ventas_valor', dir: 'desc' }
+    if (stored) {
+      iAnos     = stored.fAnos     ?? [CURRENT_YEAR]
+      iMeses    = stored.fMeses    ?? []
+      iPaises   = stored.fPaises   ?? []
+      iCats     = stored.fCats     ?? []
+      iSubcats  = stored.fSubcats  ?? []
+      iClientes = stored.fClientes ?? []
+      iBuscar   = stored.buscar    ?? ''
+      iSort     = stored.sort      ?? { key: 'ventas_valor', dir: 'desc' }
+      setFAnos(iAnos); setFMeses(iMeses); setFPaises(iPaises)
+      setFCats(iCats); setFSubcats(iSubcats); setFClientes(iClientes)
+      setBuscar(iBuscar); setBuscarInput(iBuscar); setSort(iSort)
+    }
+
+    cargar(iAnos, iMeses, iPaises, iCats, iSubcats, iClientes, iBuscar, 1, iSort)
+
     fetch('/api/ventas/resumen?tipo=periodos')
       .then(r => r.json())
       .then(j => {
@@ -106,6 +140,7 @@ export default function SelloutPage() {
         setMesMap(mm)
         setAnos(Object.keys(mm).map(Number).sort((a, b) => b - a))
       })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Load pais options (no cascade) ───────────────────────────────────────
@@ -165,7 +200,8 @@ export default function SelloutPage() {
     anos: string[], meses: string[],
     paises: string[], cats: string[], subcats: string[],
     clientes: string[], buscarVal: string,
-    pg: number
+    pg: number,
+    sortState?: SortState
   ) => {
     setLoading(true)
     const p = new URLSearchParams()
@@ -178,6 +214,7 @@ export default function SelloutPage() {
     if (buscarVal.trim()) p.set('buscar', buscarVal.trim())
     p.set('page', String(pg))
     p.set('pageSize', String(PAGE_SIZE))
+    if (sortState) { p.set('sortBy', sortState.key); p.set('sortDir', sortState.dir) }
 
     fetch('/api/ventas/sellout?' + p)
       .then(r => r.json())
@@ -203,30 +240,37 @@ export default function SelloutPage() {
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => {
-    cargar([CURRENT_YEAR], [], [], [], [], [], '', 1)
-  }, [cargar])
+  const saveStorage = (
+    anos: string[], meses: string[], paises: string[], cats: string[],
+    subcats: string[], clientes: string[], b: string, s: SortState
+  ) => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ fAnos: anos, fMeses: meses, fPaises: paises, fCats: cats, fSubcats: subcats, fClientes: clientes, buscar: b, sort: s })) } catch {}
+  }
 
   const triggerCargar = (
     anos = fAnos, meses = fMeses,
     paises = fPaises, cats = fCats, subcats = fSubcats,
     clientes = fClientes, buscarVal = buscar,
-    pg = 1
+    pg = 1,
+    sortState = sort
   ) => {
     setPage(pg)
-    cargar(anos, meses, paises, cats, subcats, clientes, buscarVal, pg)
+    saveStorage(anos, meses, paises, cats, subcats, clientes, buscarVal, sortState)
+    cargar(anos, meses, paises, cats, subcats, clientes, buscarVal, pg, sortState)
   }
 
   const limpiar = () => {
+    const defSort: SortState = { key: 'ventas_valor', dir: 'desc' }
     setFAnos([CURRENT_YEAR]); setFMeses([])
     setFPaises([]); setFCats([]); setFSubcats([])
-    setFClientes([])
+    setFClientes([]); setSort(defSort)
     setBuscar(''); setBuscarInput('')
     setPage(1)
-    cargar([CURRENT_YEAR], [], [], [], [], [], '', 1)
+    try { localStorage.removeItem(STORAGE_KEY) } catch {}
+    cargar([CURRENT_YEAR], [], [], [], [], [], '', 1, defSort)
   }
 
-  // ── Sort logic ────────────────────────────────────────────────────────────
+  // ── Sort logic (server-side) ──────────────────────────────────────────────
   const grandTotal = kpi?.total_valor ?? rows.reduce((s, r) => s + r.ventas_valor, 0)
 
   const rowsWithPct = rows.map(r => ({
@@ -234,22 +278,16 @@ export default function SelloutPage() {
     pct: grandTotal > 0 ? (r.ventas_valor / grandTotal) * 100 : 0,
   }))
 
-  const sorted = [...rowsWithPct].sort((a, b) => {
-    let diff: number
-    if      (sort.key === 'ventas_valor')   diff = a.ventas_valor   - b.ventas_valor
-    else if (sort.key === 'ventas_unidades') diff = a.ventas_unidades - b.ventas_unidades
-    else if (sort.key === 'pct')            diff = a.pct             - b.pct
-    else if (sort.key === 'mes')            diff = a.mes  - b.mes  || a.dia - b.dia
-    else if (sort.key === 'dia')            diff = a.dia  - b.dia
-    else if (sort.key === 'pais')           diff = a.pais.localeCompare(b.pais)
-    else diff = 0
-    return sort.dir === 'asc' ? diff : -diff
-  })
+  // Server already sorted — alias for render compatibility
+  const sorted = rowsWithPct
 
-  const toggleSort = (key: SortKey) =>
-    setSort(prev => prev.key === key
-      ? { key, dir: prev.dir === 'desc' ? 'asc' : 'desc' }
-      : { key, dir: 'desc' })
+  const toggleSort = (key: SortKey) => {
+    const newSort: SortState = sort.key === key
+      ? { key, dir: sort.dir === 'desc' ? 'asc' : 'desc' }
+      : { key, dir: 'desc' }
+    setSort(newSort)
+    triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, buscar, 1, newSort)
+  }
 
   const arrow = (key: SortKey) => sort.key === key ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : ' ↕'
 

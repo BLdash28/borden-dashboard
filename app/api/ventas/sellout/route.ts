@@ -17,6 +17,13 @@ export async function GET(req: NextRequest) {
     const pageSize       = parseInt(searchParams.get('pageSize') || '500')
     const offset         = (page - 1) * pageSize
 
+    const SORT_COLS: Record<string, string> = {
+      mes: 'mes', dia: 'dia', pais: 'pais',
+      ventas_valor: 'ventas_valor', ventas_unidades: 'ventas_unidades', ano: 'ano',
+    }
+    const sortCol = SORT_COLS[searchParams.get('sortBy') || ''] || 'mes'
+    const sortDir = searchParams.get('sortDir') === 'asc' ? 'ASC' : 'DESC'
+
     const conds: string[] = ['dia > 0']
     const params: unknown[] = []
     let idx = 1
@@ -95,7 +102,7 @@ export async function GET(req: NextRequest) {
                 ROUND(ventas_unidades::numeric, 0) AS ventas_unidades,
                 ROUND(ventas_valor::numeric, 2)    AS ventas_valor
          FROM mv_sellout_mensual ${where}
-         ORDER BY ano DESC, mes DESC, dia DESC, ventas_valor DESC
+         ORDER BY ${sortCol} ${sortDir}, ventas_valor DESC, dia DESC
          LIMIT $${idx} OFFSET $${idx + 1}`,
         [...params, pageSize, offset]
       ),
