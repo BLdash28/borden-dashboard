@@ -34,7 +34,7 @@ interface SelloutRow {
   ventas_valor: number
 }
 
-type SortKey = 'ventas_valor' | 'ventas_unidades' | 'pct'
+type SortKey = 'ventas_valor' | 'ventas_unidades' | 'pct' | 'mes' | 'dia' | 'pais'
 interface SortState { key: SortKey; dir: 'asc' | 'desc' }
 
 const CURRENT_YEAR = String(new Date().getFullYear())
@@ -235,11 +235,14 @@ export default function SelloutPage() {
   }))
 
   const sorted = [...rowsWithPct].sort((a, b) => {
-    const diff = sort.key === 'ventas_valor'
-      ? a.ventas_valor - b.ventas_valor
-      : sort.key === 'ventas_unidades'
-        ? a.ventas_unidades - b.ventas_unidades
-        : a.pct - b.pct
+    let diff: number
+    if      (sort.key === 'ventas_valor')   diff = a.ventas_valor   - b.ventas_valor
+    else if (sort.key === 'ventas_unidades') diff = a.ventas_unidades - b.ventas_unidades
+    else if (sort.key === 'pct')            diff = a.pct             - b.pct
+    else if (sort.key === 'mes')            diff = a.mes  - b.mes  || a.dia - b.dia
+    else if (sort.key === 'dia')            diff = a.dia  - b.dia
+    else if (sort.key === 'pais')           diff = a.pais.localeCompare(b.pais)
+    else diff = 0
     return sort.dir === 'asc' ? diff : -diff
   })
 
@@ -554,7 +557,7 @@ export default function SelloutPage() {
                           <div className="text-[11px] font-mono mt-0.5" style={{ color: 'var(--t3)' }}>{r.sku}</div>
                         </div>
                         <span className="text-[12px] font-bold tabular-nums flex-shrink-0" style={{ color: 'var(--acc)' }}>
-                          {fmt(r.ventas_valor)}
+                          {fmtFull(r.ventas_valor)}
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]" style={{ color: 'var(--t3)' }}>
@@ -574,9 +577,9 @@ export default function SelloutPage() {
                     <thead>
                       <tr className="uppercase tracking-widest border-b" style={{ color: 'var(--t3)', borderColor: 'var(--border)' }}>
                         <th className="text-left py-2 pr-3">Año</th>
-                        <th className="text-left py-2 pr-3">Mes</th>
-                        <th className="text-left py-2 pr-3">Día</th>
-                        <th className="text-left py-2 pr-3">País</th>
+                        <th className="text-left py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('mes')}>Mes{arrow('mes')}</th>
+                        <th className="text-left py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('dia')}>Día{arrow('dia')}</th>
+                        <th className="text-left py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('pais')}>País{arrow('pais')}</th>
                         <th className="text-left py-2 pr-3">Cliente</th>
                         <th className="text-left py-2 pr-3">Punto Venta</th>
                         <th className="text-left py-2 pr-3">Cód. Barras</th>
@@ -608,7 +611,7 @@ export default function SelloutPage() {
                           <td className="py-1.5 pr-3 max-w-[160px] truncate" style={{ color: 'var(--t1)' }}>{r.descripcion}</td>
                           <td className="py-1.5 pr-3" style={{ color: 'var(--t2)' }}>{r.subcategoria}</td>
                           <td className="py-1.5 pr-3 text-right tabular-nums" style={{ color: 'var(--t2)' }}>{r.ventas_unidades.toLocaleString()}</td>
-                          <td className="py-1.5 pr-3 text-right font-semibold tabular-nums" style={{ color: 'var(--t1)' }}>{fmt(r.ventas_valor)}</td>
+                          <td className="py-1.5 pr-3 text-right font-semibold tabular-nums" style={{ color: 'var(--t1)' }}>{fmtFull(r.ventas_valor)}</td>
                           <td className="py-1.5 text-right tabular-nums" style={{ color: 'var(--t3)' }}>{r.pct.toFixed(1)}%</td>
                         </tr>
                       ))}
