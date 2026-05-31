@@ -9,12 +9,14 @@ const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov'
 export async function GET(req: NextRequest) {
   try {
     const sp        = req.nextUrl.searchParams
-    const pais      = sp.get('pais')      ?? 'CR'
-    const categoria = sp.get('categoria') ?? ''
-    const cadena    = sp.get('cadena')    ?? ''
+    const pais      = sp.get('pais')         ?? 'CR'
+    const categoria = sp.get('categoria')    ?? ''
+    const subcat    = sp.get('subcategoria') ?? ''
+    const cadena    = sp.get('cadena')       ?? ''
     const paisSafe  = pais.replace(/'/g,"''")
-    const catFilter    = categoria ? `AND categoria = '${categoria.replace(/'/g,"''")}'` : ''
-    const cadenaFilter = cadena    ? `AND cadena = '${cadena.replace(/'/g,"''")}'`       : ''
+    const catFilter    = categoria ? `AND categoria    = '${categoria.replace(/'/g,"''")}'` : ''
+    const subcatFilter = subcat    ? `AND subcategoria = '${subcat.replace(/'/g,"''")}'`    : ''
+    const cadenaFilter = cadena    ? `AND cadena       = '${cadena.replace(/'/g,"''")}'`    : ''
 
     const [monthlyR, byCadenaR, byCatR, baselineR] = await Promise.all([
       // Overall monthly 2024/2025/2026
@@ -25,7 +27,7 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(ventas_valor)::numeric,    2) AS valor,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}' ${catFilter} ${cadenaFilter}
+        WHERE pais = '${paisSafe}' ${catFilter} ${subcatFilter} ${cadenaFilter}
           AND fecha >= '2024-01-01' AND fecha < '2027-01-01'
         GROUP BY 1, 2
         ORDER BY 1, 2
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
         FROM fact_ventas_walmart
         WHERE pais = '${paisSafe}'
           AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
-          ${catFilter}
+          ${catFilter} ${subcatFilter}
         GROUP BY cadena, mes
         ORDER BY cadena, mes
       `),
@@ -66,7 +68,7 @@ export async function GET(req: NextRequest) {
           FROM fact_ventas_walmart
           WHERE pais = '${paisSafe}'
             AND fecha >= '2025-10-01' AND fecha < '2027-01-01'
-            ${catFilter} ${cadenaFilter}
+            ${catFilter} ${subcatFilter} ${cadenaFilter}
           GROUP BY 1
           HAVING SUM(ventas_valor) >= 5000
         )

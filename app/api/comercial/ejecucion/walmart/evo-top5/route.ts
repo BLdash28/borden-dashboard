@@ -9,17 +9,19 @@ const MN = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', '
 export async function GET(req: NextRequest) {
   try {
     const sp       = req.nextUrl.searchParams
-    const pais     = sp.get('pais')      ?? 'CR'
-    const cat      = sp.get('categoria') ?? ''
+    const pais     = sp.get('pais')         ?? 'CR'
+    const cat      = sp.get('categoria')    ?? ''
+    const subcat   = sp.get('subcategoria') ?? ''
     const topN     = Math.min(Math.max(parseInt(sp.get('top') ?? '5'), 1), 200)
-    const paisSafe = pais.replace(/'/g, "''")
-    const catFilter = cat ? `AND categoria = '${cat.replace(/'/g, "''")}'` : ''
+    const paisSafe  = pais.replace(/'/g, "''")
+    const catFilter  = cat    ? `AND categoria    = '${cat.replace(/'/g, "''")}'`    : ''
+    const subFilter  = subcat ? `AND subcategoria = '${subcat.replace(/'/g, "''")}'` : ''
 
     const { rows } = await pool.query(`
       WITH top_skus AS (
         SELECT codigo_barras, SUM(ventas_valor) AS total
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}' AND EXTRACT(YEAR FROM fecha) = 2026 ${catFilter}
+        WHERE pais = '${paisSafe}' AND EXTRACT(YEAR FROM fecha) = 2026 ${catFilter} ${subFilter}
         GROUP BY codigo_barras
         ORDER BY total DESC
         LIMIT ${topN}

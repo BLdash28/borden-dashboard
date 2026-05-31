@@ -189,10 +189,13 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [inv,         setInv]         = useState<any>(null)
   const [evolMedida,       setEvolMedida]       = useState<'valor' | 'unidades'>('valor')
   const [evolVista,        setEvolVista]        = useState<'mensual' | 'diaria'>('mensual')
+  const [evolSubcat,       setEvolSubcat]       = useState('')
+  const [evolSubcatOpts,   setEvolSubcatOpts]   = useState<string[]>([])
   const [evolDesde,        setEvolDesde]        = useState('')
   const [evolHasta,        setEvolHasta]        = useState('')
   const [evolTopN,         setEvolTopN]         = useState(5)
   const [evolSkuFilter,    setEvolSkuFilter]    = useState('')
+  const [evolSkuHover,     setEvolSkuHover]     = useState('')
   const [evolYearFilter,   setEvolYearFilter]   = useState('')
   const [evolCadenaLine,   setEvolCadenaLine]   = useState('')
   const [evolCpFilter,     setEvolCpFilter]     = useState('')
@@ -225,16 +228,29 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     if (savedMedida === 'valor' || savedMedida === 'unidades') setEvolMedida(savedMedida)
     const savedCadena = localStorage.getItem(`${storageKey}-cadena`)
     if (savedCadena !== null) setCadenaFilter(savedCadena)
+    const savedSubcat = localStorage.getItem(`${storageKey}-subcat`)
+    if (savedSubcat) setEvolSubcat(savedSubcat)
+    const savedTopN = localStorage.getItem(`${storageKey}-topn`)
+    if (savedTopN) setEvolTopN(parseInt(savedTopN) || 5)
     const savedDesde = localStorage.getItem(`${storageKey}-desde`)
     if (savedDesde) setEvolDesde(savedDesde)
     const savedHasta = localStorage.getItem(`${storageKey}-hasta`)
     if (savedHasta) setEvolHasta(savedHasta)
   }, []) // eslint-disable-line
 
+  // Fetch subcategory options when div/pais changes
   useEffect(() => {
-    const catQ = currentCat ? `&categoria=${encodeURIComponent(currentCat)}` : ''
-    const cadQ = cadenaFilter ? `&cadena=${encodeURIComponent(cadenaFilter)}` : ''
-    const baseQ = `pais=${pais}${catQ}`
+    const p = new URLSearchParams({ pais })
+    if (currentCat) p.set('categoria', currentCat)
+    fetch(`/api/comercial/ejecucion/walmart/subcategorias?${p}`)
+      .then(r => r.json()).then(d => { setEvolSubcatOpts(d.subcategorias ?? []); setEvolSubcat('') })
+  }, [div]) // eslint-disable-line
+
+  useEffect(() => {
+    const catQ   = currentCat  ? `&categoria=${encodeURIComponent(currentCat)}`   : ''
+    const subcatQ = evolSubcat ? `&subcategoria=${encodeURIComponent(evolSubcat)}` : ''
+    const cadQ   = cadenaFilter ? `&cadena=${encodeURIComponent(cadenaFilter)}`    : ''
+    const baseQ  = `pais=${pais}${catQ}`
 
     const needsInventario = ['cobertura','inventarios','perdida','recomendaciones'].includes(section)
 
@@ -249,8 +265,8 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     } else if (section === 'evolucion') {
       setL('evolucion', true)
       Promise.all([
-        fetch(`/api/comercial/ejecucion/walmart/timeseries?pais=${pais}${catQ}${cadQ}`).then(r => r.json()),
-        fetch(`/api/comercial/ejecucion/walmart/evo-top5?pais=${pais}${catQ}&top=${evolTopN > 5 ? 100 : 5}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/timeseries?pais=${pais}${catQ}${subcatQ}${cadQ}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/evo-top5?pais=${pais}${catQ}${subcatQ}&top=${evolTopN > 5 ? 100 : 5}`).then(r => r.json()),
         fetch(`/api/comercial/ejecucion/walmart/comparativo?pais=${pais}&cliente=${clienteSellin}`).then(r => r.json()),
       ]).then(([tsData, t5Data, cpData]) => { setTs(tsData); setEvoTop5(t5Data); setComparativo(cpData) })
         .finally(() => setL('evolucion', false))
@@ -265,14 +281,16 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       fetch(`/api/comercial/ejecucion/walmart/inventario?${baseQ}`)
         .then(r => r.json()).then(setInv).finally(() => setL(section, false))
     }
-  }, [section, div, cadenaFilter, topN, evolTopN]) // eslint-disable-line
+  }, [section, div, cadenaFilter, topN, evolTopN, evolSubcat]) // eslint-disable-line
 
-  // Fetch daily data when vista=diaria or date range changes
+  // Fetch daily data when vista=diaria or any filter changes
   useEffect(() => {
     if (section !== 'evolucion' || evolVista !== 'diaria') return
     const cat = DIVS.find(d => d.key === div)?.cat ?? ''
-    const p = new URLSearchParams({ pais })
-    if (cat) p.set('categoria', cat)
+    const p = new URLSearchParams({ pais, top: String(evolTopN > 5 ? 100 : 5) })
+    if (cat)           p.set('categoria',    cat)
+    if (evolSubcat)    p.set('subcategoria', evolSubcat)
+    if (cadenaFilter)  p.set('cadena',       cadenaFilter)
     if (evolDesde) p.set('desde', evolDesde + '-01')
     if (evolHasta) {
       const [y, m] = evolHasta.split('-').map(Number)
@@ -281,7 +299,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     }
     fetch(`/api/comercial/ejecucion/walmart/daily?${p}`)
       .then(r => r.json()).then(d => setEvolDiario(d))
-  }, [evolVista, div, evolDesde, evolHasta, section]) // eslint-disable-line
+  }, [evolVista, div, evolSubcat, cadenaFilter, evolTopN, evolDesde, evolHasta, section]) // eslint-disable-line
 
   // ── Resumen ──────────────────────────────────────────────────────────────
 
@@ -489,6 +507,15 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     }
     const top5Data = Object.values(top5Series).filter(r => skus.some((s: any) => (r[s.descripcion] ?? 0) > 0))
 
+    // Daily variants (declared after top5Data so no temporal dead zone)
+    const isDiaria  = evolVista === 'diaria'
+    const dCadenas  = isDiaria ? (evolDiario?.cadenas  ?? []) : cadenas
+    const dByCad    = isDiaria ? (evolDiario?.byCadena ?? []) : byCad
+    const dSkuNames = isDiaria ? (evolDiario?.skuNames ?? []) : skus.map((s: any) => s.descripcion)
+    const dSkuData  = isDiaria ? (evolDiario?.bySkus   ?? []) : top5Data
+    const xKey      = isDiaria ? 'label' : 'mes_nombre'
+    const SKU_COLORS2 = makeColors(dSkuNames.length || 10)
+
     // Comparativo (sell-in vs sell-out por categoria)
     const cpQuesos = comparativo?.quesos ?? []
     const cpLeches = comparativo?.leches ?? []
@@ -650,56 +677,46 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         </div>
 
         {/* ── Top N SKUs ── */}
-        {skus.length > 0 && (
+        {dSkuNames.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <div className="flex items-start justify-between gap-2 mb-1">
               <h3 className="text-sm font-semibold text-gray-800">
-                🏆 {evolTopN === 5 ? 'Top 5 SKUs' : `${skus.length} SKUs`} — Evolución Mensual 2026
+                🏆 {evolTopN === 5 ? 'Top 5 SKUs' : `${dSkuNames.length} SKUs`} — Evolución {isDiaria ? 'Diaria' : 'Mensual'} 2026
               </h3>
               {evolSkuFilter && (
                 <button onClick={() => setEvolSkuFilter('')}
                   className="flex-shrink-0 text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium hover:bg-amber-200 transition-colors">
-                  ✕ Mostrando solo 1 — ver todas
+                  ✕ ver todas
                 </button>
               )}
             </div>
             <p className="text-xs text-gray-400 mb-3">
-              Por venta acumulada · Walmart {paisNombre}
-              {evolSkuFilter ? '' : ' · Clic en una línea para aislar'}
+              Por venta acumulada · Walmart {paisNombre} · Toca una línea para aislarla
             </p>
-            {/* Controls */}
-            <div className="flex items-center gap-x-3 gap-y-2 flex-wrap text-xs mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
-              <span className="text-gray-400 font-medium">Mostrar:</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                <button onClick={() => { setEvolTopN(5); setEvolSkuFilter('') }}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolTopN === 5 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  Top 5
-                </button>
-                <button onClick={() => { setEvolTopN(100); setEvolSkuFilter('') }}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolTopN !== 5 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {evolTopN !== 5 && skus.length ? `Todos (${skus.length})` : 'Todos'}
-                </button>
-              </div>
-            </div>
 
-            {/* Chart — no built-in Legend, custom one below */}
-            <ResponsiveContainer width="100%" height={evolSkuFilter ? 320 : evolTopN === 5 ? 280 : Math.max(560, skus.length * 14)}>
-              <LineChart data={top5Data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+            <ResponsiveContainer width="100%" height={evolSkuFilter ? 320 : evolTopN === 5 ? 280 : Math.max(560, dSkuNames.length * 14)}>
+              <LineChart data={dSkuData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
+                onMouseLeave={() => setEvolSkuHover('')}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
+                <XAxis dataKey={xKey} tick={{ fontSize: isDiaria ? 9 : 11 }}
+                  interval={isDiaria ? Math.max(0, Math.floor((dSkuData.length || 1) / 20) - 1) : 0} />
                 <YAxis tickFormatter={yFmt} tick={{ fontSize: 11 }} width={55} />
-                <Tooltip formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]} />
-                {skus.map((sku: any, i: number) => {
-                  const color = SKU_COLORS[i % SKU_COLORS.length]
-                  if (evolSkuFilter && evolSkuFilter !== sku.descripcion) return null
+                <Tooltip formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]}
+                  itemStyle={{ fontSize: 11 }} />
+                {dSkuNames.map((name: string, i: number) => {
+                  const color = SKU_COLORS2[i % SKU_COLORS2.length]
+                  if (evolSkuFilter && evolSkuFilter !== name) return null
+                  const dimmed = !evolSkuFilter && evolSkuHover && evolSkuHover !== name
                   return (
-                    <Line key={sku.sku} type="monotone" dataKey={sku.descripcion}
+                    <Line key={name} type="monotone" dataKey={name}
                       stroke={color}
-                      strokeWidth={evolSkuFilter ? 3 : evolTopN === 5 ? 2 : 2}
-                      dot={evolTopN === 5 || evolSkuFilter ? { r: 4, fill: color } : { r: 3, fill: color }}
-                      activeDot={{ r: 6, fill: color }}
+                      strokeWidth={evolSkuFilter || evolSkuHover === name ? 3 : 1.5}
+                      strokeOpacity={dimmed ? 0.12 : 1}
+                      dot={evolSkuFilter || evolSkuHover === name ? { r: 3, fill: color } : false}
+                      activeDot={{ r: 5, fill: color }}
                       connectNulls
-                      onClick={() => setEvolSkuFilter(p => p === sku.descripcion ? '' : sku.descripcion)}
+                      onMouseEnter={() => setEvolSkuHover(name)}
+                      onClick={() => { setEvolSkuFilter(p => p === name ? '' : name); setEvolSkuHover('') }}
                       style={{ cursor: 'pointer' }} />
                   )
                 })}
@@ -708,22 +725,18 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
             {/* Custom clickable legend */}
             <div className="mt-3 flex flex-wrap gap-1.5">
-              {skus.map((sku: any, i: number) => {
-                const color = SKU_COLORS[i % SKU_COLORS.length]
-                const isActive = !evolSkuFilter || evolSkuFilter === sku.descripcion
+              {dSkuNames.map((name: string, i: number) => {
+                const color = SKU_COLORS2[i % SKU_COLORS2.length]
+                const isActive = !evolSkuFilter || evolSkuFilter === name
                 return (
-                  <button
-                    key={sku.sku}
-                    onClick={() => setEvolSkuFilter(prev => prev === sku.descripcion ? '' : sku.descripcion)}
+                  <button key={name}
+                    onClick={() => setEvolSkuFilter(prev => prev === name ? '' : name)}
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all select-none ${
-                      isActive
-                        ? 'border-gray-200 text-gray-700 bg-white hover:bg-gray-50'
-                        : 'border-gray-100 text-gray-300 bg-gray-50 hover:bg-gray-100'
-                    }`}
-                  >
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 transition-colors"
+                      isActive ? 'border-gray-200 text-gray-700 bg-white hover:bg-gray-50' : 'border-gray-100 text-gray-300 bg-gray-50 hover:bg-gray-100'
+                    }`}>
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
                       style={{ background: isActive ? color : '#d1d5db' }} />
-                    {sku.descripcion}
+                    {name}
                   </button>
                 )
               })}
@@ -732,7 +745,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         )}
 
         {/* ── 2026 por Cadena (line) ── */}
-        {!cadenaFilter && byCad.length > 0 && cadenas.length > 1 && (
+        {!cadenaFilter && dByCad.length > 0 && dCadenas.length > 1 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-sm font-semibold text-gray-700">2026 por Cadena</h3>
@@ -743,20 +756,21 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 </button>
               )}
             </div>
-            <p className="text-xs text-gray-400 mb-4">Sell-out mensual por formato · clic en una línea para aislar</p>
+            <p className="text-xs text-gray-400 mb-4">Sell-out {isDiaria ? 'diario' : 'mensual'} por formato · clic en una línea para aislar</p>
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={byCad} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+              <LineChart data={dByCad} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
+                <XAxis dataKey={xKey} tick={{ fontSize: isDiaria ? 9 : 11 }}
+                  interval={isDiaria ? Math.max(0, Math.floor((dByCad.length || 1) / 20) - 1) : 0} />
                 <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
                 <Tooltip formatter={(v: any) => v !== null ? fmtFull(v) : '—'} />
-                {cadenas.map((c: string) => {
+                {dCadenas.map((c: string) => {
                   if (evolCadenaLine && evolCadenaLine !== c) return null
                   return (
                     <Line key={c} type="monotone" dataKey={c} name={c}
                       stroke={CADENA_COLORS[c] ?? '#6b7280'}
-                      strokeWidth={evolCadenaLine === c ? 2.5 : 2}
-                      dot={{ r: 3 }} connectNulls
+                      strokeWidth={evolCadenaLine === c ? 2.5 : 1.5}
+                      dot={isDiaria ? false : { r: 3 }} connectNulls
                       onClick={() => toggleCadenaLine(c)}
                       style={{ cursor: 'pointer' }} />
                   )
@@ -764,7 +778,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               </LineChart>
             </ResponsiveContainer>
             <div className="flex flex-wrap gap-1.5 mt-3">
-              {cadenas.map((c: string) => {
+              {dCadenas.map((c: string) => {
                 const color = CADENA_COLORS[c] ?? '#6b7280'
                 const active = !evolCadenaLine || evolCadenaLine === c
                 return (
@@ -1148,7 +1162,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       {/* ── Filtros globales ── */}
       <div className="px-6 pt-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <div className="flex items-center gap-x-4 gap-y-3 flex-wrap text-xs">
+          <div className="flex items-start gap-x-4 gap-y-3 flex-wrap text-xs">
 
             {/* División */}
             <div className="flex flex-col gap-1">
@@ -1163,6 +1177,19 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 ))}
               </div>
             </div>
+
+            {/* Subcategoría */}
+            {evolSubcatOpts.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-widest text-gray-400">Subcategoría</span>
+                <select value={evolSubcat}
+                  onChange={e => { setEvolSubcat(e.target.value); saveFilter('subcat', e.target.value) }}
+                  className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 text-xs h-[30px]">
+                  <option value="">Todas</option>
+                  {evolSubcatOpts.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            )}
 
             {/* Vista */}
             <div className="flex flex-col gap-1">
@@ -1190,6 +1217,21 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               </div>
             </div>
 
+            {/* SKUs */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-widest text-gray-400">SKUs</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                <button onClick={() => { setEvolTopN(5); setEvolSkuFilter(''); saveFilter('topn', '5') }}
+                  className={`px-3 py-1.5 font-medium transition-colors ${evolTopN === 5 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  Top 5
+                </button>
+                <button onClick={() => { setEvolTopN(100); setEvolSkuFilter(''); saveFilter('topn', '100') }}
+                  className={`px-3 py-1.5 font-medium transition-colors ${evolTopN !== 5 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                  Todos
+                </button>
+              </div>
+            </div>
+
             {/* Cadena */}
             <div className="flex flex-col gap-1">
               <span className="text-[10px] uppercase tracking-widest text-gray-400">Cadena</span>
@@ -1207,7 +1249,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               </div>
             </div>
 
-            {/* Periodo */}
+            {/* Período */}
             <div className="flex flex-col gap-1">
               <span className="text-[10px] uppercase tracking-widest text-gray-400">Período</span>
               <div className="flex items-center gap-2">
@@ -1225,13 +1267,14 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
             {/* Reset */}
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400 invisible">Reset</span>
+              <span className="text-[10px] uppercase tracking-widest text-gray-400 invisible">x</span>
               <button
                 onClick={() => {
                   setDiv('TOTAL'); setEvolVista('mensual'); setEvolMedida('valor')
-                  setCadenaFilter(''); setEvolDesde(''); setEvolHasta('')
+                  setEvolSubcat(''); setEvolTopN(5); setCadenaFilter('')
+                  setEvolDesde(''); setEvolHasta('')
                   setEvolYearFilter(''); setEvolCadenaLine(''); setEvolCpFilter(''); setEvolSkuFilter('')
-                  ;['div','vista','medida','cadena','desde','hasta'].forEach(k => localStorage.removeItem(`${storageKey}-${k}`))
+                  ;['div','vista','medida','subcat','topn','cadena','desde','hasta'].forEach(k => localStorage.removeItem(`${storageKey}-${k}`))
                 }}
                 className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
                 ↺ Reset
