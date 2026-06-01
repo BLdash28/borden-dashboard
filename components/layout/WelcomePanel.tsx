@@ -185,10 +185,10 @@ export default function WelcomePanel({ dept, nombre }: Props) {
             className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0"
             style={{ background: 'linear-gradient(135deg, #a86220 0%, #c8873a 100%)', boxShadow: '0 4px 12px rgba(200,135,58,0.30)' }}
           >
-            <div
-              className="w-4 h-4 rounded-full border-[2.5px] border-white"
-              style={{ background: 'transparent' }}
-            />
+            <div className="relative flex items-center justify-center w-4 h-4">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-50" />
+              <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-white" />
+            </div>
           </div>
           <p className="text-[22px] font-bold" style={{ color: '#0a1628' }}>
             Panel de <span style={{ color: '#c8873a' }}>
