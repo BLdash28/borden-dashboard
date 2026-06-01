@@ -43,12 +43,29 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
-  // Usuario autenticado: verificar nivel MFA una sola vez
+  // Usuario autenticado: cargar perfil una sola vez para MFA + acceso
+  let profile: { role: string; dashboards: string[]; require_mfa: boolean } | null = null
   if (user) {
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
-    const needsMfa = aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2'
+    const { data } = await supabase
+      .from('profiles')
+      .select('role, dashboards, require_mfa')
+      .eq('id', user.id)
+      .single()
+    profile = data
+  }
 
-    // Rutas de auth: permitir mfa-challenge y reset-password, redirigir al dashboard si no
+  if (user) {
+    const isSuperadmin = profile?.role === 'superadmin'
+    const mfaRequired  = !isSuperadmin && profile?.require_mfa === true
+
+    // Calcular si hay MFA pendiente solo cuando aplica
+    let needsMfa = false
+    if (mfaRequired) {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      needsMfa = aal?.nextLevel === 'aal2' && aal?.currentLevel !== 'aal2'
+    }
+
+    // Rutas de auth
     if (pathname === '/' || pathname.startsWith('/auth')) {
       if (pathname === '/auth/mfa-challenge') {
         if (!needsMfa) {
@@ -56,11 +73,9 @@ export async function middleware(request: NextRequest) {
         }
         return supabaseResponse
       }
-      // Permitir reset-password y callback aunque haya sesión activa
       if (pathname === '/auth/reset-password' || pathname === '/auth/callback') {
         return supabaseResponse
       }
-      // Resto de /auth/* → dashboard
       return NextResponse.redirect(new URL('/dashboard', request.url))
     }
 
@@ -74,29 +89,21 @@ export async function middleware(request: NextRequest) {
   }
 
   // Control de acceso por departamento para rol 'usuario'
-  if (user && pathname.startsWith('/dashboard/')) {
+  if (user && profile?.role === 'usuario' && pathname.startsWith('/dashboard/')) {
     const deptMatch = pathname.match(/^\/dashboard\/([^/]+)/)
     const dept = deptMatch?.[1]
 
     if (dept && VALID_DEPTS.includes(dept)) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role, dashboards')
-        .eq('id', user.id)
-        .single()
+      const allowed: string[] = Array.isArray(profile.dashboards) ? profile.dashboards : []
 
-      if (profile?.role === 'usuario') {
-        const allowed: string[] = Array.isArray(profile.dashboards) ? profile.dashboards : []
-
-        if (!allowed.includes(dept)) {
-          const firstDept = VALID_DEPTS.find(d => allowed.includes(d))
-          if (firstDept) {
-            return NextResponse.redirect(
-              new URL(`/dashboard/${firstDept}${DEPT_HOME[firstDept]}`, request.url)
-            )
-          }
-          return NextResponse.redirect(new URL('/auth/login', request.url))
+      if (!allowed.includes(dept)) {
+        const firstDept = VALID_DEPTS.find(d => allowed.includes(d))
+        if (firstDept) {
+          return NextResponse.redirect(
+            new URL(`/dashboard/${firstDept}${DEPT_HOME[firstDept]}`, request.url)
+          )
         }
+        return NextResponse.redirect(new URL('/auth/login', request.url))
       }
     }
   }

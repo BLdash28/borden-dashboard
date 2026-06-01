@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'SERVICE_ROLE_KEY no configurada' }, { status: 500 })
     }
 
-    const { user_id, full_name, role, paises, dashboards, password } = await req.json()
+    const { user_id, full_name, role, paises, dashboards, password, require_mfa } = await req.json()
 
     if (!user_id || !full_name) {
       return NextResponse.json({ error: 'user_id y full_name son requeridos' }, { status: 400 })
@@ -26,10 +26,11 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         full_name,
-        role:       role || 'usuario',
-        paises:     paises || [],
-        dashboards: dashboards || [],
-        updated_at: new Date().toISOString(),
+        role:        role || 'usuario',
+        paises:      paises || [],
+        dashboards:  dashboards || [],
+        require_mfa: require_mfa ?? false,
+        updated_at:  new Date().toISOString(),
       }),
     })
 

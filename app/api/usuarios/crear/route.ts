@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { email, password, full_name, role, paises, dashboards } = body
+    const { email, password, full_name, role, paises, dashboards, require_mfa } = body
 
     if (!email || !password || !full_name) {
       return NextResponse.json(
@@ -67,13 +67,14 @@ export async function POST(req: NextRequest) {
         'Prefer': 'return=minimal',
       },
       body: JSON.stringify({
-        id:         userId,
+        id:           userId,
         email,
         full_name,
-        role:       role || 'usuario',
-        paises:     paises || [],
-        dashboards: dashboards || [],
-        is_active:  true,
+        role:         role || 'usuario',
+        paises:       paises || [],
+        dashboards:   dashboards || [],
+        is_active:    true,
+        require_mfa:  require_mfa ?? false,
       }),
     })
 

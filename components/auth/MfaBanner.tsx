@@ -10,11 +10,17 @@ export default function MfaBanner() {
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    // Solo verificar una vez por sesión de página
-    supabase.auth.mfa.listFactors().then(({ data }) => {
+    const check = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data: profile } = await supabase.from('profiles')
+        .select('require_mfa, role').eq('id', user.id).single()
+      if (!profile?.require_mfa || profile?.role === 'superadmin') return
+      const { data } = await supabase.auth.mfa.listFactors()
       const hasVerified = (data?.totp ?? []).some(f => f.status === 'verified')
       if (!hasVerified) setShow(true)
-    }).catch(() => {})
+    }
+    check().catch(() => {})
   }, [])
 
   if (!show || dismissed) return null

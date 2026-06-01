@@ -23,6 +23,7 @@ const PAISES = ['GT','SV','CO','CR','NI']
 const EMPTY_FORM = {
   full_name: '', email: '', password: '', role: 'usuario',
   paises: [] as string[], dashboards: [] as string[], useInvite: false,
+  require_mfa: false,
 }
 
 type ModalMode = 'create' | 'edit' | 'delete' | 'dashboards' | null
@@ -57,7 +58,8 @@ export default function UsuariosPage() {
 
   const openEdit = (u: any) => {
     setForm({ full_name: u.full_name||'', email: u.email||'', password: '',
-      role: u.role||'usuario', paises: u.paises||[], dashboards: u.dashboards||[], useInvite: false })
+      role: u.role||'usuario', paises: u.paises||[], dashboards: u.dashboards||[],
+      useInvite: false, require_mfa: u.require_mfa ?? false })
     setSelected(u); setModal('edit')
   }
 
@@ -86,7 +88,8 @@ export default function UsuariosPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: form.email, password: tempPwd,
             full_name: form.full_name, role: form.role,
-            paises: form.paises, dashboards: form.dashboards }),
+            paises: form.paises, dashboards: form.dashboards,
+            require_mfa: form.require_mfa }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Error al crear usuario')
@@ -105,7 +108,8 @@ export default function UsuariosPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: form.email, password: form.password,
             full_name: form.full_name, role: form.role,
-            paises: form.paises, dashboards: form.dashboards }),
+            paises: form.paises, dashboards: form.dashboards,
+            require_mfa: form.require_mfa }),
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error || 'Error al crear usuario')
@@ -125,12 +129,13 @@ export default function UsuariosPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          user_id:    selected.id,
-          full_name:  form.full_name,
-          role:       form.role,
-          paises:     form.paises,
-          dashboards: form.dashboards,
-          password:   form.password || undefined,
+          user_id:     selected.id,
+          full_name:   form.full_name,
+          role:        form.role,
+          paises:      form.paises,
+          dashboards:  form.dashboards,
+          require_mfa: form.require_mfa,
+          password:    form.password || undefined,
         }),
       })
       const data = await res.json()
@@ -434,6 +439,16 @@ export default function UsuariosPage() {
                 </div>
                 <div className="text-[9px] mt-1" style={{color:'var(--t3)'}}>Sin selección = todos los países</div>
               </div>
+
+              <label className="flex items-center gap-2.5 cursor-pointer select-none pt-1">
+                <div onClick={()=>setForm({...form, require_mfa: !form.require_mfa})}
+                  className={`w-8 h-4 rounded-full transition-colors relative ${form.require_mfa?'bg-amber-500':'bg-gray-300'}`}>
+                  <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${form.require_mfa?'left-4':'left-0.5'}`}/>
+                </div>
+                <span className="text-[11px]" style={{color:'var(--t2)'}}>
+                  Requerir autenticación en dos pasos (MFA)
+                </span>
+              </label>
             </div>
 
             {/* Footer */}
