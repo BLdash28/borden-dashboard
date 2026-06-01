@@ -9,6 +9,10 @@ const DEPT_HOME: Record<string, string> = {
 }
 const VALID_DEPTS = Object.keys(DEPT_HOME)
 
+// Profile cached in a short-lived cookie so middleware doesn't hit the DB every request.
+const PROFILE_COOKIE = 'bl_pcache'
+const PROFILE_TTL    = 600 // seconds (10 min)
+
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
@@ -43,15 +47,34 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
-  // Usuario autenticado: cargar perfil una sola vez para MFA + acceso
-  let profile: { role: string; dashboards: string[]; require_mfa: boolean } | null = null
+  // Usuario autenticado: cargar perfil con caché de cookie (evita DB call por request)
+  let profile: { role: string; dashboards: string[]; require_mfa: boolean; uid: string; exp: number } | null = null
   if (user) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('role, dashboards, require_mfa')
-      .eq('id', user.id)
-      .single()
-    profile = data
+    const raw = request.cookies.get(PROFILE_COOKIE)?.value
+    if (raw) {
+      try {
+        const cached = JSON.parse(raw)
+        if (cached.uid === user.id && cached.exp > Date.now() / 1000) {
+          profile = cached
+        }
+      } catch { /* cookie corrupta — se recarga */ }
+    }
+
+    if (!profile) {
+      const { data } = await supabase
+        .from('profiles')
+        .select('role, dashboards, require_mfa')
+        .eq('id', user.id)
+        .single()
+      if (data) {
+        profile = { ...data, uid: user.id, exp: Math.floor(Date.now() / 1000) + PROFILE_TTL }
+        supabaseResponse.cookies.set(
+          PROFILE_COOKIE,
+          JSON.stringify(profile),
+          { httpOnly: true, secure: true, sameSite: 'lax', maxAge: PROFILE_TTL }
+        )
+      }
+    }
   }
 
   if (user) {
@@ -113,6 +136,7 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // Excluir: archivos estáticos, imágenes, rutas de API (tienen su propio auth)
+    '/((?!_next/static|_next/image|favicon.ico|api/|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
