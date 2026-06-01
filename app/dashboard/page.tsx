@@ -24,7 +24,7 @@ export default async function DashboardPage() {
     .single()
 
   // Determine destination
-  let destination = '/dashboard/comercial/resumen'
+  let destination = '/dashboard/comercial/sellout/resumen'
   if (profile?.role === 'usuario' && Array.isArray(profile.dashboards) && profile.dashboards.length > 0) {
     const first = profile.dashboards.find((d: string) => DEPT_HOME[d]) || profile.dashboards[0]
     if (first && DEPT_HOME[first]) {

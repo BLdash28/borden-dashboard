@@ -28,7 +28,7 @@ export const MENUS: Record<string, MenuSection[]> = {
     {
       section: 'Sell Out',
       items: [
-        { href: '/resumen',            icon: BarChart2,    label: 'Resumen Ejecutivo' },
+        { href: '/sellout/resumen',    icon: BarChart2,    label: 'Resumen Ejecutivo' },
         { href: '/sellout/tendencias', icon: TrendingUp,   label: 'Tendencias'        },
         { href: '/sellout',            icon: ShoppingCart, label: 'Detalle por SKU'   },
         { href: '/sellout/ytd',        icon: ArrowUpRight, label: 'YTD y Variaciones' },
@@ -138,7 +138,7 @@ export const DEPT_LABELS: Record<string, string> = {
 }
 
 export const DEPT_HOME: Record<string, string> = {
-  comercial:   '/resumen',
+  comercial:   '/sellout/resumen',
   mercadeo:    '/tendencias',
   operaciones: '/registros-sanitarios',
   finanzas:    '/resumen',
