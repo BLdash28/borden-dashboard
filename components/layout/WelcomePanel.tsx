@@ -267,7 +267,7 @@ export default function WelcomePanel({ dept, nombre }: Props) {
         </div>
 
         {/* ── Navigation dots ── */}
-        <div className="flex items-center gap-1.5 mt-5">
+        <div className="flex items-center gap-1.5 mt-5 mb-5">
           {quotes.map((_, i) => (
             <button
               key={i}
@@ -283,42 +283,43 @@ export default function WelcomePanel({ dept, nombre }: Props) {
           ))}
         </div>
 
-        {/* ── Module shortcuts ── */}
-        <div className="mt-4 flex flex-wrap gap-3">
-          {shortcuts.map(s => (
-            <button
-              key={s.href}
-              onClick={() => router.push(s.href)}
-              className="flex items-center gap-3 px-5 py-3.5 rounded-xl text-[14px] font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
-              style={{
-                background:  'white',
-                border:      '1.5px solid #e2e8f0',
-                color:       '#0a1628',
-                boxShadow:   '0 2px 8px rgba(10,22,40,0.06)',
-              }}
-              onMouseEnter={e => {
-                ;(e.currentTarget as HTMLButtonElement).style.borderColor = '#c8873a'
-                ;(e.currentTarget as HTMLButtonElement).style.color = '#c8873a'
-              }}
-              onMouseLeave={e => {
-                ;(e.currentTarget as HTMLButtonElement).style.borderColor = '#e2e8f0'
-                ;(e.currentTarget as HTMLButtonElement).style.color = '#0a1628'
-              }}
-            >
-              {s.label}
-              <span style={{ color: '#c8873a', fontWeight: 700 }}>→</span>
-            </button>
-          ))}
-        </div>
+        {/* ── Bottom bar ── */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
 
-        {/* ── Footer tagline ── */}
-        <p
-          className="mt-6 text-[13px] leading-relaxed"
-          style={{ color: '#94a3b8' }}
-        >
-          Nuevo mes, nuevas oportunidades.&nbsp;
-          <span style={{ color: '#c8873a', fontWeight: 600 }}>Tu equipo cuenta contigo.</span>
-        </p>
+          {/* Left: icon + tagline */}
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: '#dcfce7' }}
+            >
+              <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
+                <rect x="1"  y="9" width="3" height="6" rx="1" fill="#16a34a"/>
+                <rect x="6"  y="5" width="3" height="10" rx="1" fill="#16a34a"/>
+                <rect x="11" y="2" width="3" height="13" rx="1" fill="#16a34a"/>
+              </svg>
+            </div>
+            <p className="text-[13px] leading-snug" style={{ color: '#64748b' }}>
+              Nuevo mes,{' '}
+              <strong style={{ color: '#15803d' }}>nuevas oportunidades.</strong>{' '}
+              Tu equipo cuenta contigo.
+            </p>
+          </div>
+
+          {/* Right: 3 shortcut buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {shortcuts.map(s => (
+              <button
+                key={s.href}
+                onClick={() => router.push(s.href)}
+                className="px-5 py-3 rounded-xl font-semibold text-[13px] text-white transition-all duration-200 hover:opacity-80 active:scale-[0.98] whitespace-nowrap"
+                style={{ background: '#0a1628' }}
+              >
+                {s.label} →
+              </button>
+            ))}
+          </div>
+
+        </div>
 
       </div>
     </div>
