@@ -12,11 +12,5 @@ export default async function FinanzasPage() {
   const meta   = user.user_metadata ?? {}
   const nombre = (meta.full_name || meta.name || user.email?.split('@')[0] || 'Bienvenido') as string
 
-  return (
-    <WelcomePanel
-      dept="finanzas"
-      nombre={nombre}
-      destination="/dashboard/finanzas/resumen"
-    />
-  )
+  return <WelcomePanel dept="finanzas" nombre={nombre} />
 }

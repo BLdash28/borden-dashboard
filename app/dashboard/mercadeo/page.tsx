@@ -12,11 +12,5 @@ export default async function MercadeoPage() {
   const meta   = user.user_metadata ?? {}
   const nombre = (meta.full_name || meta.name || user.email?.split('@')[0] || 'Bienvenido') as string
 
-  return (
-    <WelcomePanel
-      dept="mercadeo"
-      nombre={nombre}
-      destination="/dashboard/mercadeo/tendencias"
-    />
-  )
+  return <WelcomePanel dept="mercadeo" nombre={nombre} />
 }

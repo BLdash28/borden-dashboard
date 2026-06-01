@@ -12,11 +12,5 @@ export default async function OperacionesPage() {
   const meta   = user.user_metadata ?? {}
   const nombre = (meta.full_name || meta.name || user.email?.split('@')[0] || 'Bienvenido') as string
 
-  return (
-    <WelcomePanel
-      dept="operaciones"
-      nombre={nombre}
-      destination="/dashboard/operaciones/registros-sanitarios"
-    />
-  )
+  return <WelcomePanel dept="operaciones" nombre={nombre} />
 }
