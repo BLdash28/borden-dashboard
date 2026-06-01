@@ -25,17 +25,17 @@ export async function GET(req: NextRequest) {
     // ── Periods listing (no per-user restrictions needed) ────────
     if (tipo === 'periodos') {
       const { data: periodos } = await withCache(
-        'periodos-v11',
+        'periodos-v12',
         async () => {
           const r = await pool.query(
             'SELECT ano, mes, COUNT(DISTINCT pais) AS n_paises, COUNT(*) AS filas, ' +
             'ROUND(SUM(ventas_valor)::numeric,0) AS valor_usd ' +
-            'FROM mv_sellout_mensual WHERE ano > 2000 ' +
+            'FROM mv_ventas_agg WHERE ano > 2000 ' +
             'GROUP BY ano, mes ORDER BY ano DESC, mes DESC'
           )
           return r.rows
         },
-        10 * 60_000 // 10 min TTL — periods list rarely changes
+        30 * 60_000
       )
       return NextResponse.json({ periodos }, { headers: cacheHeaders(600) })
     }
@@ -145,12 +145,12 @@ export async function GET(req: NextRequest) {
     const where = conds.join(' AND ')
 
     // ── Full response cache (5 min TTL) ─────────────────────────
-    const cacheKey = `resumen-v9:${new URL(req.url).searchParams.toString()}`
+    const cacheKey = `resumen-v10:${new URL(req.url).searchParams.toString()}`
     const { data: result } = await withCache(
       cacheKey,
       async () => {
-        // mv_sellout_mensual (17MB) para aggregates — skuQ usa JOIN dim_producto para codigo_barras
-        const MV = 'mv_sellout_mensual'
+        // mv_ventas_agg: pre-aggregated (3.5K rows, ~100ms) vs mv_sellout_mensual (773K rows, 43s)
+        const MV = 'mv_ventas_agg'
         // For modo='mes': single query on fact_sales_sellout gets both dia and semana breakdowns
         const diaSemanasPromise = modo === 'mes'
           ? pool.query(
@@ -234,7 +234,7 @@ export async function GET(req: NextRequest) {
           clientes:      clienteQ.rows,
         }
       },
-      5 * 60_000 // 5 min TTL
+      30 * 60_000
     )
 
     return NextResponse.json(result, { headers: cacheHeaders(300) })
