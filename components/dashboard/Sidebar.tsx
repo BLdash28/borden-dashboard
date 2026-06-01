@@ -65,7 +65,7 @@ const DEPT_LABELS: Record<string,string> = {
   comercial:'Ventas', mercadeo:'Mercadeo', operaciones:'Operaciones', finanzas:'Finanzas'
 }
 const DEPT_HOME: Record<string,string> = {
-  comercial:'/resumen', mercadeo:'/resumen', operaciones:'/registros-sanitarios', finanzas:'/resumen'
+  comercial:'', mercadeo:'', operaciones:'', finanzas:''
 }
 
 export default function Sidebar({ profile: profileProp }: { profile?: any }) {

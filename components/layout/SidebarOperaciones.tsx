@@ -55,7 +55,7 @@ export default function SidebarOperaciones({ profile }: { profile?: any }) {
         {deptOpen && (
           <div className="mt-1 space-y-0.5 pb-1">
             {DEPTS.map(d => (
-              <Link key={d} href={`/dashboard/${d}${d==='operaciones'?'/registros-sanitarios':'/resumen'}`}
+              <Link key={d} href={`/dashboard/${d}`}
                 onClick={() => setDeptOpen(false)}
                 className="block px-3 py-1.5 rounded-lg text-[11px] transition-all hover:bg-white/5"
                 style={{ color: path.includes(`/${d}/`) ? 'var(--acc)' : 'rgba(255,255,255,0.35)' }}>
