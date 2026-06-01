@@ -312,15 +312,14 @@ function computeInventarioKPIs(sellout: any, inv: any) {
     ? meses2026Clean.reduce((s: number, m: any) => s + m.y2026, 0) / meses2026Clean.length : 0
 
   return {
-    inv_pdv:        kpis?.pdv_valor      ?? null,
-    inv_cedi:       kpis?.cedi_valor     ?? null,
-    inv_total:      kpis?.total_valor    ?? null,
-    tiendas_pdv:    kpis?.pdv_tiendas   ?? null,
-    skus_pdv:       kpis?.pdv_skus      ?? null,
-    criticos:       kpis?.criticos       ?? null,
-    alertas:        kpis?.alertas        ?? null,
-    skus_ofertar:   kpis?.excedentes     ?? null,
-    quiebre_cedi:   kpis?.n_cedis === 0  ? null : 0,
+    total_items:      kpis?.total_items      ?? null,
+    inv_total_unds:   kpis?.total_unidades   ?? null,
+    inv_cedi_unds:    kpis?.cedi_unidades    ?? null,
+    inv_cedi_cajas:   kpis?.cedi_cajas       ?? null,
+    ultima_semana:    kpis?.ultima_semana     ?? null,
+    criticos:         kpis?.criticos          ?? null,
+    alertas:          kpis?.alertas           ?? null,
+    skus_ofertar:     kpis?.excedentes        ?? null,
     baseline_mensual: baseline2026 > 0 ? baseline2026 : null,
   }
 }
@@ -639,21 +638,20 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         {(() => {
           const ikpis = computeInventarioKPIs(sellout, inv)
           const hasInv = inv?.disponible === true
+          if (monthly.length === 0 && !hasInv) return null
           const cards1 = [
-            { label: 'INV PDV ($)',    value: ikpis.inv_pdv    !== null ? fmtFull(ikpis.inv_pdv)    : '—', sub: 'Valor inventario PDV',  color: '' },
-            { label: 'INV CEDI ($)',   value: ikpis.inv_cedi   !== null ? fmtFull(ikpis.inv_cedi)   : '—', sub: 'Valor inventario CEDI', color: '' },
-            { label: 'TOTAL INV ($)',  value: ikpis.inv_total  !== null ? fmtFull(ikpis.inv_total)  : '—', sub: 'Inventario total',      color: '' },
-            { label: 'TIENDAS PDV',   value: ikpis.tiendas_pdv !== null ? ikpis.tiendas_pdv.toLocaleString('en-US') : '—', sub: 'Puntos de venta activos', color: '' },
-            { label: 'SKUs PDV',      value: ikpis.skus_pdv   !== null ? ikpis.skus_pdv.toLocaleString('en-US')    : '—', sub: 'SKUs con inventario',     color: '' },
+            { label: 'SKUs c/inv',    value: ikpis.total_items     !== null ? ikpis.total_items.toLocaleString('en-US')     : '—', sub: 'Items con inventario'   },
+            { label: 'INV PDV (u)',   value: ikpis.inv_total_unds  !== null ? ikpis.inv_total_unds.toLocaleString('en-US')  : '—', sub: 'Unidades en tiendas'    },
+            { label: 'CEDI (u)',      value: ikpis.inv_cedi_unds   !== null ? ikpis.inv_cedi_unds.toLocaleString('en-US')   : '—', sub: 'Unidades CEDI'          },
+            { label: 'CEDI (cajas)',  value: ikpis.inv_cedi_cajas  !== null ? ikpis.inv_cedi_cajas.toLocaleString('en-US')  : '—', sub: 'Cajas CEDI'             },
+            { label: 'SEMANA',        value: ikpis.ultima_semana   !== null ? String(ikpis.ultima_semana)                    : '—', sub: 'Semana del snapshot'    },
           ]
           const cards2 = [
-            { label: 'CRÍTICOS PDV',    value: ikpis.criticos    !== null ? String(ikpis.criticos)    : '—', sub: 'DOH ≤ 7 días',          leftColor: ikpis.criticos !== null && ikpis.criticos > 0 ? '#ef4444' : '#e5e7eb' },
-            { label: 'EN ALERTA PDV',   value: ikpis.alertas     !== null ? String(ikpis.alertas)     : '—', sub: 'DOH 8–14 días',         leftColor: ikpis.alertas  !== null && ikpis.alertas  > 0 ? '#f97316' : '#e5e7eb' },
-            { label: 'SKUs A OFERTAR',  value: ikpis.skus_ofertar !== null ? String(ikpis.skus_ofertar) : '—', sub: 'Sobrestock DOH > 60d', leftColor: ikpis.skus_ofertar !== null && ikpis.skus_ofertar > 0 ? '#8b5cf6' : '#e5e7eb' },
-            { label: 'QUIEBRE CEDI',    value: ikpis.quiebre_cedi !== null ? String(ikpis.quiebre_cedi) : 'N/A', sub: 'CEDIs sin stock',   leftColor: '#e5e7eb' },
-            { label: 'BASELINE MENSUAL', value: ikpis.baseline_mensual !== null ? fmtFull(ikpis.baseline_mensual) : '—', sub: 'Promedio mensual 2026 (excl. OOS)', leftColor: '#3b82f6' },
+            { label: 'CRÍTICOS',      value: ikpis.criticos    !== null ? String(ikpis.criticos)    : '—', sub: 'DOH ≤ 7 días',         leftColor: ikpis.criticos    !== null && ikpis.criticos    > 0 ? '#ef4444' : '#e5e7eb' },
+            { label: 'EN ALERTA',     value: ikpis.alertas     !== null ? String(ikpis.alertas)     : '—', sub: 'DOH 8–14 días',        leftColor: ikpis.alertas     !== null && ikpis.alertas     > 0 ? '#f97316' : '#e5e7eb' },
+            { label: 'EXCEDENTES',    value: ikpis.skus_ofertar !== null ? String(ikpis.skus_ofertar) : '—', sub: 'DOH > 60 días',      leftColor: ikpis.skus_ofertar !== null && ikpis.skus_ofertar > 0 ? '#8b5cf6' : '#e5e7eb' },
+            { label: 'BASELINE SELL-OUT', value: ikpis.baseline_mensual !== null ? fmtFull(ikpis.baseline_mensual) : '—', sub: 'Promedio mensual 2026', leftColor: '#3b82f6' },
           ]
-          if (monthly.length === 0) return null
           return (
             <div>
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Indicadores de Inventario</p>
@@ -666,7 +664,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   </div>
                 ))}
               </div>
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {cards2.map(c => (
                   <div key={c.label} className="bg-white rounded-xl border border-l-4 border-gray-100 shadow-sm p-4" style={{ borderLeftColor: c.leftColor }}>
                     <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest leading-tight mb-1">{c.label}</p>
@@ -1170,17 +1168,19 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     if (L) return <CardSkeleton cols={4} />
     if (!inv?.disponible) return <ProximamentePlaceholder section="inventarios" />
 
-    const k = inv.kpis
+    const k    = inv.kpis
     const rows: any[] = inv.rows ?? []
 
     return (
       <div className="space-y-5">
+
+        {/* KPI cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { label: 'Total Inventario', value: fmtFull(k.total_valor),                    sub: `${k.total_unidades.toLocaleString('en-US')} u`, icon: '💰', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
-            { label: 'Críticos (DOH<7)', value: k.criticos,                                  sub: 'requieren reabasto urgente', icon: '🔴', bg: k.criticos > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-gray-100', tc: k.criticos > 0 ? 'text-red-700' : 'text-gray-800' },
-            { label: 'En Alerta (7-14d)', value: k.alertas,                                  sub: 'monitorear esta semana', icon: '⚠️', bg: k.alertas > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100', tc: k.alertas > 0 ? 'text-amber-700' : 'text-gray-800' },
-            { label: 'Excedentes (>60d)', value: k.excedentes,                               sub: 'evaluar oferta/promo', icon: '🔵', bg: k.excedentes > 0 ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-100', tc: k.excedentes > 0 ? 'text-blue-700' : 'text-gray-800' },
+            { label: 'SKUs c/inventario', value: k.total_items,    sub: `Semana ${k.ultima_semana ?? '—'}`, icon: '📦', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
+            { label: 'Críticos (DOH≤7)',  value: k.criticos,       sub: 'Reabasto urgente',       icon: '🔴', bg: k.criticos  > 0 ? 'bg-red-50 border-red-200'    : 'bg-white border-gray-100', tc: k.criticos  > 0 ? 'text-red-700'    : 'text-gray-800' },
+            { label: 'En alerta (7–14d)', value: k.alertas,        sub: 'Monitorear esta semana', icon: '⚠️', bg: k.alertas   > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100', tc: k.alertas   > 0 ? 'text-amber-700'  : 'text-gray-800' },
+            { label: 'Excedentes (>60d)', value: k.excedentes,     sub: 'Evaluar oferta/promo',   icon: '🔵', bg: k.excedentes > 0 ? 'bg-blue-50 border-blue-200'  : 'bg-white border-gray-100', tc: k.excedentes > 0 ? 'text-blue-700'  : 'text-gray-800' },
           ].map(c => (
             <div key={c.label} className={`rounded-xl border shadow-sm p-5 ${c.bg}`}>
               <div className="flex items-center justify-between mb-1">
@@ -1193,31 +1193,56 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           ))}
         </div>
 
+        {/* CEDI summary */}
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: 'CEDI Unidades', value: k.cedi_unidades.toLocaleString('en-US'), sub: 'Inventario en CEDI (unidades)' },
+            { label: 'CEDI Cajas',    value: k.cedi_cajas.toLocaleString('en-US'),    sub: 'Inventario en CEDI (cajas)'   },
+          ].map(c => (
+            <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest leading-tight mb-1">{c.label}</p>
+              <p className="text-xl font-bold text-gray-800">{c.value}</p>
+              <p className="text-[10px] text-gray-400 mt-0.5">{c.sub}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Detail table */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-50">
-            <h3 className="text-sm font-semibold text-gray-700">Inventario por SKU × Tienda</h3>
-            <p className="text-xs text-gray-400">Snapshot al {k.ultima_fecha ?? '—'} · ordenado por DOH ascendente</p>
+            <h3 className="text-sm font-semibold text-gray-700">Inventario por SKU — Semana {k.ultima_semana ?? '—'}</h3>
+            <p className="text-xs text-gray-400">RetailLink · {pais} · ordenado por DOH ascendente</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 text-gray-400 uppercase tracking-widest text-[10px]">
+                  <th className="text-left px-4 py-2.5">Item #</th>
                   <th className="text-left px-4 py-2.5">Descripción</th>
-                  <th className="text-left px-3 py-2.5">Tienda</th>
-                  <th className="text-left px-3 py-2.5">Cat.</th>
-                  <th className="text-right px-4 py-2.5">Stock (u)</th>
-                  <th className="text-right px-4 py-2.5">V/día</th>
+                  <th className="text-left px-3 py-2.5">Tipo</th>
+                  <th className="text-right px-3 py-2.5">PDV (u)</th>
+                  <th className="text-right px-3 py-2.5">Órdenes</th>
+                  <th className="text-right px-3 py-2.5">Tránsito</th>
+                  <th className="text-right px-3 py-2.5">CEDI (u)</th>
+                  <th className="text-right px-3 py-2.5">V/día</th>
                   <th className="text-right px-4 py-2.5">DOH</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {rows.map((r, i) => (
-                  <tr key={i} className={r.doh !== null && r.doh < 7 ? 'bg-red-50/40' : r.doh !== null && r.doh < 14 ? 'bg-amber-50/30' : 'hover:bg-gray-50/60'}>
-                    <td className="px-4 py-2.5 font-medium text-gray-700"><span className="text-gray-400 mr-1.5 font-normal">{r.sku}</span>{r.descripcion}</td>
-                    <td className="px-3 py-2.5 text-gray-400 truncate max-w-[120px]">{r.punto_venta}</td>
-                    <td className="px-3 py-2.5 text-gray-400">{r.categoria}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{r.inv_mano.toLocaleString('en-US')}</td>
-                    <td className="px-4 py-2.5 text-right font-mono">{r.venta_dia > 0 ? r.venta_dia.toFixed(1) : '—'}</td>
+                  <tr key={i} className={
+                    r.doh !== null && r.doh < 7  ? 'bg-red-50/40' :
+                    r.doh !== null && r.doh < 14 ? 'bg-amber-50/30' :
+                    'hover:bg-gray-50/60'
+                  }>
+                    <td className="px-4 py-2.5 font-mono text-gray-400">{r.sku}</td>
+                    <td className="px-4 py-2.5 font-medium text-gray-700 max-w-[200px] truncate">{r.descripcion}</td>
+                    <td className="px-3 py-2.5 text-gray-400">{r.item_type || '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono">{r.inventario.toLocaleString('en-US')}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-blue-600">{r.ordenes > 0 ? r.ordenes.toLocaleString('en-US') : '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-indigo-600">{r.transito > 0 ? r.transito.toLocaleString('en-US') : '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-500">{r.inv_cedi_unds > 0 ? r.inv_cedi_unds.toLocaleString('en-US') : '—'}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-gray-500">{r.venta_dia > 0 ? r.venta_dia.toFixed(1) : '—'}</td>
                     <td className="px-4 py-2.5 text-right"><DohChip d={r.doh} /></td>
                   </tr>
                 ))}
