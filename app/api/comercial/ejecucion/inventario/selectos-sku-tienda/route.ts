@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const revalidate = 0
+export const revalidate = 300
 
 const NSE_VALUES = `
   ('0001','A'),('0003','C'),('0004','A'),('0006','C'),('0007','C'),

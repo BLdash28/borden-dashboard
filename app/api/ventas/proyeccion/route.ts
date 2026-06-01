@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 
-export const dynamic = 'force-dynamic'
+export const revalidate = 300
 
 const MES: Record<number, string> = {
   1:'Ene', 2:'Feb', 3:'Mar', 4:'Abr', 5:'May', 6:'Jun',
