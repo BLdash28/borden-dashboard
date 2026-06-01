@@ -159,6 +159,172 @@ function ProximamentePlaceholder({ section }: { section: string }) {
   )
 }
 
+// ── Hallazgos ─────────────────────────────────────────────────────────────
+
+type HallazgoTipo = 'critico' | 'alerta' | 'positivo' | 'informativo' | 'estrategico'
+
+interface Hallazgo {
+  tipo:     HallazgoTipo
+  titulo:   string
+  detalle:  string
+  prioridad: number
+}
+
+const HALLAZGO_STYLE: Record<HallazgoTipo, { leftColor: string; badge: string; badgeCls: string }> = {
+  critico:     { leftColor: '#ef4444', badge: 'CRÍTICO',     badgeCls: 'bg-red-100 text-red-700' },
+  alerta:      { leftColor: '#f97316', badge: 'ALERTA',      badgeCls: 'bg-orange-100 text-orange-700' },
+  positivo:    { leftColor: '#22c55e', badge: 'POSITIVO',    badgeCls: 'bg-emerald-100 text-emerald-700' },
+  informativo: { leftColor: '#3b82f6', badge: 'INFO',        badgeCls: 'bg-blue-100 text-blue-700' },
+  estrategico: { leftColor: '#8b5cf6', badge: 'ESTRATÉGICO', badgeCls: 'bg-purple-100 text-purple-700' },
+}
+
+const PRIORIDAD: Record<HallazgoTipo, number> = {
+  critico: 1, alerta: 2, positivo: 3, informativo: 4, estrategico: 5,
+}
+
+function generarHallazgos(sellout: any, inv: any, topSkus: any[]): Hallazgo[] {
+  const hallazgos: Hallazgo[] = []
+  const monthly: any[] = sellout?.monthly ?? []
+  const kpis = inv?.kpis ?? null
+
+  // Baseline provisional: avg of 2025 months with data
+  const meses2025 = monthly.filter((m: any) => (m.y2025 ?? 0) > 0)
+  const baseline2025 = meses2025.length > 0
+    ? meses2025.reduce((s: number, m: any) => s + m.y2025, 0) / meses2025.length
+    : 0
+
+  // Baseline 2026: avg excluding OOS (< 30% of 2025 baseline)
+  const meses2026 = monthly.filter((m: any) => m.y2026 !== null && m.y2026 > 0)
+  const oosThreshold = baseline2025 * 0.3
+  const meses2026Clean = meses2026.filter((m: any) => !baseline2025 || m.y2026 >= oosThreshold)
+  const baseline2026 = meses2026Clean.length > 0
+    ? meses2026Clean.reduce((s: number, m: any) => s + m.y2026, 0) / meses2026Clean.length
+    : 0
+
+  // Rule 1 — OOS months (< 85% of baseline and next month recovered)
+  for (let i = 0; i < monthly.length - 1; i++) {
+    const m = monthly[i]
+    const next = monthly[i + 1]
+    if (m.y2026 !== null && baseline2025 > 0 && m.y2026 < baseline2025 * 0.85) {
+      const recovered = next.y2026 !== null && next.y2026 >= baseline2025 * 0.85
+      if (recovered) {
+        hallazgos.push({
+          tipo: 'alerta', prioridad: PRIORIDAD.alerta,
+          titulo: `Quiebre de stock detectado — ${m.mes_nombre}`,
+          detalle: `Venta ${fmtFull(m.y2026)} vs baseline ${fmtFull(baseline2025)} (${((m.y2026 / baseline2025 - 1) * 100).toFixed(0)}%). Recuperó en ${next.mes_nombre}.`,
+        })
+      }
+    }
+  }
+
+  // Rule 2 — Critical inventory
+  if (kpis && kpis.criticos > 0) {
+    hallazgos.push({
+      tipo: 'critico', prioridad: PRIORIDAD.critico,
+      titulo: `${kpis.criticos} SKU${kpis.criticos > 1 ? 's' : ''} con inventario crítico (DOH ≤ 7 días)`,
+      detalle: `Riesgo inmediato de quiebre. Revisar reabasto urgente para ${kpis.criticos} ${kpis.criticos > 1 ? 'posiciones' : 'posición'} en PDV.`,
+    })
+  }
+  if (kpis && kpis.alertas > 0) {
+    hallazgos.push({
+      tipo: 'alerta', prioridad: PRIORIDAD.alerta,
+      titulo: `${kpis.alertas} SKU${kpis.alertas > 1 ? 's' : ''} en alerta de inventario (DOH 8–14 días)`,
+      detalle: `Cobertura baja. Programar pedido en los próximos días para evitar quiebre.`,
+    })
+  }
+
+  // Rule 3 — Healthy demand trend
+  if (meses2026.length >= 2 && baseline2026 > 0) {
+    const lastTwo = meses2026.slice(-2)
+    if (lastTwo.every((m: any) => m.y2026 >= baseline2026 * 0.95)) {
+      hallazgos.push({
+        tipo: 'positivo', prioridad: PRIORIDAD.positivo,
+        titulo: 'Demanda estable o en crecimiento',
+        detalle: `Promedio mensual 2026: ${fmtFull(baseline2026)}. Los últimos 2 meses sostienen el ritmo.`,
+      })
+    }
+  }
+
+  // Rule 4 — New SKUs (topSkus with data only in 2026)
+  if (topSkus.length > 0) {
+    const newSkus = topSkus.filter((s: any) => (s.uni_2025 ?? 0) === 0 && (s.uni_2026 ?? 0) > 0)
+    if (newSkus.length > 0) {
+      hallazgos.push({
+        tipo: 'informativo', prioridad: PRIORIDAD.informativo,
+        titulo: `${newSkus.length} SKU nuevo${newSkus.length > 1 ? 's' : ''} con venta en 2026`,
+        detalle: newSkus.slice(0, 3).map((s: any) => s.descripcion ?? s.sku).join(', ') + (newSkus.length > 3 ? ` +${newSkus.length - 3} más` : ''),
+      })
+    }
+  }
+
+  // Rule 5 — Pareto concentration
+  if (topSkus.length >= 5) {
+    const total2026 = topSkus.reduce((s: number, sk: any) => s + (sk.valor_2026 ?? 0), 0)
+    let acum = 0; let pareto80 = 0
+    const sorted = [...topSkus].sort((a, b) => (b.valor_2026 ?? 0) - (a.valor_2026 ?? 0))
+    for (const sk of sorted) {
+      acum += (sk.valor_2026 ?? 0)
+      pareto80++
+      if (total2026 > 0 && acum / total2026 >= 0.8) break
+    }
+    const pct = Math.round(pareto80 / topSkus.length * 100)
+    hallazgos.push({
+      tipo: 'estrategico', prioridad: PRIORIDAD.estrategico,
+      titulo: `${pareto80} SKU${pareto80 > 1 ? 's' : ''} representan el 80% de las ventas (${pct}% del portafolio)`,
+      detalle: `Top: ${sorted.slice(0, 2).map((s: any) => s.descripcion ?? s.sku).join(', ')}. Concentración de riesgo a monitorear.`,
+    })
+  }
+
+  // Rule 6 — YTD summary (always fires when sellout data exists)
+  const ytd2026 = sellout?.ytd_2026 ?? 0
+  const delta   = sellout?.delta_ytd ?? null
+  if (ytd2026 > 0) {
+    const tipo: HallazgoTipo = delta !== null && delta > 10 ? 'positivo'
+      : delta !== null && delta < -10 ? 'alerta'
+      : 'informativo'
+    const meses = sellout?.ultimo_mes ?? meses2026.length
+    const baselineStr = baseline2026 > 0 ? ` · Promedio mensual: ${fmtFull(baseline2026)}` : ''
+    hallazgos.push({
+      tipo, prioridad: PRIORIDAD[tipo],
+      titulo: `Sell-Out YTD 2026: ${fmtFull(ytd2026)} (${meses} meses)`,
+      detalle: delta !== null
+        ? `${delta > 0 ? '+' : ''}${delta.toFixed(1)}% vs mismo período 2025.${baselineStr}`
+        : `Sin comparativo 2025 disponible.${baselineStr}`,
+    })
+  }
+
+  return hallazgos.sort((a, b) => a.prioridad - b.prioridad)
+}
+
+// ── Indicadores de Inventario ─────────────────────────────────────────────
+
+function computeInventarioKPIs(sellout: any, inv: any) {
+  const monthly: any[] = sellout?.monthly ?? []
+  const kpis = inv?.kpis ?? null
+
+  const meses2026 = monthly.filter((m: any) => m.y2026 !== null && m.y2026 > 0)
+  const meses2025 = monthly.filter((m: any) => (m.y2025 ?? 0) > 0)
+  const baseline2025 = meses2025.length > 0
+    ? meses2025.reduce((s: number, m: any) => s + m.y2025, 0) / meses2025.length : 0
+  const oosThreshold = baseline2025 * 0.3
+  const meses2026Clean = meses2026.filter((m: any) => !baseline2025 || m.y2026 >= oosThreshold)
+  const baseline2026 = meses2026Clean.length > 0
+    ? meses2026Clean.reduce((s: number, m: any) => s + m.y2026, 0) / meses2026Clean.length : 0
+
+  return {
+    inv_pdv:        kpis?.pdv_valor      ?? null,
+    inv_cedi:       kpis?.cedi_valor     ?? null,
+    inv_total:      kpis?.total_valor    ?? null,
+    tiendas_pdv:    kpis?.pdv_tiendas   ?? null,
+    skus_pdv:       kpis?.pdv_skus      ?? null,
+    criticos:       kpis?.criticos       ?? null,
+    alertas:        kpis?.alertas        ?? null,
+    skus_ofertar:   kpis?.excedentes     ?? null,
+    quiebre_cedi:   kpis?.n_cedis === 0  ? null : 0,
+    baseline_mensual: baseline2026 > 0 ? baseline2026 : null,
+  }
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -259,7 +425,8 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       Promise.all([
         fetch(`/api/comercial/ejecucion/walmart/kpis?${baseQ}`).then(r => r.json()),
         fetch(`/api/comercial/sell-in/kpis?pais=${pais}&cliente=${clienteSellin}${catQ}`).then(r => r.json()),
-      ]).then(([so, si]) => { setSellout(so); setSellin(si) })
+        fetch(`/api/comercial/ejecucion/walmart/inventario?${baseQ}`).then(r => r.json()).catch(() => null),
+      ]).then(([so, si, invData]) => { setSellout(so); setSellin(si); if (invData) setInv(invData) })
         .finally(() => setL('resumen', false))
 
     } else if (section === 'evolucion') {
@@ -314,7 +481,11 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     const soAvg    = sellout?.ultimo_mes > 0 ? soTotal / sellout.ultimo_mes : 0
     const cadenas  = sellout?.por_cadena ?? []
     const cats     = sellout?.por_categoria ?? []
-    const monthly  = (sellout?.monthly ?? []).filter((m: any) => m.y2025 > 0 || m.y2026 !== null)
+    const monthlyRaw = sellout?.monthly ?? []
+    const monthly    = monthlyRaw.map((m: any) => ({
+      ...m,
+      y2025: (m.y2025 ?? 0) > 0 ? m.y2025 : null,
+    }))
 
     const siVal    = sellin?.kpis?.ingresos?.valor ?? 0
     const siDelta  = sellin?.kpis?.ingresos?.delta ?? null
@@ -441,25 +612,99 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           </div>
         )}
 
-        {/* Monthly bar chart */}
+        {/* Monthly line chart */}
         {monthly.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <h3 className="text-sm font-semibold text-gray-700 mb-4">Sell-Out Mensual — 2025 / 2026</h3>
             <div className="h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthly} barGap={2}>
+                <LineChart data={monthly}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                   <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
                   <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
-                  <Tooltip formatter={(v: any) => fmtFull(v)} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="y2025" name="2025" fill="#cbd5e1" radius={[2,2,0,0]} />
-                  <Bar dataKey="y2026" name="2026" fill="#c8873a" radius={[2,2,0,0]} />
-                </BarChart>
+                  <Tooltip
+                    formatter={(v: any, name: string) => [fmtFull(v), name]}
+                    labelFormatter={(label: string) => label}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11, textAlign: 'center' }} verticalAlign="bottom" />
+                  <Line dataKey="y2025" name="2025" type="monotone" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
+                  <Line dataKey="y2026" name="2026" type="monotone" stroke="#c8873a" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           </div>
         )}
+
+        {/* Indicadores de Inventario */}
+        {(() => {
+          const ikpis = computeInventarioKPIs(sellout, inv)
+          const hasInv = inv?.disponible === true
+          const cards1 = [
+            { label: 'INV PDV ($)',    value: ikpis.inv_pdv    !== null ? fmtFull(ikpis.inv_pdv)    : '—', sub: 'Valor inventario PDV',  color: '' },
+            { label: 'INV CEDI ($)',   value: ikpis.inv_cedi   !== null ? fmtFull(ikpis.inv_cedi)   : '—', sub: 'Valor inventario CEDI', color: '' },
+            { label: 'TOTAL INV ($)',  value: ikpis.inv_total  !== null ? fmtFull(ikpis.inv_total)  : '—', sub: 'Inventario total',      color: '' },
+            { label: 'TIENDAS PDV',   value: ikpis.tiendas_pdv !== null ? ikpis.tiendas_pdv.toLocaleString('en-US') : '—', sub: 'Puntos de venta activos', color: '' },
+            { label: 'SKUs PDV',      value: ikpis.skus_pdv   !== null ? ikpis.skus_pdv.toLocaleString('en-US')    : '—', sub: 'SKUs con inventario',     color: '' },
+          ]
+          const cards2 = [
+            { label: 'CRÍTICOS PDV',    value: ikpis.criticos    !== null ? String(ikpis.criticos)    : '—', sub: 'DOH ≤ 7 días',          leftColor: ikpis.criticos !== null && ikpis.criticos > 0 ? '#ef4444' : '#e5e7eb' },
+            { label: 'EN ALERTA PDV',   value: ikpis.alertas     !== null ? String(ikpis.alertas)     : '—', sub: 'DOH 8–14 días',         leftColor: ikpis.alertas  !== null && ikpis.alertas  > 0 ? '#f97316' : '#e5e7eb' },
+            { label: 'SKUs A OFERTAR',  value: ikpis.skus_ofertar !== null ? String(ikpis.skus_ofertar) : '—', sub: 'Sobrestock DOH > 60d', leftColor: ikpis.skus_ofertar !== null && ikpis.skus_ofertar > 0 ? '#8b5cf6' : '#e5e7eb' },
+            { label: 'QUIEBRE CEDI',    value: ikpis.quiebre_cedi !== null ? String(ikpis.quiebre_cedi) : 'N/A', sub: 'CEDIs sin stock',   leftColor: '#e5e7eb' },
+            { label: 'BASELINE MENSUAL', value: ikpis.baseline_mensual !== null ? fmtFull(ikpis.baseline_mensual) : '—', sub: 'Promedio mensual 2026 (excl. OOS)', leftColor: '#3b82f6' },
+          ]
+          if (monthly.length === 0) return null
+          return (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Indicadores de Inventario</p>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
+                {cards1.map(c => (
+                  <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest leading-tight mb-1">{c.label}</p>
+                    <p className="text-xl font-bold text-gray-800">{c.value}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{c.sub}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                {cards2.map(c => (
+                  <div key={c.label} className="bg-white rounded-xl border border-l-4 border-gray-100 shadow-sm p-4" style={{ borderLeftColor: c.leftColor }}>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest leading-tight mb-1">{c.label}</p>
+                    <p className="text-xl font-bold text-gray-800">{c.value}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{c.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Hallazgos Críticos */}
+        {(() => {
+          const hallazgos = generarHallazgos(sellout, inv, topSkus)
+          if (hallazgos.length === 0) return null
+          return (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Hallazgos Críticos</p>
+              <div className="space-y-2">
+                {hallazgos.map((h, i) => {
+                  const s = HALLAZGO_STYLE[h.tipo]
+                  return (
+                    <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 border-l-4" style={{ borderLeftColor: s.leftColor }}>
+                      <div className="flex items-start gap-3">
+                        <span className={`flex-shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full mt-0.5 ${s.badgeCls}`}>{s.badge}</span>
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{h.titulo}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{h.detalle}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })()}
 
         {soTotal === 0 && siVal === 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
