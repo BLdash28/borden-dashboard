@@ -138,8 +138,8 @@ export const DEPT_LABELS: Record<string, string> = {
 }
 
 export const DEPT_HOME: Record<string, string> = {
-  comercial:   '/sellout/resumen',
-  mercadeo:    '/tendencias',
-  operaciones: '/registros-sanitarios',
-  finanzas:    '/resumen',
+  comercial:   '',
+  mercadeo:    '',
+  operaciones: '',
+  finanzas:    '',
 }
