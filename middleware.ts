@@ -2,10 +2,10 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 const DEPT_HOME: Record<string, string> = {
-  comercial:   '/resumen',
-  mercadeo:    '/resumen',
-  operaciones: '/registros-sanitarios',
-  finanzas:    '/resumen',
+  comercial:   '',
+  mercadeo:    '',
+  operaciones: '',
+  finanzas:    '',
 }
 const VALID_DEPTS = Object.keys(DEPT_HOME)
 

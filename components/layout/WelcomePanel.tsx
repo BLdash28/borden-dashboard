@@ -348,112 +348,119 @@ export default function WelcomePanel({ dept, nombre, destination }: Props) {
   const q = quotes[idx]
 
   return (
-    <div className="w-full max-w-3xl">
+    <div
+      className="flex flex-col -m-4 md:-m-6"
+      style={{
+        minHeight: 'calc(100vh - 60px)',
+        background: 'linear-gradient(160deg, #f7f5f2 0%, #edeae4 100%)',
+      }}
+    >
+      <div className="flex-1 flex flex-col justify-center px-8 md:px-14 py-12 w-full max-w-4xl">
 
-      {/* ── Header ── */}
-      <div className="flex items-start justify-between mb-8 gap-4">
-        <div>
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between mb-10 gap-4">
+          <div>
+            {ready && (
+              <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#c8873a' }}>
+                {saludo()}
+              </p>
+            )}
+            <h1 className="text-[36px] md:text-[44px] font-black leading-tight" style={{ color: '#0a1628' }}>
+              ¡Bienvenido de vuelta, {nombre}! 👋
+            </h1>
+            <p className="mt-2 text-[15px]" style={{ color: '#64748b' }}>
+              {DEPT_SUBTITLES[dept]}
+            </p>
+          </div>
           {ready && (
-            <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#c8873a' }}>
-              {saludo()}
+            <p
+              className="hidden md:block text-right text-[12px] shrink-0 capitalize leading-snug mt-1"
+              style={{ color: '#94a3b8' }}
+            >
+              {fechaCorta()}
             </p>
           )}
-          <h1 className="text-[32px] md:text-[38px] font-black leading-tight" style={{ color: '#0a1628' }}>
-            ¡Bienvenido de vuelta, {nombre}! 👋
-          </h1>
-          <p className="mt-1 text-[15px]" style={{ color: '#64748b' }}>
-            {DEPT_SUBTITLES[dept]}
-          </p>
         </div>
-        {ready && (
-          <p
-            className="hidden md:block text-right text-[12px] shrink-0 capitalize leading-snug mt-1"
-            style={{ color: '#94a3b8' }}
-          >
-            {fechaCorta()}
-          </p>
-        )}
-      </div>
 
-      {/* ── Animated card ── */}
-      <div
-        style={{
-          opacity:    visible ? 1 : 0,
-          transform:  visible ? 'translateY(0px)' : 'translateY(10px)',
-          transition: 'opacity 0.38s ease, transform 0.38s ease',
-        }}
-      >
-        {/* Amber header */}
+        {/* ── Animated card ── */}
         <div
-          className="rounded-t-2xl px-6 py-5 flex items-center justify-between gap-6"
           style={{
-            background: 'linear-gradient(135deg, #a86220 0%, #c8873a 55%, #e8a95a 100%)',
+            opacity:    visible ? 1 : 0,
+            transform:  visible ? 'translateY(0px)' : 'translateY(10px)',
+            transition: 'opacity 0.38s ease, transform 0.38s ease',
           }}
         >
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="w-2 h-2 rounded-full bg-white opacity-80" />
-            <span className="text-[10px] font-bold uppercase tracking-[2.5px] text-white opacity-90">
-              Mensaje del día
-            </span>
+          {/* Amber header */}
+          <div
+            className="rounded-t-2xl px-7 py-5 flex items-center justify-between gap-6"
+            style={{
+              background: 'linear-gradient(135deg, #a86220 0%, #c8873a 55%, #e8a95a 100%)',
+            }}
+          >
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="w-2 h-2 rounded-full bg-white opacity-80" />
+              <span className="text-[10px] font-bold uppercase tracking-[2.5px] text-white opacity-90">
+                Mensaje del día
+              </span>
+            </div>
+            <p
+              className="text-right text-white text-[13px] font-medium leading-snug opacity-90"
+              style={{ whiteSpace: 'pre-line' }}
+            >
+              {q.tagline}
+            </p>
           </div>
-          <p
-            className="text-right text-white text-[13px] font-medium leading-snug opacity-90"
-            style={{ whiteSpace: 'pre-line' }}
+
+          {/* Quote body */}
+          <div
+            className="rounded-b-2xl px-8 py-9"
+            style={{
+              background: 'white',
+              boxShadow:  '0 8px 40px rgba(10,22,40,0.07)',
+            }}
           >
-            {q.tagline}
-          </p>
+            <p
+              className="text-[24px] md:text-[28px] font-semibold leading-relaxed mb-5"
+              style={{ color: '#0a1628' }}
+            >
+              &ldquo;<QuoteText text={q.text} highlight={q.highlight} />&rdquo;
+            </p>
+            <p className="text-sm font-medium" style={{ color: '#94a3b8' }}>
+              — {q.author}
+            </p>
+          </div>
         </div>
 
-        {/* Quote body */}
-        <div
-          className="rounded-b-2xl px-8 py-8"
-          style={{
-            background:  'white',
-            boxShadow:   '0 8px 32px rgba(10,22,40,0.08)',
-          }}
-        >
-          <p
-            className="text-[22px] md:text-[26px] font-semibold leading-relaxed mb-5"
-            style={{ color: '#0a1628' }}
+        {/* ── Dots + CTA ── */}
+        <div className="mt-6 flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            {quotes.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => goTo(i)}
+                aria-label={`Frase ${i + 1}`}
+                className="rounded-full transition-all duration-300"
+                style={{
+                  width:      i === idx ? 20 : 6,
+                  height:     6,
+                  background: i === idx ? '#c8873a' : '#cbd5e1',
+                }}
+              />
+            ))}
+          </div>
+
+          <button
+            onClick={() => router.push(destination)}
+            className="px-7 py-3.5 rounded-xl font-bold text-white text-[14px] transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
+            style={{
+              background: 'linear-gradient(135deg, #c8873a 0%, #e8a95a 100%)',
+              boxShadow:  '0 4px 18px rgba(200,135,58,0.32)',
+            }}
           >
-            &ldquo;<QuoteText text={q.text} highlight={q.highlight} />&rdquo;
-          </p>
-          <p className="text-sm font-medium" style={{ color: '#94a3b8' }}>
-            — {q.author}
-          </p>
-        </div>
-      </div>
-
-      {/* ── Dots + CTA ── */}
-      <div className="mt-5 flex items-center justify-between">
-        {/* Navigation dots */}
-        <div className="flex items-center gap-1.5">
-          {quotes.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => goTo(i)}
-              aria-label={`Frase ${i + 1}`}
-              className="rounded-full transition-all duration-300"
-              style={{
-                width:      i === idx ? 20 : 6,
-                height:     6,
-                background: i === idx ? '#c8873a' : '#e2e8f0',
-              }}
-            />
-          ))}
+            Ir al Dashboard →
+          </button>
         </div>
 
-        {/* CTA */}
-        <button
-          onClick={() => router.push(destination)}
-          className="px-6 py-3 rounded-xl font-bold text-white text-[14px] transition-all duration-200 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98]"
-          style={{
-            background:  'linear-gradient(135deg, #c8873a 0%, #e8a95a 100%)',
-            boxShadow:   '0 4px 16px rgba(200,135,58,0.30)',
-          }}
-        >
-          Ir al Dashboard →
-        </button>
       </div>
     </div>
   )
