@@ -4,10 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 export const dynamic = 'force-dynamic'
 
 const DEPT_HOME: Record<string, string> = {
-  comercial:   '/sellout/resumen',
-  mercadeo:    '/tendencias',
-  operaciones: '/registros-sanitarios',
-  finanzas:    '/resumen',
+  comercial:   '/comercial',
+  mercadeo:    '/mercadeo',
+  operaciones: '/operaciones',
+  finanzas:    '/finanzas',
 }
 
 export default async function DashboardPage() {
@@ -22,11 +22,11 @@ export default async function DashboardPage() {
     .eq('id', user!.id)
     .single()
 
-  let destination = '/dashboard/comercial/sellout/resumen'
+  let destination = '/dashboard/comercial'
   if (profile?.role === 'usuario' && Array.isArray(profile.dashboards) && profile.dashboards.length > 0) {
-    const first = profile.dashboards.find((d: string) => DEPT_HOME[d]) || profile.dashboards[0]
-    if (first && DEPT_HOME[first]) {
-      destination = `/dashboard/${first}${DEPT_HOME[first]}`
+    const first = profile.dashboards[0] as string
+    if (DEPT_HOME[first]) {
+      destination = `/dashboard${DEPT_HOME[first]}`
     }
   }
 

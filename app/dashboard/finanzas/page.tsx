@@ -4,7 +4,7 @@ import WelcomePanel from '@/components/layout/WelcomePanel'
 
 export const dynamic = 'force-dynamic'
 
-export default async function OperacionesPage() {
+export default async function FinanzasPage() {
   const supabase = createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
@@ -14,9 +14,9 @@ export default async function OperacionesPage() {
 
   return (
     <WelcomePanel
-      dept="operaciones"
+      dept="finanzas"
       nombre={nombre}
-      destination="/dashboard/operaciones/registros-sanitarios"
+      destination="/dashboard/finanzas/resumen"
     />
   )
 }
