@@ -10,11 +10,11 @@ export async function GET(req: NextRequest) {
   try {
     const sp     = req.nextUrl.searchParams
     const cats   = sp.get('categoria')    ? sp.get('categoria')!.split(',').filter(Boolean) : []
-    const subcat = sp.get('subcategoria') ?? ''
-    const topN   = Math.min(Math.max(parseInt(sp.get('top') ?? '5'), 1), 200)
+    const subcats = sp.get('subcategoria') ? sp.get('subcategoria')!.split(',').filter(Boolean) : []
+    const topN    = Math.min(Math.max(parseInt(sp.get('top') ?? '5'), 1), 200)
 
-    const catFilter    = cats.length ? `AND categoria IN (${cats.map(c => `'${c.replace(/'/g, "''")}'`).join(',')})` : ''
-    const subcatFilter = subcat ? `AND subcategoria = '${subcat.replace(/'/g, "''")}'` : ''
+    const catFilter    = cats.length   ? `AND categoria    IN (${cats.map(c   => `'${c.replace(/'/g,"''")}'`).join(',')})` : ''
+    const subcatFilter = subcats.length ? `AND subcategoria IN (${subcats.map(s => `'${s.replace(/'/g,"''")}'`).join(',')})` : ''
 
     const { rows } = await pool.query(`
       WITH top_skus AS (

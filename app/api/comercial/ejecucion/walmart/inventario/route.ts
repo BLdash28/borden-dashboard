@@ -2,93 +2,231 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const revalidate = 300
+export const dynamic   = 'force-dynamic'
+export const revalidate = 0
 
 export async function GET(req: NextRequest) {
   try {
-    const pais     = req.nextUrl.searchParams.get('pais') ?? 'CR'
-    const paisSafe = pais.replace(/'/g, "''")
+    const pais      = req.nextUrl.searchParams.get('pais')     ?? 'CR'
+    const categoria = req.nextUrl.searchParams.get('categoria') ?? ''
+    const paisSafe  = pais.replace(/'/g, "''")
+    const catFilter = categoria
+      ? `AND COALESCE(dp.categoria, '') = '${categoria.replace(/'/g, "''")}'`
+      : ''
 
-    // Latest semana for this pais
-    const latestR = await pool.query(
-      `SELECT semana FROM inventario_walmart WHERE pais = '${paisSafe}' ORDER BY semana DESC LIMIT 1`
-    )
+    // ── Check availability ──────────────────────────────────────────────────
+    const [countTiendas, countCedi] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS n FROM fact_inventario_walmart_pdv  WHERE pais = '${paisSafe}'`),
+      pool.query(`SELECT COUNT(*) AS n FROM fact_inventario_walmart_cedi WHERE pais = '${paisSafe}'`),
+    ])
+    const nTiendas = parseInt(countTiendas.rows[0]?.n ?? '0')
+    const nCedi    = parseInt(countCedi.rows[0]?.n    ?? '0')
 
-    if (latestR.rows.length === 0) {
+    if (nTiendas === 0 && nCedi === 0) {
       return NextResponse.json({ disponible: false, rows: [], kpis: null, msg: `Sin datos de inventario para ${pais}` })
     }
 
-    const semana = latestR.rows[0].semana
+    // ── Run main queries in parallel ────────────────────────────────────────
+    const [pdvResult, cediResult, storeStatsResult] = await Promise.all([
 
-    const [kpiR, rowsR] = await Promise.all([
-      pool.query(`
-        WITH doh_calc AS (
-          SELECT *,
-            CASE WHEN ventas_periodo > 0 AND dias_periodo > 0
-              THEN inventario / (ventas_periodo::float / dias_periodo)
-              ELSE NULL END AS doh_val
-          FROM inventario_walmart
-          WHERE pais = '${paisSafe}' AND semana = ${semana}
+      // PDV: aggregated by SKU with sell-out pricing
+      nTiendas > 0 ? pool.query(`
+        WITH ultima AS (
+          SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = '${paisSafe}'
+        ),
+        base AS (
+          SELECT
+            COALESCE(dp.codigo_barras, t.codigo_barras) AS codigo_barras,
+            MAX(dp.sku)                                                              AS sku,
+            COALESCE(MAX(NULLIF(dp.descripcion,'')), MAX(NULLIF(t.descripcion,''))) AS descripcion,
+            MAX(dp.categoria)    AS categoria,
+            MAX(dp.subcategoria) AS subcategoria,
+            SUM(t.inv_mano)      AS inv_mano,
+            COUNT(DISTINCT t.punto_venta) AS tiendas,
+            TO_CHAR(MAX(t.fecha), 'YYYY-MM-DD') AS fecha_snap
+          FROM fact_inventario_walmart_pdv t
+          JOIN ultima ON t.fecha = ultima.f
+          LEFT JOIN dim_producto dp ON (
+            CASE WHEN t.codigo_barras LIKE '0%'
+                 THEN LTRIM(t.codigo_barras, '0')
+                 ELSE LTRIM(LEFT(t.codigo_barras, LENGTH(t.codigo_barras)-1), '0')
+            END
+          ) = LTRIM(LEFT(dp.codigo_barras, LENGTH(dp.codigo_barras)-1), '0')
+          WHERE t.pais = '${paisSafe}' ${catFilter}
+          GROUP BY COALESCE(dp.codigo_barras, t.codigo_barras)
+        ),
+        vel AS (
+          SELECT codigo_barras,
+            ROUND((SUM(ventas_unidades) / 90.0)::numeric, 4) AS venta_dia,
+            CASE WHEN SUM(ventas_unidades) > 0
+              THEN ROUND((SUM(ventas_valor) / SUM(ventas_unidades))::numeric, 4)
+              ELSE 0 END AS precio_unitario
+          FROM fact_ventas_walmart
+          WHERE fecha >= CURRENT_DATE - INTERVAL '90 days'
+            AND pais = '${paisSafe}'
+          GROUP BY codigo_barras
         )
         SELECT
-          COUNT(*)                                                        AS total_items,
-          SUM(inventario)                                                  AS total_unidades,
-          SUM(inv_cedi_unds)                                               AS cedi_unidades,
-          SUM(inv_cedi_cajas)                                              AS cedi_cajas,
-          SUM(CASE WHEN doh_val <= 7                    THEN 1 ELSE 0 END) AS criticos,
-          SUM(CASE WHEN doh_val BETWEEN 8 AND 14        THEN 1 ELSE 0 END) AS alertas,
-          SUM(CASE WHEN doh_val > 60                    THEN 1 ELSE 0 END) AS excedentes
-        FROM doh_calc
-      `),
-      pool.query(`
-        SELECT item_nbr, item, item_type, item_status,
-          ROUND(inventario::numeric, 0)     AS inventario,
-          ROUND(ordenes::numeric, 0)        AS ordenes,
-          ROUND(transito::numeric, 0)       AS transito,
-          ROUND(wharehouse::numeric, 0)     AS wharehouse,
-          ROUND(inv_cedi_cajas::numeric, 0) AS inv_cedi_cajas,
-          ROUND(inv_cedi_unds::numeric, 0)  AS inv_cedi_unds,
-          ventas_periodo, dias_periodo,
-          CASE WHEN dias_periodo > 0
-            THEN ROUND((ventas_periodo::float / dias_periodo)::numeric, 2)
-            ELSE 0 END AS venta_dia,
-          CASE WHEN ventas_periodo > 0 AND dias_periodo > 0
-            THEN ROUND((inventario / (ventas_periodo::float / dias_periodo))::numeric, 1)
+          b.*,
+          COALESCE(v.venta_dia, 0)       AS venta_dia,
+          COALESCE(v.precio_unitario, 0) AS precio_unitario,
+          CASE WHEN COALESCE(v.venta_dia, 0) > 0
+            THEN ROUND((b.inv_mano / v.venta_dia)::numeric, 1)
             ELSE NULL END AS doh
-        FROM inventario_walmart
-        WHERE pais = '${paisSafe}' AND semana = ${semana}
-        ORDER BY doh ASC NULLS LAST
-        LIMIT 500
-      `),
+        FROM base b
+        LEFT JOIN vel v ON b.codigo_barras = v.codigo_barras
+        ORDER BY b.inv_mano DESC
+        LIMIT 300
+      `) : Promise.resolve({ rows: [] }),
+
+      // CEDI: per-SKU with VNPK conversion and pricing
+      nCedi > 0 ? pool.query(`
+        WITH ultima AS (
+          SELECT MAX(fecha) AS f FROM fact_inventario_walmart_cedi WHERE pais = '${paisSafe}'
+        ),
+        vel AS (
+          SELECT codigo_barras,
+            ROUND((SUM(ventas_unidades) / 90.0)::numeric, 4) AS venta_dia,
+            CASE WHEN SUM(ventas_unidades) > 0
+              THEN ROUND((SUM(ventas_valor) / SUM(ventas_unidades))::numeric, 4)
+              ELSE 0 END AS precio_unitario
+          FROM fact_ventas_walmart
+          WHERE fecha >= CURRENT_DATE - INTERVAL '90 days'
+            AND pais = '${paisSafe}'
+          GROUP BY codigo_barras
+        )
+        SELECT
+          COALESCE(dp.sku, c.sku, c.codigo_barras)                                  AS sku,
+          COALESCE(dp.codigo_barras, c.codigo_barras)                               AS codigo_barras,
+          COALESCE(NULLIF(dp.descripcion,''), NULLIF(c.descripcion,''), c.codigo_barras) AS descripcion,
+          COALESCE(dp.categoria, '')    AS categoria,
+          COALESCE(dp.subcategoria, '') AS subcategoria,
+          COALESCE(dp.vnpk_qty, 1)      AS vnpk_qty,
+          ROUND(c.inv_cajas::numeric, 0) AS inv_mano_cajas,
+          ROUND((c.inv_cajas * COALESCE(dp.vnpk_qty, 1))::numeric, 0) AS inv_mano_unidades,
+          COALESCE(vel.venta_dia, 0)       AS venta_dia,
+          COALESCE(vel.precio_unitario, 0) AS precio_unitario,
+          CASE WHEN COALESCE(vel.venta_dia, 0) > 0
+            THEN ROUND(((c.inv_cajas * COALESCE(dp.vnpk_qty, 1)) / vel.venta_dia)::numeric, 1)
+            ELSE NULL END AS doh,
+          TO_CHAR(c.fecha, 'YYYY-MM-DD') AS fecha_snap
+        FROM fact_inventario_walmart_cedi c
+        JOIN ultima ON c.fecha = ultima.f
+        LEFT JOIN dim_producto dp ON (
+          CASE WHEN c.codigo_barras LIKE '0%'
+               THEN LTRIM(c.codigo_barras, '0')
+               ELSE LTRIM(LEFT(c.codigo_barras, LENGTH(c.codigo_barras)-1), '0')
+          END
+        ) = LTRIM(LEFT(dp.codigo_barras, LENGTH(dp.codigo_barras)-1), '0')
+        LEFT JOIN vel ON COALESCE(dp.codigo_barras, c.codigo_barras) = vel.codigo_barras
+        WHERE c.pais = '${paisSafe}' ${catFilter}
+        ORDER BY c.inv_cajas DESC
+        LIMIT 300
+      `) : Promise.resolve({ rows: [] }),
+
+      // Store-level DOH counts (SKU × Tienda combinations)
+      nTiendas > 0 ? pool.query(`
+        WITH ultima AS (
+          SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = '${paisSafe}'
+        ),
+        vel AS (
+          SELECT codigo_barras, SUM(ventas_unidades)::float / 90.0 AS vpd
+          FROM fact_ventas_walmart
+          WHERE fecha >= CURRENT_DATE - INTERVAL '90 days' AND pais = '${paisSafe}'
+          GROUP BY codigo_barras
+        )
+        SELECT
+          COUNT(DISTINCT t.punto_venta)::int AS tiendas_distinct,
+          COUNT(*) FILTER (
+            WHERE v.vpd > 0 AND (t.inv_mano::float / v.vpd) <= 7
+          ) AS criticos,
+          COUNT(*) FILTER (
+            WHERE v.vpd > 0 AND (t.inv_mano::float / v.vpd) > 7
+              AND (t.inv_mano::float / v.vpd) <= 14
+          ) AS alertas,
+          COUNT(*) FILTER (
+            WHERE v.vpd > 0 AND (t.inv_mano::float / v.vpd) > 60
+          ) AS sobrestock
+        FROM fact_inventario_walmart_pdv t
+        JOIN ultima ON t.fecha = ultima.f
+        LEFT JOIN dim_producto dp ON (
+          CASE WHEN t.codigo_barras LIKE '0%'
+               THEN LTRIM(t.codigo_barras, '0')
+               ELSE LTRIM(LEFT(t.codigo_barras, LENGTH(t.codigo_barras)-1), '0')
+          END
+        ) = LTRIM(LEFT(dp.codigo_barras, LENGTH(dp.codigo_barras)-1), '0')
+        LEFT JOIN vel v ON COALESCE(dp.codigo_barras, t.codigo_barras) = v.codigo_barras
+        WHERE t.pais = '${paisSafe}'
+      `) : Promise.resolve({ rows: [{ tiendas_distinct: 0, criticos: 0, alertas: 0, sobrestock: 0 }] }),
     ])
 
-    const k = kpiR.rows[0]
+    // ── Assemble ────────────────────────────────────────────────────────────
+    const pdv = pdvResult.rows
+    const ced = cediResult.rows
+    const ss  = storeStatsResult.rows[0] ?? { tiendas_distinct: 0, criticos: 0, alertas: 0, sobrestock: 0 }
+
+    const fechaTienda = pdv[0]?.fecha_snap ?? null
+    const fechaCedi   = ced[0]?.fecha_snap ?? null
+
+    const pdv_valor  = pdv.reduce((s: number, r: any) => s + (parseFloat(r.inv_mano) || 0) * (parseFloat(r.precio_unitario) || 0), 0)
+    const cedi_valor = ced.reduce((s: number, r: any) => s + (parseInt(r.inv_mano_unidades) || 0) * (parseFloat(r.precio_unitario) || 0), 0)
+
+    const kpis = {
+      // PDV — SKU level
+      pdv_skus:          pdv.length,
+      pdv_tiendas:       pdv.reduce((s: number, r: any) => s + (parseInt(r.tiendas) || 0), 0),
+      pdv_tiendas_dist:  parseInt(ss.tiendas_distinct) || 0,
+      pdv_inv:           pdv.reduce((s: number, r: any) => s + (parseFloat(r.inv_mano) || 0), 0),
+      pdv_valor,
+      pdv_criticos:      pdv.filter((r: any) => r.doh !== null && parseFloat(r.doh) <= 7).length,
+      pdv_alertas:       pdv.filter((r: any) => r.doh !== null && parseFloat(r.doh) > 7  && parseFloat(r.doh) <= 21).length,
+      pdv_excedentes:    pdv.filter((r: any) => r.doh !== null && parseFloat(r.doh) > 60).length,
+      pdv_sin_datos:     pdv.filter((r: any) => r.doh === null).length,
+      // PDV — store × SKU level
+      pdv_criticos_stores:  parseInt(ss.criticos)   || 0,
+      pdv_alertas_stores:   parseInt(ss.alertas)    || 0,
+      pdv_sobrestock_stores:parseInt(ss.sobrestock) || 0,
+      fecha_tiendas: fechaTienda,
+      // CEDI
+      cedi_skus:       ced.length,
+      cedi_cajas:      ced.reduce((s: number, r: any) => s + (parseInt(r.inv_mano_cajas)    || 0), 0),
+      cedi_unidades:   ced.reduce((s: number, r: any) => s + (parseInt(r.inv_mano_unidades) || 0), 0),
+      cedi_ordenes:    0,
+      cedi_sin_stock:  ced.filter((r: any) => parseInt(r.inv_mano_cajas) === 0).length,
+      cedi_criticos:   ced.filter((r: any) => r.doh !== null && parseFloat(r.doh) <= 7).length,
+      cedi_valor,
+      fecha_cedi: fechaCedi,
+    }
+
     return NextResponse.json({
       disponible: true,
-      semana,
-      kpis: {
-        total_items:    parseInt(k.total_items   ?? '0'),
-        total_unidades: parseInt(k.total_unidades ?? '0'),
-        cedi_unidades:  parseInt(k.cedi_unidades  ?? '0'),
-        cedi_cajas:     parseInt(k.cedi_cajas     ?? '0'),
-        criticos:       parseInt(k.criticos        ?? '0'),
-        alertas:        parseInt(k.alertas         ?? '0'),
-        excedentes:     parseInt(k.excedentes      ?? '0'),
-        ultima_semana:  semana,
-      },
-      rows: rowsR.rows.map((r: any) => ({
-        sku:           r.item_nbr,
-        descripcion:   r.item ?? '',
-        item_type:     r.item_type ?? '',
-        item_status:   r.item_status ?? '',
-        inventario:    parseInt(r.inventario    ?? '0'),
-        ordenes:       parseInt(r.ordenes       ?? '0'),
-        transito:      parseInt(r.transito      ?? '0'),
-        wharehouse:    parseInt(r.wharehouse    ?? '0'),
-        inv_cedi_cajas: parseInt(r.inv_cedi_cajas ?? '0'),
-        inv_cedi_unds:  parseInt(r.inv_cedi_unds  ?? '0'),
-        venta_dia:     parseFloat(r.venta_dia   ?? '0'),
-        doh:           r.doh !== null ? parseFloat(r.doh) : null,
+      kpis,
+      pdv_rows: pdv.map((r: any) => ({
+        sku:             r.sku             ?? r.codigo_barras ?? '',
+        upc:             r.codigo_barras   ?? '',
+        descripcion:     r.descripcion     ?? '',
+        categoria:       r.categoria       ?? '',
+        subcategoria:    r.subcategoria    ?? '',
+        inv_mano:        parseFloat(r.inv_mano)        || 0,
+        tiendas:         parseInt(r.tiendas)           || 0,
+        venta_dia:       parseFloat(r.venta_dia)       || 0,
+        precio_unitario: parseFloat(r.precio_unitario) || 0,
+        doh: r.doh !== null ? parseFloat(r.doh) : null,
+      })),
+      cedi_rows: ced.map((r: any) => ({
+        sku:               r.sku            ?? r.codigo_barras ?? '',
+        upc:               r.codigo_barras  ?? '',
+        descripcion:       r.descripcion    ?? '',
+        categoria:         r.categoria      ?? '',
+        subcategoria:      r.subcategoria   ?? '',
+        vnpk_qty:          parseInt(r.vnpk_qty)           || 1,
+        inv_mano_cajas:    parseInt(r.inv_mano_cajas)     || 0,
+        inv_orden_cajas:   0,
+        inv_mano_unidades: parseInt(r.inv_mano_unidades)  || 0,
+        inv_orden_unidades:0,
+        venta_dia:         parseFloat(r.venta_dia)        || 0,
+        precio_unitario:   parseFloat(r.precio_unitario)  || 0,
+        doh: r.doh !== null ? parseFloat(r.doh) : null,
       })),
     })
   } catch (err) {

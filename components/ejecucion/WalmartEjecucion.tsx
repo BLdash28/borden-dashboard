@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart,
+  PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, Cell, ReferenceLine,
 } from 'recharts'
@@ -10,9 +11,10 @@ import {
 // ── Config ────────────────────────────────────────────────────────────────
 
 const DIVS = [
-  { key: 'TOTAL', label: 'Total',     cat: '' },
-  { key: 'QUESO', label: '🧀 Queso', cat: 'Quesos' },
-  { key: 'LECHE', label: '🥛 Leche', cat: 'Leches' },
+  { key: 'TOTAL',   label: 'Total',        cat: '' },
+  { key: 'QUESO',   label: '🧀 Queso',    cat: 'Quesos' },
+  { key: 'LECHE',   label: '🥛 Leche',    cat: 'Leches' },
+  { key: 'HELADOS', label: '🍦 Helados',  cat: 'Helados' },
 ]
 
 const SECTIONS = [
@@ -20,14 +22,9 @@ const SECTIONS = [
   { key: 'evolucion',        label: 'Evolución Ventas'  },
   { key: 'cobertura',        label: 'Cobertura'         },
   { key: 'inventarios',      label: 'Inventarios'       },
-  { key: 'pedidos',          label: 'Pedidos'           },
-  { key: 'ofertas',          label: 'Ofertas'           },
   { key: 'innovaciones',     label: 'Innovaciones'      },
   { key: 'pareto',           label: 'Pareto'            },
-  { key: 'perdida',          label: 'Pérdida de Venta'  },
   { key: 'precios',          label: 'Lista Precios'     },
-  { key: 'recomendaciones',  label: 'Recomendaciones'   },
-  { key: 'cliente',          label: 'Vista Cliente'     },
 ]
 
 const CADENA_COLORS: Record<string, string> = {
@@ -137,7 +134,7 @@ function ChartSkeleton() {
 function ProximamentePlaceholder({ section }: { section: string }) {
   const msgs: Record<string, { icon: string; titulo: string; desc: string }> = {
     cobertura:     { icon: '📍', titulo: 'Cobertura de Distribución', desc: 'Disponible cuando se cargue el inventario de tiendas en inventario_walmart.' },
-    inventarios:   { icon: '📦', titulo: 'Inventario en Tiendas', desc: 'Disponible cuando se cargue el snapshot de inventario PDV en inventario_walmart.' },
+    inventarios:   { icon: '📦', titulo: 'Inventarios', desc: 'Cargando inventario de tiendas (inventario_tiendas) y CEDI (inventario_cedi)...' },
     pedidos:       { icon: '🚚', titulo: 'Pedidos y Reabasto', desc: 'Se habilitará con el historial de órdenes de compra.' },
     ofertas:       { icon: '🏷️', titulo: 'Ofertas y Excedentes', desc: 'Requiere datos de inventario para calcular SKUs con sobrestock.' },
     innovaciones:  { icon: '🆕', titulo: 'Innovaciones', desc: 'Tracking de nuevos SKUs lanzados en 2026.' },
@@ -217,19 +214,20 @@ function generarHallazgos(sellout: any, inv: any, topSkus: any[]): Hallazgo[] {
     }
   }
 
-  // Rule 2 — Critical inventory
-  if (kpis && kpis.criticos > 0) {
+  // Rule 2 — inventory snapshot (PDV + CEDI)
+  if (kpis && (kpis.pdv_skus > 0 || kpis.cedi_skus > 0)) {
+    const parts: string[] = []
+    if (kpis.pdv_skus > 0) parts.push(`PDV: ${kpis.pdv_skus} SKUs · ${Math.round(kpis.pdv_inv ?? 0).toLocaleString('en-US')} un`)
+    if (kpis.cedi_skus > 0) parts.push(`CEDI: ${kpis.cedi_cajas?.toLocaleString('en-US')} cj · ${kpis.cedi_skus} SKUs`)
+    const warn = (kpis.pdv_criticos ?? 0) > 0 || (kpis.cedi_sin_stock ?? 0) > 0
+    const warnText = [
+      kpis.pdv_criticos > 0 ? `⚠️ ${kpis.pdv_criticos} SKUs PDV críticos (DOH ≤ 7d)` : '',
+      kpis.cedi_sin_stock > 0 ? `⚠️ ${kpis.cedi_sin_stock} SKUs CEDI sin stock` : '',
+    ].filter(Boolean).join('. ')
     hallazgos.push({
-      tipo: 'critico', prioridad: PRIORIDAD.critico,
-      titulo: `${kpis.criticos} SKU${kpis.criticos > 1 ? 's' : ''} con inventario crítico (DOH ≤ 7 días)`,
-      detalle: `Riesgo inmediato de quiebre. Revisar reabasto urgente para ${kpis.criticos} ${kpis.criticos > 1 ? 'posiciones' : 'posición'} en PDV.`,
-    })
-  }
-  if (kpis && kpis.alertas > 0) {
-    hallazgos.push({
-      tipo: 'alerta', prioridad: PRIORIDAD.alerta,
-      titulo: `${kpis.alertas} SKU${kpis.alertas > 1 ? 's' : ''} en alerta de inventario (DOH 8–14 días)`,
-      detalle: `Cobertura baja. Programar pedido en los próximos días para evitar quiebre.`,
+      tipo: warn ? 'alerta' : 'informativo', prioridad: warn ? PRIORIDAD.alerta : PRIORIDAD.informativo,
+      titulo: `Inventario: ${parts.join(' · ')}`,
+      detalle: `Snapshot tiendas ${kpis.fecha_tiendas ?? '—'} / CEDI ${kpis.fecha_cedi ?? '—'}.${warnText ? ' ' + warnText : ''}`,
     })
   }
 
@@ -312,14 +310,31 @@ function computeInventarioKPIs(sellout: any, inv: any) {
     ? meses2026Clean.reduce((s: number, m: any) => s + m.y2026, 0) / meses2026Clean.length : 0
 
   return {
-    total_items:      kpis?.total_items      ?? null,
-    inv_total_unds:   kpis?.total_unidades   ?? null,
-    inv_cedi_unds:    kpis?.cedi_unidades    ?? null,
-    inv_cedi_cajas:   kpis?.cedi_cajas       ?? null,
-    ultima_semana:    kpis?.ultima_semana     ?? null,
-    criticos:         kpis?.criticos          ?? null,
-    alertas:          kpis?.alertas           ?? null,
-    skus_ofertar:     kpis?.excedentes        ?? null,
+    // PDV — SKU level
+    pdv_skus:              kpis?.pdv_skus              ?? null,
+    pdv_tiendas:           kpis?.pdv_tiendas           ?? null,
+    pdv_tiendas_dist:      kpis?.pdv_tiendas_dist      ?? null,
+    pdv_inv:               kpis?.pdv_inv               ?? null,
+    pdv_valor:             kpis?.pdv_valor             ?? null,
+    pdv_criticos:          kpis?.pdv_criticos          ?? null,
+    pdv_alertas:           kpis?.pdv_alertas           ?? null,
+    pdv_excedentes:        kpis?.pdv_excedentes        ?? null,
+    pdv_sin_datos:         kpis?.pdv_sin_datos         ?? null,
+    // PDV — store × SKU level
+    pdv_criticos_stores:   kpis?.pdv_criticos_stores   ?? null,
+    pdv_alertas_stores:    kpis?.pdv_alertas_stores    ?? null,
+    pdv_sobrestock_stores: kpis?.pdv_sobrestock_stores ?? null,
+    fecha_tiendas:         kpis?.fecha_tiendas         ?? null,
+    // CEDI
+    cedi_skus:       kpis?.cedi_skus       ?? null,
+    cedi_cajas:      kpis?.cedi_cajas      ?? null,
+    cedi_unidades:   kpis?.cedi_unidades   ?? null,
+    cedi_ordenes:    kpis?.cedi_ordenes    ?? null,
+    cedi_sin_stock:  kpis?.cedi_sin_stock  ?? null,
+    cedi_criticos:   kpis?.cedi_criticos   ?? null,
+    cedi_valor:      kpis?.cedi_valor      ?? null,
+    fecha_cedi:      kpis?.fecha_cedi      ?? null,
+    // sell-out baseline
     baseline_mensual: baseline2026 > 0 ? baseline2026 : null,
   }
 }
@@ -352,6 +367,11 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [comparativo, setComparativo] = useState<any>(null)
   const [topSkus,     setTopSkus]     = useState<any[]>([])
   const [inv,         setInv]         = useState<any>(null)
+  const [innov,       setInnov]       = useState<any>(null)
+  const [cob,         setCob]         = useState<any>(null)
+  const [cobSort,     setCobSort]     = useState<'gap' | 'actual' | 'maxima'>('gap')
+  const [cobVista,    setCobVista]    = useState<'numerica' | 'ponderada'>('numerica')
+  const [cobCatF,     setCobCatF]     = useState('')
   const [evolMedida,       setEvolMedida]       = useState<'valor' | 'unidades'>('valor')
   const [evolVista,        setEvolVista]        = useState<'mensual' | 'diaria'>('mensual')
   const [evolSubcat,       setEvolSubcat]       = useState('')
@@ -365,6 +385,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [evolCadenaLine,   setEvolCadenaLine]   = useState('')
   const [evolCpFilter,     setEvolCpFilter]     = useState('')
   const [evolDiario,       setEvolDiario]       = useState<any>(null)
+  const [invSkuTienda,        setInvSkuTienda]        = useState<any[] | null>(null)
+  const [invSkuTiendaLoading, setInvSkuTiendaLoading] = useState(false)
+  const [invSkuTiendaFilters, setInvSkuTiendaFilters] = useState({ cadena: '', salud: '', prod: '' })
 
   const loadedRef = useRef<Record<string, boolean>>({})
   const setL = (k: string, v: boolean) => setLoading(p => ({ ...p, [k]: v }))
@@ -417,7 +440,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     const cadQ   = cadenaFilter ? `&cadena=${encodeURIComponent(cadenaFilter)}`    : ''
     const baseQ  = `pais=${pais}${catQ}`
 
-    const needsInventario = ['cobertura','inventarios','perdida','recomendaciones'].includes(section)
+    const needsInventario = ['inventarios','perdida','recomendaciones'].includes(section)
 
     if (section === 'resumen') {
       setL('resumen', true)
@@ -442,10 +465,25 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       fetch(`/api/comercial/ejecucion/walmart/top-skus?${baseQ}${cadQ}&top=${topN}`)
         .then(r => r.json()).then(d => setTopSkus(d.rows ?? [])).finally(() => setL('pareto', false))
 
+    } else if (section === 'cobertura') {
+      setL('cobertura', true)
+      Promise.all([
+        fetch(`/api/comercial/ejecucion/walmart/cobertura?${baseQ}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/inventario?${baseQ}`).then(r => r.json()).catch(() => null),
+      ]).then(([cobData, invData]) => {
+        setCob(cobData)
+        if (invData) setInv(invData)
+      }).finally(() => setL('cobertura', false))
+
     } else if (needsInventario) {
       setL(section, true)
       fetch(`/api/comercial/ejecucion/walmart/inventario?${baseQ}`)
         .then(r => r.json()).then(setInv).finally(() => setL(section, false))
+
+    } else if (section === 'innovaciones') {
+      setL('innovaciones', true)
+      fetch(`/api/comercial/ejecucion/walmart/innovaciones?${baseQ}`)
+        .then(r => r.json()).then(setInnov).finally(() => setL('innovaciones', false))
     }
   }, [section, div, cadenaFilter, topN, evolTopN, evolSubcat]) // eslint-disable-line
 
@@ -639,33 +677,18 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           const ikpis = computeInventarioKPIs(sellout, inv)
           const hasInv = inv?.disponible === true
           if (monthly.length === 0 && !hasInv) return null
-          const cards1 = [
-            { label: 'SKUs c/inv',    value: ikpis.total_items     !== null ? ikpis.total_items.toLocaleString('en-US')     : '—', sub: 'Items con inventario'   },
-            { label: 'INV PDV (u)',   value: ikpis.inv_total_unds  !== null ? ikpis.inv_total_unds.toLocaleString('en-US')  : '—', sub: 'Unidades en tiendas'    },
-            { label: 'CEDI (u)',      value: ikpis.inv_cedi_unds   !== null ? ikpis.inv_cedi_unds.toLocaleString('en-US')   : '—', sub: 'Unidades CEDI'          },
-            { label: 'CEDI (cajas)',  value: ikpis.inv_cedi_cajas  !== null ? ikpis.inv_cedi_cajas.toLocaleString('en-US')  : '—', sub: 'Cajas CEDI'             },
-            { label: 'SEMANA',        value: ikpis.ultima_semana   !== null ? String(ikpis.ultima_semana)                    : '—', sub: 'Semana del snapshot'    },
-          ]
-          const cards2 = [
-            { label: 'CRÍTICOS',      value: ikpis.criticos    !== null ? String(ikpis.criticos)    : '—', sub: 'DOH ≤ 7 días',         leftColor: ikpis.criticos    !== null && ikpis.criticos    > 0 ? '#ef4444' : '#e5e7eb' },
-            { label: 'EN ALERTA',     value: ikpis.alertas     !== null ? String(ikpis.alertas)     : '—', sub: 'DOH 8–14 días',        leftColor: ikpis.alertas     !== null && ikpis.alertas     > 0 ? '#f97316' : '#e5e7eb' },
-            { label: 'EXCEDENTES',    value: ikpis.skus_ofertar !== null ? String(ikpis.skus_ofertar) : '—', sub: 'DOH > 60 días',      leftColor: ikpis.skus_ofertar !== null && ikpis.skus_ofertar > 0 ? '#8b5cf6' : '#e5e7eb' },
-            { label: 'BASELINE SELL-OUT', value: ikpis.baseline_mensual !== null ? fmtFull(ikpis.baseline_mensual) : '—', sub: 'Promedio mensual 2026', leftColor: '#3b82f6' },
+          const cards = [
+            { label: 'SKUs PDV',        value: ikpis.pdv_skus       !== null ? ikpis.pdv_skus.toLocaleString('en-US')                         : '—', sub: `${ikpis.pdv_tiendas_dist ?? '—'} tiendas · ${ikpis.fecha_tiendas ?? '—'}`, leftColor: '#3b82f6' },
+            { label: 'INV PDV (un)',    value: ikpis.pdv_inv        !== null ? Math.round(ikpis.pdv_inv).toLocaleString('en-US')                 : '—', sub: 'Unidades en tienda',                                                          leftColor: '#c8873a' },
+            { label: 'CRÍTICOS PDV',    value: ikpis.pdv_criticos_stores !== null ? ikpis.pdv_criticos_stores.toLocaleString('en-US')           : '—', sub: 'Combos SKU×Tienda DOH ≤ 7d',                                                   leftColor: ikpis.pdv_criticos_stores !== null && ikpis.pdv_criticos_stores > 0 ? '#ef4444' : '#e5e7eb' },
+            { label: 'UNID. CEDI',      value: ikpis.cedi_unidades  !== null ? Math.round(ikpis.cedi_unidades).toLocaleString('en-US')          : (ikpis.cedi_cajas !== null ? ikpis.cedi_cajas.toLocaleString('en-US') : '—'), sub: `${ikpis.cedi_unidades !== null ? 'Unidades' : 'Cajas'} CEDI · ${ikpis.fecha_cedi ?? '—'}`, leftColor: '#16a34a' },
+            { label: 'SIN STOCK CEDI',  value: ikpis.cedi_sin_stock !== null ? String(ikpis.cedi_sin_stock)                                     : '—', sub: 'SKUs CEDI con inv. = 0',                                                       leftColor: ikpis.cedi_sin_stock !== null && ikpis.cedi_sin_stock > 0 ? '#ef4444' : '#e5e7eb' },
           ]
           return (
             <div>
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Indicadores de Inventario</p>
-              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
-                {cards1.map(c => (
-                  <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest leading-tight mb-1">{c.label}</p>
-                    <p className="text-xl font-bold text-gray-800">{c.value}</p>
-                    <p className="text-[10px] text-gray-400 mt-0.5">{c.sub}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {cards2.map(c => (
+              <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                {cards.map(c => (
                   <div key={c.label} className="bg-white rounded-xl border border-l-4 border-gray-100 shadow-sm p-4" style={{ borderLeftColor: c.leftColor }}>
                     <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest leading-tight mb-1">{c.label}</p>
                     <p className="text-xl font-bold text-gray-800">{c.value}</p>
@@ -760,8 +783,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     const SKU_COLORS2 = makeColors(dSkuNames.length || 10)
 
     // Comparativo (sell-in vs sell-out por categoria)
-    const cpQuesos = comparativo?.quesos ?? []
-    const cpLeches = comparativo?.leches ?? []
+    const cpQuesos  = comparativo?.quesos  ?? []
+    const cpLeches  = comparativo?.leches  ?? []
+    const cpHelados = comparativo?.helados ?? []
 
     const yFmt = (v: number) => evolMedida === 'valor'
       ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
@@ -1039,7 +1063,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         )}
 
         {/* ── Sell-In vs Sell-Out · Comparativo mensual ── */}
-        {(cpQuesos.length > 0 || cpLeches.length > 0) && (
+        {(cpQuesos.length > 0 || cpLeches.length > 0 || cpHelados.length > 0) && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <h3 className="text-sm font-semibold text-gray-700 mb-1">Sell-In vs Sell-Out · Comparativo Mensual</h3>
             <p className="text-xs text-gray-400 mb-1">
@@ -1054,7 +1078,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               </div>
             )}
             <div className="space-y-4 mt-4">
-              {[{ label: '🧀 Quesos', data: cpQuesos }, { label: '🥛 Leches', data: cpLeches }]
+              {[{ label: '🧀 Quesos', data: cpQuesos }, { label: '🥛 Leches', data: cpLeches }, { label: '🍦 Helados', data: cpHelados }]
                 .filter(g => g.data.length > 0)
                 .map(g => (
                   <div key={g.label}>
@@ -1107,58 +1131,218 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   // ── Inventarios / Cobertura ───────────────────────────────────────────────
 
   function Cobertura() {
-    const cob = COBERTURA_POR_PAIS[pais]
+    const L          = isL('cobertura')
+    const staticCob  = COBERTURA_POR_PAIS[pais]
+
+    const barColor = (pct: number) =>
+      pct >= 70 ? '#10b981' : pct >= 50 ? '#f59e0b' : pct >= 30 ? '#f97316' : '#ef4444'
+
+    if (L) return (
+      <div className="space-y-4">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 animate-pulse">
+          <div className="h-4 bg-gray-100 rounded w-1/3 mb-3" />
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
+            {Array(4).fill(0).map((_, i) => <div key={i} className="h-16 bg-gray-50 rounded-lg" />)}
+          </div>
+        </div>
+        {Array(2).fill(0).map((_, i) => (
+          <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 animate-pulse">
+            <div className="h-4 bg-gray-100 rounded w-1/3 mb-4" />
+            <div className="h-[220px] bg-gray-50 rounded" />
+          </div>
+        ))}
+      </div>
+    )
+
+    // ── Static store network panel ───────────────────────────────────────────
+    const staticPanel = staticCob && (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700">Red Walmart Group — {paisNombre}</h3>
+            <p className="text-xs text-gray-400">Puntos de venta potenciales por formato</p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold text-gray-800">{staticCob.total}</p>
+            <p className="text-xs text-gray-400">tiendas totales</p>
+          </div>
+        </div>
+        <div className={`grid grid-cols-2 md:grid-cols-${Math.min(Object.keys(staticCob.formatos).length, 4)} gap-3`}>
+          {Object.entries(staticCob.formatos).map(([formato, n]) => {
+            const color = CADENA_COLORS[formato] ?? '#6b7280'
+            const pct = Math.round((n as number) / staticCob.total * 100)
+            return (
+              <div key={formato} className="bg-gray-50 rounded-lg p-3">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                  <p className="text-xs font-medium text-gray-600 truncate">{formato}</p>
+                </div>
+                <p className="text-xl font-bold text-gray-800">{n as number}</p>
+                <div className="mt-1.5 bg-gray-200 rounded-full h-1">
+                  <div className="h-1 rounded-full" style={{ width: `${pct}%`, background: color }} />
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1">{pct}% de la red</p>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+
+    if (!cob?.rows?.length) return (
+      <div className="space-y-5">
+        {staticPanel}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">
+          <p className="text-3xl mb-2">📊</p>
+          <p className="text-sm font-semibold text-gray-700 mb-1">Sin datos de ventas por tienda</p>
+          <p className="text-xs text-gray-400">La cobertura se calcula desde <code className="bg-gray-100 px-1 rounded text-xs">fact_ventas_walmart</code> con columna <code className="bg-gray-100 px-1 rounded text-xs">punto_venta</code>.</p>
+        </div>
+      </div>
+    )
+
+    const allRows: any[]  = cob.rows
+    const totalPdvs       = cob.total_pdvs
+    const skuSaludables   = allRows.filter((r: any) => r.cobertura_pct >= 70).length
+    const skuBaja         = allRows.filter((r: any) => r.cobertura_pct < 50).length
+
+    // ── Bullet chart rows ────────────────────────────────────────────────────
+    const bulletRows = allRows
+      .filter((r: any) => !cobCatF || r.categoria === cobCatF)
+      .map((r: any) => ({
+        ...r,
+        _actual: cobVista === 'ponderada' ? r.cobertura_ponderada : r.cobertura_pct,
+        _max:    r.cobertura_maxima,
+      }))
+      .sort((a: any, b: any) => {
+        if (cobSort === 'gap')    return b.gap_pp  - a.gap_pp
+        if (cobSort === 'actual') return b._actual - a._actual
+        return b._max - a._max
+      })
+
     return (
       <div className="space-y-5">
-        {/* Static coverage reference */}
-        {cob && (
+
+        {staticPanel}
+
+
+
+        {/* ── KPI cards ── */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-800 mb-4">🎯 Cobertura de Distribución — {paisNombre}</h3>
+          <p className="text-xs text-gray-500 leading-relaxed mb-4">
+            <span className="font-semibold">Cobertura numérica</span> = % de tiendas ({totalPdvs} con ventas) que vendieron el SKU en 2026.{' '}
+            <span className="font-semibold">Cobertura ponderada</span> = las mismas tiendas pesadas por su share de ventas.{' '}
+            <span className="font-semibold">Máxima histórica</span> = mejor mes alcanzado. Gap = pp de recuperación potencial.
+          </p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: 'COBERTURA PROMEDIO', value: cob.avg_cob + '%', sub: `vs máx histórica ${cob.max_historica}% · gap ${cob.gap_global}pp`, tc: 'text-emerald-600' },
+              { label: 'COB. PONDERADA',     value: cob.avg_ponderada + '%', sub: `por share de venta · ${allRows.length} SKUs`, tc: 'text-emerald-600' },
+              { label: 'SKUs SALUDABLES',    value: skuSaludables, sub: 'cobertura ≥ 70% de tiendas', tc: skuSaludables > 0 ? 'text-emerald-600' : 'text-red-600' },
+              { label: 'SKUs BAJA COB.',     value: skuBaja, sub: 'por debajo de 50% — oportunidad', tc: skuBaja > 0 ? 'text-red-600' : 'text-gray-800' },
+            ].map(c => (
+              <div key={c.label} className="border border-gray-100 rounded-xl p-4">
+                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-2 leading-tight">{c.label}</p>
+                <p className={`text-2xl font-bold mb-1 ${c.tc}`}>{c.value}</p>
+                <p className="text-xs text-gray-400">{c.sub}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── By cadena bar chart ── */}
+        {cob.por_cadena?.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-semibold text-gray-700">Puntos de Venta — {paisNombre}</h3>
-                <p className="text-xs text-gray-400">Cobertura total de la red Walmart Group</p>
-              </div>
-              <div className="text-right">
-                <p className="text-2xl font-bold text-gray-800">{cob.total}</p>
-                <p className="text-xs text-gray-400">tiendas totales</p>
-              </div>
+            <h3 className="text-sm font-semibold text-gray-800 mb-1">📊 Por Formato — ¿Dónde están las brechas?</h3>
+            <p className="text-xs text-gray-400 mb-4">Cobertura promedio de los SKUs Borden en cada formato de tienda (actual vs máxima histórica).</p>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart
+                data={cob.por_cadena.map((g: any) => ({
+                  cadena:  `${g.cadena} (${g.n_tiendas})`,
+                  actual:  g.cob_actual_avg,
+                  maxima:  g.cob_max_avg,
+                }))}
+                margin={{ top: 10, right: 20, left: 0, bottom: 40 }}
+                barCategoryGap="30%"
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="cadena" tick={{ fontSize: 10 }} angle={-20} textAnchor="end" interval={0} />
+                <YAxis domain={[0, 100]} tickFormatter={v => v + '%'} tick={{ fontSize: 11 }} width={42} />
+                <Tooltip formatter={(v: number, n: string) => [v.toFixed(1) + '%', n === 'maxima' ? 'Máx Histórica' : 'Actual 2026']} />
+                <Legend formatter={(n: string) => n === 'maxima' ? 'Máx Histórica' : 'Actual 2026'} />
+                <Bar dataKey="maxima" name="maxima" fill="#d1d5db" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="actual" name="actual" fill="#1b3b5f" radius={[3, 3, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* ── Bullet chart by SKU ── */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-800 mb-1">📋 Bullet Chart por SKU — Actual vs Máxima Histórica</h3>
+          <p className="text-xs text-gray-400 mb-4">
+            Barra coloreada = cobertura actual. Línea gris = máxima histórica. La diferencia es la distribución recuperable.
+          </p>
+
+          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap text-xs mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400 font-medium">Ordenar:</span>
+              {([['gap', 'Mayor Gap'], ['actual', 'Cobertura Actual'], ['maxima', 'Máxima Histórica']] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setCobSort(k)}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors border ${cobSort === k ? 'bg-[#1b3b5f] text-white border-[#1b3b5f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                  {l}
+                </button>
+              ))}
             </div>
-            <div className={`grid grid-cols-2 md:grid-cols-${Math.min(Object.keys(cob.formatos).length, 4)} gap-3`}>
-              {Object.entries(cob.formatos).map(([formato, n]) => {
-                const color = CADENA_COLORS[formato] ?? '#6b7280'
-                const pct = Math.round(n / cob.total * 100)
-                return (
-                  <div key={formato} className="bg-gray-50 rounded-lg p-3">
-                    <div className="flex items-center gap-1.5 mb-1">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
-                      <p className="text-xs font-medium text-gray-600 truncate">{formato}</p>
-                    </div>
-                    <p className="text-xl font-bold text-gray-800">{n}</p>
-                    <div className="mt-1.5 bg-gray-200 rounded-full h-1">
-                      <div className="h-1 rounded-full" style={{ width: `${pct}%`, background: color }} />
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1">{pct}% de la red</p>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-400 font-medium">Vista:</span>
+              {([['numerica', 'Numérica'], ['ponderada', 'Ponderada']] as const).map(([k, l]) => (
+                <button key={k} onClick={() => setCobVista(k)}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors border ${cobVista === k ? 'bg-[#1b3b5f] text-white border-[#1b3b5f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1 max-h-[500px] overflow-y-auto pr-1">
+            {bulletRows.map((r: any) => (
+              <div key={r.sku} className="flex items-center gap-3 py-1.5">
+                <div className="w-52 flex-shrink-0">
+                  <p className="text-xs font-semibold text-gray-700 truncate">{r.descripcion}</p>
+                  <p className="text-[10px] text-gray-400">{r.sku} · {r.categoria}</p>
+                </div>
+                <div className="flex-1 relative h-7 bg-gray-100 rounded overflow-hidden">
+                  <div className="absolute inset-y-0 left-0 bg-gray-200 rounded"
+                    style={{ width: `${Math.min(r._max, 100)}%` }} />
+                  <div className="absolute inset-y-0 left-0 rounded transition-all"
+                    style={{ width: `${Math.min(r._actual, 100)}%`, backgroundColor: barColor(r._actual) }} />
+                  {r._max > r._actual && (
+                    <div className="absolute inset-y-0 w-0.5 bg-gray-500 opacity-60"
+                      style={{ left: `${Math.min(r._max, 100)}%` }} />
+                  )}
+                </div>
+                <div className="flex gap-4 text-right flex-shrink-0">
+                  <div className="w-12">
+                    <p className="text-[9px] text-gray-400">Actual</p>
+                    <p className="text-xs font-bold" style={{ color: barColor(r._actual) }}>{r._actual.toFixed(0)}%</p>
                   </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-        {/* Live inventory when available */}
-        {inv?.disponible ? (
-          <Inventarios />
-        ) : (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-6 flex items-start gap-4">
-            <div className="text-3xl">📦</div>
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-1">Snapshot de Inventario por Tienda</p>
-              <p className="text-sm text-gray-400">Disponible cuando se cargue el inventario PDV en <code className="bg-gray-100 px-1 rounded text-xs">inventario_walmart</code>.</p>
-              <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-700 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" /> Pendiente de datos
+                  <div className="w-10">
+                    <p className="text-[9px] text-gray-400">Máx</p>
+                    <p className="text-xs font-semibold text-gray-500">{r._max.toFixed(0)}%</p>
+                  </div>
+                  <div className="w-14">
+                    <p className="text-[9px] text-gray-400">Gap</p>
+                    <p className={`text-xs font-bold ${r.gap_pp > 0 ? 'text-orange-500' : 'text-emerald-600'}`}>
+                      {r.gap_pp > 0 ? '+' : ''}{r.gap_pp.toFixed(1)}pp
+                    </p>
+                  </div>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
-        )}
+        </div>
+
       </div>
     )
   }
@@ -1168,41 +1352,368 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     if (L) return <CardSkeleton cols={4} />
     if (!inv?.disponible) return <ProximamentePlaceholder section="inventarios" />
 
-    const k    = inv.kpis
-    const rows: any[] = inv.rows ?? []
+    const k         = inv.kpis
+    const cediRows: any[] = inv.cedi_rows ?? []
+
+    // ── Value summary ────────────────────────────────────────────────────────
+    const pdvValor   = k.pdv_valor   ?? 0
+    const cediValor  = k.cedi_valor  ?? 0
+    const totalValor = pdvValor + cediValor
+    const cediPct    = totalValor > 0 ? Math.round((cediValor / totalValor) * 100) : 0
+    const pdvPct     = 100 - cediPct
+    const pdvInv     = k.pdv_inv      ?? 0
+    const cediInv    = k.cedi_unidades ?? 0
+    const fmtVal     = (v: number) => '$' + Math.round(v).toLocaleString('en-US')
+    const fecha      = k.fecha_tiendas ?? k.fecha_cedi ?? '—'
+
+    const SALUD_CFG: Record<string, { color: string; bg: string; label: string }> = {
+      'CRÍTICO':       { color: '#dc2626', bg: '#fef2f2',  label: 'Crítico <7d' },
+      'ATENCIÓN':      { color: '#f59e0b', bg: '#fffbeb',  label: 'Atención 7-14d' },
+      'SALUDABLE':     { color: '#10b981', bg: '#f0fdf4',  label: 'Saludable' },
+      'COBERTURA ALTA':{ color: '#06b6d4', bg: '#ecfeff',  label: 'Cob Alta 60-120d' },
+      'SOBRESTOCK':    { color: '#f97316', bg: '#fff7ed',  label: 'Sobrestock >120d' },
+      'SIN VPD':       { color: '#9ca3af', bg: '#f9fafb',  label: 'Sin VPD' },
+    }
+
+    const cadenas = CADENAS_POR_PAIS[pais] ?? []
+
+    function loadSkuTienda() {
+      const p = new URLSearchParams({ pais })
+      if (invSkuTiendaFilters.cadena) p.set('cadena', invSkuTiendaFilters.cadena)
+      if (invSkuTiendaFilters.salud)  p.set('salud',  invSkuTiendaFilters.salud)
+      if (invSkuTiendaFilters.prod)   p.set('prod',   invSkuTiendaFilters.prod)
+      if (currentCat) p.set('categoria', currentCat)
+      setInvSkuTiendaLoading(true)
+      fetch('/api/comercial/ejecucion/walmart/inventario/sku-tienda?' + p)
+        .then(r => r.json())
+        .then(d => setInvSkuTienda(d.rows ?? []))
+        .finally(() => setInvSkuTiendaLoading(false))
+    }
+
+    function downloadCSV() {
+      if (!invSkuTienda?.length) return
+      const cols = ['SKU', 'UPC', 'Producto', 'Categoría', 'Cadena', 'Tienda', 'Inv u', 'VPD u/d', 'DOH', 'Salud']
+      const rows = invSkuTienda.map(r => [
+        r.sku, r.upc, `"${r.descripcion}"`, r.categoria, `"${r.cadena}"`, `"${r.nombre_tienda}"`,
+        r.inv_mano, r.venta_dia > 0 ? r.venta_dia.toFixed(2) : '', r.doh ?? '', r.salud,
+      ].join(','))
+      const blob = new Blob([cols.join(',') + '\n' + rows.join('\n')], { type: 'text/csv' })
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+      a.download = `inventario-sku-tienda-${pais}.csv`; a.click()
+    }
+
+    // ── CEDI Faltantes ───────────────────────────────────────────────────────
+    const cediFaltantes = cediRows.filter((r: any) => r.inv_mano_cajas === 0)
 
     return (
       <div className="space-y-5">
 
-        {/* KPI cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { label: 'SKUs c/inventario', value: k.total_items,    sub: `Semana ${k.ultima_semana ?? '—'}`, icon: '📦', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
-            { label: 'Críticos (DOH≤7)',  value: k.criticos,       sub: 'Reabasto urgente',       icon: '🔴', bg: k.criticos  > 0 ? 'bg-red-50 border-red-200'    : 'bg-white border-gray-100', tc: k.criticos  > 0 ? 'text-red-700'    : 'text-gray-800' },
-            { label: 'En alerta (7–14d)', value: k.alertas,        sub: 'Monitorear esta semana', icon: '⚠️', bg: k.alertas   > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100', tc: k.alertas   > 0 ? 'text-amber-700'  : 'text-gray-800' },
-            { label: 'Excedentes (>60d)', value: k.excedentes,     sub: 'Evaluar oferta/promo',   icon: '🔵', bg: k.excedentes > 0 ? 'bg-blue-50 border-blue-200'  : 'bg-white border-gray-100', tc: k.excedentes > 0 ? 'text-blue-700'  : 'text-gray-800' },
-          ].map(c => (
-            <div key={c.label} className={`rounded-xl border shadow-sm p-5 ${c.bg}`}>
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
-                <span className="text-lg">{c.icon}</span>
+        {/* ── Panel 1: Header KPI + Distribution bar ──────────────────────── */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
+            <span>📦</span>
+            <h3 className="text-sm font-semibold text-gray-700">Inventarios{fecha !== '—' ? ` al ${fecha}` : ''} · CEDI + PDV</h3>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 p-5">
+            {[
+              { label: 'INV CEDI',      value: fmtVal(cediValor), sub: `${Math.round(cediInv).toLocaleString('en-US')} u · ${k.cedi_skus ?? 0} SKUs`, tc: 'text-blue-700', bg: 'bg-blue-50 border-blue-100' },
+              { label: 'INV PDV',       value: fmtVal(pdvValor),  sub: `${Math.round(pdvInv).toLocaleString('en-US')} u · ${k.pdv_tiendas_dist ?? 0} tiendas`, tc: 'text-emerald-700', bg: 'bg-emerald-50 border-emerald-100' },
+              { label: 'TOTAL SISTEMA', value: fmtVal(totalValor),sub: `${Math.round(pdvInv + cediInv).toLocaleString('en-US')} u totales`, tc: 'text-gray-800', bg: 'bg-white border-gray-100' },
+              { label: 'DISTRIBUCIÓN',  value: `${cediPct}% CEDI`,sub: `${pdvPct}% PDV — ratio deseable <40% CEDI`, tc: 'text-gray-700', bg: 'bg-gray-50 border-gray-100' },
+            ].map(c => (
+              <div key={c.label} className={`rounded-xl border p-4 ${c.bg}`}>
+                <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2">{c.label}</p>
+                <p className={`text-xl font-bold mb-1 ${c.tc}`}>{c.value}</p>
+                <p className="text-xs text-gray-500">{c.sub}</p>
               </div>
-              <p className={`text-2xl font-bold mb-1 ${c.tc}`}>{c.value}</p>
-              <p className="text-xs text-gray-400">{c.sub}</p>
+            ))}
+          </div>
+          {totalValor > 0 && (
+            <div className="px-5 pb-4">
+              <div className="flex rounded-full overflow-hidden h-2.5">
+                <div className="bg-blue-400 transition-all" style={{ width: `${cediPct}%` }} />
+                <div className="bg-emerald-400 flex-1" />
+              </div>
+              <div className="flex gap-5 mt-1.5">
+                <span className="text-[10px] text-gray-400 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-400 inline-block" />CEDI {cediPct}%</span>
+                <span className="text-[10px] text-gray-400 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />PDV {pdvPct}%</span>
+              </div>
             </div>
-          ))}
+          )}
         </div>
 
-        {/* CEDI summary */}
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: 'CEDI Unidades', value: k.cedi_unidades.toLocaleString('en-US'), sub: 'Inventario en CEDI (unidades)' },
-            { label: 'CEDI Cajas',    value: k.cedi_cajas.toLocaleString('en-US'),    sub: 'Inventario en CEDI (cajas)'   },
-          ].map(c => (
-            <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest leading-tight mb-1">{c.label}</p>
-              <p className="text-xl font-bold text-gray-800">{c.value}</p>
-              <p className="text-[10px] text-gray-400 mt-0.5">{c.sub}</p>
+        {/* ── Panel 2: CEDI sin stock ──────────────────────────────────────── */}
+        {cediRows.length > 0 && (
+          cediFaltantes.length === 0 ? (
+            <div className="bg-emerald-50 rounded-xl border border-emerald-100 p-4 flex items-center gap-3">
+              <span className="text-xl">✅</span>
+              <div>
+                <p className="text-sm font-semibold text-emerald-800">Sin CEDI Faltantes</p>
+                <p className="text-xs text-emerald-600">Todos los {cediRows.length} SKUs activos tienen stock en CEDI.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-xl border-l-4 border-red-500 bg-gradient-to-r from-red-50 to-red-50/20 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-red-100">
+                <h3 className="text-sm font-semibold text-red-800">🚨 CEDI Faltantes — SKUs SIN stock en CEDI</h3>
+                <p className="text-xs text-red-600 mt-0.5">{cediFaltantes.length} SKUs dependen solo del stock en PDV. Si PDV se agota antes del próximo pedido = quiebre nacional.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-red-50/60 text-gray-500 uppercase tracking-widest text-[10px]">
+                    <th className="text-left px-4 py-2.5">Producto</th><th className="text-left px-3 py-2.5">Cat.</th>
+                    <th className="text-right px-3 py-2.5">VPD u/d</th><th className="text-right px-3 py-2.5">Unidades PDV</th>
+                    <th className="text-right px-4 py-2.5">DOH PDV</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-red-50">
+                    {cediFaltantes.map((r: any, i: number) => (
+                      <tr key={i} className="hover:bg-red-50/30">
+                        <td className="px-4 py-2.5 font-medium text-gray-700"><span className="text-gray-400 mr-1.5 text-[10px]">{r.sku}</span>{r.descripcion}</td>
+                        <td className="px-3 py-2.5 text-gray-400">{r.categoria}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-gray-500">{r.venta_dia > 0 ? r.venta_dia.toFixed(1) : '—'}</td>
+                        <td className="px-3 py-2.5 text-right font-mono">{r.inv_mano_unidades?.toLocaleString('en-US') ?? '—'}</td>
+                        <td className="px-4 py-2.5 text-right font-mono font-bold">
+                          <DohChip d={r.doh} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        )}
+
+        {/* ── Panel 3: CEDI tabla completa ─────────────────────────────────── */}
+        {cediRows.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-50">
+              <h3 className="text-sm font-semibold text-gray-700">🏭 Inventario CEDI por SKU</h3>
+              <p className="text-xs text-gray-400">{bandera} {paisNombre} · {cediRows.length} SKUs · {k.fecha_cedi ?? '—'}</p>
+            </div>
+            <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+              <table className="w-full table-fixed text-xs">
+                <colgroup>
+                  <col style={{width:'20%'}} />
+                  <col style={{width:'11%'}} />
+                  <col style={{width:'7%'}} />
+                  <col style={{width:'10%'}} />
+                  <col style={{width:'5%'}} />
+                  <col style={{width:'6%'}} />
+                  <col style={{width:'9%'}} />
+                  <col style={{width:'8%'}} />
+                  <col style={{width:'7%'}} />
+                  <col style={{width:'8%'}} />
+                </colgroup>
+                <thead className="sticky top-0 z-10">
+                  <tr className="bg-gray-50 text-gray-400 uppercase tracking-widest text-[10px]">
+                    <th className="text-left px-4 py-2.5">Producto</th>
+                    <th className="text-left px-4 py-2.5">Cód. Barras</th>
+                    <th className="text-left px-4 py-2.5">Cat.</th>
+                    <th className="text-left px-4 py-2.5">Subcategoría</th>
+                    <th className="text-right px-3 py-2.5">VNPK</th>
+                    <th className="text-right px-3 py-2.5">Cajas</th>
+                    <th className="text-right px-3 py-2.5">Unidades</th>
+                    <th className="text-right px-3 py-2.5">Vta/día</th>
+                    <th className="text-right px-3 py-2.5">DOH</th>
+                    <th className="text-right px-3 py-2.5">Orden (cj)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {cediRows.map((r: any, i: number) => (
+                    <tr key={i} className={(r.inv_mano_cajas === 0 || (r.doh !== null && r.doh <= 7)) ? 'bg-red-50/40' : 'hover:bg-gray-50/60'}>
+                      <td className="px-4 py-2 font-medium text-gray-700">
+                        <p className="font-mono text-[10px] text-gray-400">{r.sku}</p>
+                        <p className="whitespace-normal">{r.descripcion}</p>
+                      </td>
+                      <td className="px-4 py-2 font-mono text-[10px] text-gray-400">{r.upc || '—'}</td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold ${r.categoria?.toLowerCase().includes('leche') ? 'bg-blue-50 text-blue-600' : r.categoria?.toLowerCase().includes('helado') ? 'bg-teal-50 text-teal-600' : 'bg-amber-50 text-amber-700'}`}>{r.categoria || '—'}</span>
+                      </td>
+                      <td className="px-4 py-2 text-[10px] text-gray-500 truncate">{r.subcategoria || '—'}</td>
+                      <td className="px-3 py-2 text-right font-mono text-gray-400 text-[10px]">{r.vnpk_qty ?? 1}</td>
+                      <td className="px-3 py-2 text-right font-mono text-gray-500">
+                        {r.inv_mano_cajas === 0 ? <span className="text-red-500 font-bold">0</span> : r.inv_mano_cajas.toLocaleString('en-US')}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono font-semibold text-gray-700">
+                        {r.inv_mano_unidades != null
+                          ? (r.inv_mano_unidades === 0 ? <span className="text-red-500 font-bold">0</span> : r.inv_mano_unidades.toLocaleString('en-US'))
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-gray-400">{r.venta_dia > 0 ? r.venta_dia.toFixed(1) : '—'}</td>
+                      <td className="px-3 py-2 text-right"><DohChip d={r.doh ?? null} /></td>
+                      <td className="px-3 py-2 text-right font-mono text-blue-600">
+                        {r.inv_orden_cajas > 0 ? r.inv_orden_cajas.toLocaleString('en-US') : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Panel 4: SKU × Tienda ────────────────────────────────────────── */}
+        {k.fecha_tiendas && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-50">
+              <h3 className="text-sm font-semibold text-gray-700">🏬 Inventario por SKU × Tienda</h3>
+              <p className="text-xs text-gray-400">Detalle por tienda con DOH y salud · {k.fecha_tiendas}</p>
+            </div>
+
+            {/* Filters */}
+            <div className="px-5 py-3 bg-gray-50/60 border-b border-gray-100 flex items-center gap-x-3 gap-y-2 flex-wrap text-xs">
+              <span className="text-gray-400 font-medium">Cadena:</span>
+              <select value={invSkuTiendaFilters.cadena}
+                onChange={e => setInvSkuTiendaFilters(p => ({ ...p, cadena: e.target.value }))}
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400">
+                <option value="">Todas</option>
+                {cadenas.map(c => <option key={c}>{c}</option>)}
+              </select>
+              <span className="text-gray-400 font-medium">Salud:</span>
+              <select value={invSkuTiendaFilters.salud}
+                onChange={e => setInvSkuTiendaFilters(p => ({ ...p, salud: e.target.value }))}
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400">
+                <option value="">Todas</option>
+                {['CRÍTICO', 'ATENCIÓN', 'SALUDABLE', 'COBERTURA ALTA', 'SOBRESTOCK', 'SIN VPD'].map(s => <option key={s}>{s}</option>)}
+              </select>
+              <input value={invSkuTiendaFilters.prod}
+                onChange={e => setInvSkuTiendaFilters(p => ({ ...p, prod: e.target.value }))}
+                placeholder="Producto / SKU…"
+                className="border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 w-44" />
+              <button onClick={loadSkuTienda}
+                className="px-3 py-1.5 bg-[#1b3b5f] text-white rounded-lg font-medium hover:bg-[#0f2a47] transition-colors">
+                {invSkuTiendaLoading ? 'Cargando…' : invSkuTienda ? 'Actualizar' : 'Cargar datos'}
+              </button>
+              {invSkuTienda && (
+                <button onClick={downloadCSV}
+                  className="px-3 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+                  ⬇ CSV
+                </button>
+              )}
+              {invSkuTienda && <span className="text-gray-400">{invSkuTienda.length.toLocaleString('en-US')} filas</span>}
+            </div>
+
+            {invSkuTiendaLoading ? (
+              <div className="divide-y divide-gray-50">
+                {Array(6).fill(0).map((_, i) => (
+                  <div key={i} className="px-4 py-3 flex gap-4 animate-pulse">
+                    <div className="h-3 bg-gray-100 rounded flex-1" /><div className="h-3 bg-gray-100 rounded w-16" /><div className="h-3 bg-gray-100 rounded w-12" />
+                  </div>
+                ))}
+              </div>
+            ) : invSkuTienda === null ? (
+              <div className="px-5 py-10 text-center">
+                <p className="text-xs text-gray-300">Presiona "Cargar datos" para ver el detalle por tienda</p>
+              </div>
+            ) : invSkuTienda.length === 0 ? (
+              <p className="text-center text-gray-300 py-12 text-sm">Sin resultados con los filtros aplicados</p>
+            ) : (
+              <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 z-10">
+                    <tr className="bg-gray-50 text-gray-400 uppercase tracking-widest text-[10px]">
+                      <th className="text-left px-4 py-2.5">Producto</th>
+                      <th className="text-left px-3 py-2.5">Cat.</th>
+                      <th className="text-left px-4 py-2.5">Cadena</th>
+                      <th className="text-left px-4 py-2.5">Tienda</th>
+                      <th className="text-right px-3 py-2.5">VPD u/d</th>
+                      <th className="text-right px-3 py-2.5">Inv u</th>
+                      <th className="text-right px-3 py-2.5">DOH</th>
+                      <th className="text-center px-3 py-2.5">Salud</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {invSkuTienda.map((r: any, i: number) => {
+                      const cfg = SALUD_CFG[r.salud] ?? { color: '#9ca3af', bg: '#f9fafb', label: r.salud }
+                      return (
+                        <tr key={i} className="hover:bg-gray-50/60">
+                          <td className="px-4 py-2 font-medium text-gray-700 max-w-[200px]">
+                            <p className="truncate">{r.descripcion}</p>
+                            <p className="text-[9px] text-gray-400 font-normal font-mono">{r.sku}</p>
+                          </td>
+                          <td className="px-3 py-2 text-gray-400 text-[10px]">{r.categoria}</td>
+                          <td className="px-4 py-2">
+                            <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-[#1b3b5f]/10 text-[#1b3b5f]">{r.cadena || '—'}</span>
+                          </td>
+                          <td className="px-4 py-2 text-gray-600 max-w-[140px] truncate">{r.nombre_tienda || r.tienda_nbr}</td>
+                          <td className="px-3 py-2 text-right font-mono text-gray-500">{r.venta_dia > 0 ? r.venta_dia.toFixed(1) : '—'}</td>
+                          <td className="px-3 py-2 text-right font-mono font-semibold text-gray-700">{r.inv_mano.toLocaleString('en-US')}</td>
+                          <td className="px-3 py-2 text-right"><DohChip d={r.doh} /></td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold whitespace-nowrap"
+                              style={{ backgroundColor: cfg.bg, color: cfg.color }}>
+                              {cfg.label}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+      </div>
+    )
+  }
+
+  // ── Innovaciones ─────────────────────────────────────────────────────────
+
+  function Innovaciones() {
+    const L = isL('innovaciones')
+    if (L) return <CardSkeleton cols={4} />
+
+    const rows: any[]  = innov?.rows ?? []
+    const porCat: Record<string, number> = innov?.por_categoria ?? {}
+    const total: number = innov?.total ?? 0
+
+    if (!L && total === 0) return (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
+        <p className="text-3xl mb-2">🆕</p>
+        <p className="text-sm font-semibold text-gray-600">Sin innovaciones en los últimos 3 meses</p>
+        <p className="text-xs text-gray-400 mt-1">No hay SKUs con primera venta dentro de los últimos 90 días para {paisNombre}</p>
+      </div>
+    )
+
+    const CAT_COLORS: Record<string, string> = {
+      'Quesos':  '#c8873a',
+      'Leches':  '#3a6fa8',
+      'Helados': '#2a7a58',
+    }
+
+    const diasDesde = (fecha: string) => {
+      const d = Math.floor((Date.now() - new Date(fecha).getTime()) / 86400000)
+      if (d === 0) return 'hoy'
+      if (d === 1) return 'ayer'
+      return `hace ${d}d`
+    }
+
+    const badgeClass = (fecha: string) => {
+      const d = Math.floor((Date.now() - new Date(fecha).getTime()) / 86400000)
+      if (d <= 30)  return 'bg-green-100 text-green-700 border-green-200'
+      if (d <= 60)  return 'bg-amber-100 text-amber-700 border-amber-200'
+      return 'bg-gray-100 text-gray-500 border-gray-200'
+    }
+
+    return (
+      <div className="space-y-5">
+
+        {/* KPI row */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Nuevos SKUs</p>
+            <p className="text-3xl font-bold text-gray-800">{total}</p>
+            <p className="text-xs text-gray-400 mt-1">Con primera venta en últimos 3 meses</p>
+          </div>
+          {Object.entries(porCat).map(([cat, n]) => (
+            <div key={cat} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5"
+              style={{ borderLeftColor: CAT_COLORS[cat] ?? '#6b7280', borderLeftWidth: 4 }}>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">{cat}</p>
+              <p className="text-3xl font-bold text-gray-800">{n}</p>
+              <p className="text-xs text-gray-400 mt-1">nuevos SKUs</p>
             </div>
           ))}
         </div>
@@ -1210,42 +1721,62 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         {/* Detail table */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-50">
-            <h3 className="text-sm font-semibold text-gray-700">Inventario por SKU — Semana {k.ultima_semana ?? '—'}</h3>
-            <p className="text-xs text-gray-400">RetailLink · {pais} · ordenado por DOH ascendente</p>
+            <h3 className="text-sm font-semibold text-gray-700">SKUs con menos de 3 meses de historia</h3>
+            <p className="text-xs text-gray-400">{bandera} {paisNombre} · ordenado por lanzamiento más reciente</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-gray-50 text-gray-400 uppercase tracking-widest text-[10px]">
-                  <th className="text-left px-4 py-2.5">Item #</th>
+                  <th className="text-left px-4 py-2.5">SKU</th>
                   <th className="text-left px-4 py-2.5">Descripción</th>
-                  <th className="text-left px-3 py-2.5">Tipo</th>
-                  <th className="text-right px-3 py-2.5">PDV (u)</th>
-                  <th className="text-right px-3 py-2.5">Órdenes</th>
-                  <th className="text-right px-3 py-2.5">Tránsito</th>
-                  <th className="text-right px-3 py-2.5">CEDI (u)</th>
-                  <th className="text-right px-3 py-2.5">V/día</th>
-                  <th className="text-right px-4 py-2.5">DOH</th>
+                  <th className="text-left px-3 py-2.5">Cat.</th>
+                  <th className="text-center px-3 py-2.5">Lanzamiento</th>
+                  <th className="text-center px-3 py-2.5">Meses</th>
+                  <th className="text-center px-3 py-2.5">Cadenas</th>
+                  <th className="text-center px-3 py-2.5">PDVs</th>
+                  <th className="text-right px-4 py-2.5">Unidades</th>
+                  <th className="text-right px-4 py-2.5">Valor</th>
+                  <th className="text-left px-4 py-2.5 min-w-[120px]">Tendencia</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {rows.map((r, i) => (
-                  <tr key={i} className={
-                    r.doh !== null && r.doh < 7  ? 'bg-red-50/40' :
-                    r.doh !== null && r.doh < 14 ? 'bg-amber-50/30' :
-                    'hover:bg-gray-50/60'
-                  }>
-                    <td className="px-4 py-2.5 font-mono text-gray-400">{r.sku}</td>
-                    <td className="px-4 py-2.5 font-medium text-gray-700 max-w-[200px] truncate">{r.descripcion}</td>
-                    <td className="px-3 py-2.5 text-gray-400">{r.item_type || '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono">{r.inventario.toLocaleString('en-US')}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-blue-600">{r.ordenes > 0 ? r.ordenes.toLocaleString('en-US') : '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-indigo-600">{r.transito > 0 ? r.transito.toLocaleString('en-US') : '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-500">{r.inv_cedi_unds > 0 ? r.inv_cedi_unds.toLocaleString('en-US') : '—'}</td>
-                    <td className="px-3 py-2.5 text-right font-mono text-gray-500">{r.venta_dia > 0 ? r.venta_dia.toFixed(1) : '—'}</td>
-                    <td className="px-4 py-2.5 text-right"><DohChip d={r.doh} /></td>
-                  </tr>
-                ))}
+                {rows.map((r, i) => {
+                  const maxVal = Math.max(...(r.mensual ?? []).map((m: any) => parseFloat(m.valor) || 0), 1)
+                  return (
+                    <tr key={i} className="hover:bg-gray-50/60">
+                      <td className="px-4 py-2.5 font-mono text-gray-400 text-[11px]">{r.sku}</td>
+                      <td className="px-4 py-2.5 font-medium text-gray-700 max-w-[200px] truncate">{r.descripcion}</td>
+                      <td className="px-3 py-2.5 text-gray-500">{r.categoria || '—'}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium ${badgeClass(r.primera_venta)}`}>
+                          {diasDesde(r.primera_venta)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-gray-600 font-semibold">{r.meses_activo}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-500">{r.cadenas}</td>
+                      <td className="px-3 py-2.5 text-center text-gray-500">{r.puntos_venta}</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-gray-700">{r.total_unidades.toLocaleString('en-US')}</td>
+                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-700">{fmtFull(r.total_valor)}</td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-end gap-0.5 h-6">
+                          {(r.mensual ?? []).map((m: any, j: number) => {
+                            const h = Math.max(Math.round((parseFloat(m.valor) / maxVal) * 20), 2)
+                            return (
+                              <div key={j} className="relative group flex-1 min-w-[12px]">
+                                <div
+                                  className="w-full rounded-sm bg-amber-400 hover:bg-amber-500 transition-colors cursor-default"
+                                  style={{ height: h }}
+                                  title={`${m.mes}: ${fmtFull(parseFloat(m.valor))}`}
+                                />
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -1263,21 +1794,6 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     return (
       <div className="space-y-5">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex flex-wrap gap-4 items-end">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Cadena</p>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden flex-wrap">
-              <button onClick={() => setCadenaFilter('')}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${cadenaFilter === '' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                Todas
-              </button>
-              {(CADENAS_POR_PAIS[pais] ?? []).map(c => (
-                <button key={c} onClick={() => setCadenaFilter(c)}
-                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${cadenaFilter === c ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {c}
-                </button>
-              ))}
-            </div>
-          </div>
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Top N</p>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
@@ -1403,7 +1919,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       case 'pareto':          return Pareto()
       case 'pedidos':         return <ProximamentePlaceholder section="pedidos" />
       case 'ofertas':         return inv?.disponible ? Inventarios() : <ProximamentePlaceholder section="ofertas" />
-      case 'innovaciones':    return <ProximamentePlaceholder section="innovaciones" />
+      case 'innovaciones':    return Innovaciones()
       case 'perdida':         return inv?.disponible ? Inventarios() : <ProximamentePlaceholder section="perdida" />
       case 'precios':         return <ProximamentePlaceholder section="precios" />
       case 'recomendaciones': return <ProximamentePlaceholder section="recomendaciones" />

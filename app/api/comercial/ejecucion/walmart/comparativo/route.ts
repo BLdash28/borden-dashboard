@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
         FROM fact_ventas_walmart
         WHERE pais = '${paisSafe}'
           AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
-          AND categoria IN ('Quesos', 'Leches')
+          AND categoria IN ('Quesos', 'Leches', 'Helados')
         GROUP BY EXTRACT(MONTH FROM fecha)::int, categoria
         ORDER BY mes, categoria
       `),
@@ -36,7 +36,7 @@ export async function GET(req: NextRequest) {
         WHERE ano = 2026
           AND pais = '${paisSafe}'
           AND cliente_nombre = '${clienteSafe}'
-          AND categoria IN ('Quesos', 'Leches')
+          AND categoria IN ('Quesos', 'Leches', 'Helados')
         GROUP BY mes, categoria
         ORDER BY mes, categoria
       `),
@@ -59,8 +59,9 @@ export async function GET(req: NextRequest) {
     const maxMes = allMeses.size > 0 ? Math.max(...allMeses) : 0
 
     type Point = { mes: number; mes_nombre: string; sellout: number; sellin: number }
-    const quesos: Point[] = []
-    const leches: Point[] = []
+    const quesos:  Point[] = []
+    const leches:  Point[] = []
+    const helados: Point[] = []
 
     for (let m = 1; m <= maxMes; m++) {
       const qSellout = selloutByKey[`${m}-Quesos`] ?? 0
@@ -74,9 +75,15 @@ export async function GET(req: NextRequest) {
       if (lSellout > 0 || lSellin > 0) {
         leches.push({ mes: m, mes_nombre: MN[m] ?? '', sellout: lSellout, sellin: lSellin })
       }
+
+      const hSellout = selloutByKey[`${m}-Helados`] ?? 0
+      const hSellin  = sellinByKey[`${m}-Helados`]  ?? 0
+      if (hSellout > 0 || hSellin > 0) {
+        helados.push({ mes: m, mes_nombre: MN[m] ?? '', sellout: hSellout, sellin: hSellin })
+      }
     }
 
-    return NextResponse.json({ quesos, leches })
+    return NextResponse.json({ quesos, leches, helados })
   } catch (err) {
     return handleApiError(err)
   }

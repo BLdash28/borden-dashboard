@@ -20,40 +20,59 @@ export async function GET(req: NextRequest) {
       const subcats      = sp.get('subcategoria') ? sp.get('subcategoria')!.split(',').filter(Boolean) : []
       const catFilter    = cats.length    ? `AND ${inC('categoria',    cats)}` : ''
       const subcatFilter = subcats.length ? `AND ${inC('subcategoria', subcats)}` : ''
-      const histParts    = [cats.length && inC('categoria', cats), subcats.length && inC('subcategoria', subcats)].filter(Boolean)
-      const histWhere    = histParts.length ? `WHERE ${histParts.join(' AND ')}` : ''
+
+      const IS_PDV  = `NOT (tienda ILIKE '1001%' OR tienda ILIKE '1017%')`
 
       const [skuR, totalR, histR, wgtR] = await Promise.all([
+        // SKU metadata from sales + current inventory presence at latest snapshot
         pool.query(`
-          SELECT
-            codigo_barras                          AS sku,
-            MAX(descripcion)                       AS descripcion,
-            MAX(categoria)                         AS categoria,
-            COUNT(DISTINCT nombre_sucursal)        AS pdvs_activos,
-            ROUND(SUM(ventas_valor)::numeric, 2)   AS valor
-          FROM fact_ventas_selectos
-          WHERE EXTRACT(YEAR FROM fecha) = ${ano} ${catFilter} ${subcatFilter}
-          GROUP BY codigo_barras
-          ORDER BY pdvs_activos DESC, valor DESC
+          WITH ultima AS (
+            SELECT MAX(fecha) AS fecha FROM fact_selectos_inventario
+          ),
+          sku_meta AS (
+            SELECT codigo_barras AS sku,
+              MAX(descripcion) AS descripcion,
+              MAX(categoria)   AS categoria,
+              ROUND(SUM(ventas_valor)::numeric, 2) AS valor
+            FROM fact_ventas_selectos
+            WHERE EXTRACT(YEAR FROM fecha) = ${ano} ${catFilter} ${subcatFilter}
+            GROUP BY codigo_barras
+          ),
+          sku_inv AS (
+            SELECT fsi.codigo_barra AS sku,
+              COUNT(DISTINCT fsi.tienda) AS pdvs_activos
+            FROM fact_selectos_inventario fsi
+            JOIN ultima u ON fsi.fecha = u.fecha
+            WHERE ${IS_PDV} AND fsi.inventario_unidades > 0
+            GROUP BY fsi.codigo_barra
+          )
+          SELECT m.sku, m.descripcion, m.categoria, m.valor,
+            COALESCE(i.pdvs_activos, 0) AS pdvs_activos
+          FROM sku_meta m
+          LEFT JOIN sku_inv i ON i.sku = m.sku
+          ORDER BY COALESCE(i.pdvs_activos, 0) DESC, m.valor DESC
           LIMIT 200
         `),
+        // Total PDV stores at latest inventory snapshot
         pool.query(`
-          SELECT COUNT(DISTINCT nombre_sucursal) AS n
-          FROM fact_ventas_selectos
-          WHERE EXTRACT(YEAR FROM fecha) = ${ano} ${catFilter} ${subcatFilter}
+          SELECT COUNT(DISTINCT tienda) AS n
+          FROM fact_selectos_inventario
+          JOIN (SELECT MAX(fecha) AS fecha FROM fact_selectos_inventario) u USING (fecha)
+          WHERE ${IS_PDV}
         `),
-        // Historical max: best month ever per SKU (all years)
+        // Historical max: best snapshot date per SKU (all time, inventory-based)
         pool.query(`
-          WITH monthly AS (
-            SELECT codigo_barras, DATE_TRUNC('month', fecha) AS mes,
-              COUNT(DISTINCT nombre_sucursal) AS n
-            FROM fact_ventas_selectos ${histWhere}
-            GROUP BY codigo_barras, mes
+          WITH daily AS (
+            SELECT codigo_barra, fecha,
+              COUNT(DISTINCT tienda) AS n
+            FROM fact_selectos_inventario
+            WHERE ${IS_PDV} AND inventario_unidades > 0
+            GROUP BY codigo_barra, fecha
           )
-          SELECT codigo_barras AS sku, MAX(n) AS pdvs_max
-          FROM monthly GROUP BY codigo_barras
+          SELECT codigo_barra AS sku, MAX(n) AS pdvs_max
+          FROM daily GROUP BY codigo_barra
         `),
-        // Weighted coverage: each store weighted by its share of total ${ano} sales
+        // Weighted coverage: stores weighted by their share of total ${ano} sales
         pool.query(`
           WITH store_val AS (
             SELECT nombre_sucursal, SUM(ventas_valor) AS venta

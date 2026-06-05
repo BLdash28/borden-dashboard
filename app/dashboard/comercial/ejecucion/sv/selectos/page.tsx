@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, PieChart, Pie,
-  XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
   ResponsiveContainer, Legend, ReferenceLine, Cell,
 } from 'recharts'
 
@@ -156,7 +156,7 @@ export default function EjecucionSelectos() {
   const [evolVista,       setEvolVista]       = useState<'mensual' | 'diaria'>('mensual')
   const [evolDesde,       setEvolDesde]       = useState('')
   const [evolHasta,       setEvolHasta]       = useState('')
-  const [evolSubcat,      setEvolSubcat]      = useState('')
+  const [evolSubcat,      setEvolSubcat]      = useState<string[]>([])
   const [evolSubcatOpts,  setEvolSubcatOpts]  = useState<string[]>([])
   const [evolTop5Cat,      setEvolTop5Cat]      = useState('')
   const [evolDiario,       setEvolDiario]       = useState<any>(null)
@@ -167,7 +167,7 @@ export default function EjecucionSelectos() {
   const [cobVista,      setCobVista]      = useState<'numerica' | 'ponderada'>('numerica')
   const [cobSort,       setCobSort]       = useState<'gap' | 'actual' | 'maxima'>('gap')
   const [cobCat,        setCobCat]        = useState('')
-  const [cobSubcat,     setCobSubcat]     = useState('')
+  const [cobSubcat,     setCobSubcat]     = useState<string[]>([])
   const [cobSubcatOpts, setCobSubcatOpts] = useState<string[]>([])
   const cobInitRef = useRef(false)
 
@@ -177,7 +177,7 @@ export default function EjecucionSelectos() {
   useEffect(() => {
     if (!evolInitRef.current) return
     // Reload subcategory options when category changes; reset selected subcat
-    setEvolSubcat('')
+    setEvolSubcat([])
     const scUrl = evolCat
       ? `/api/comercial/ejecucion/evolucion/selectos-subcategorias?categoria=${evolCat}`
       : '/api/comercial/ejecucion/evolucion/selectos-subcategorias'
@@ -186,8 +186,8 @@ export default function EjecucionSelectos() {
     const tsP = new URLSearchParams()
     if (evolCat) tsP.set('categoria', evolCat)
     const t5P = new URLSearchParams({ top: String(evolTopN) })
-    if (evolTop5Cat) t5P.set('categoria', evolTop5Cat)
-    if (evolSubcat)  t5P.set('subcategoria', evolSubcat)
+    if (evolTop5Cat)       t5P.set('categoria',    evolTop5Cat)
+    if (evolSubcat.length) t5P.set('subcategoria', evolSubcat.join(','))
     Promise.all([
       fetch(`/api/comercial/ejecucion/evolucion/selectos-timeseries?${tsP}`).then(r => r.json()),
       fetch(`/api/comercial/ejecucion/evolucion/selectos-top5?${t5P}`).then(r => r.json()),
@@ -201,11 +201,11 @@ export default function EjecucionSelectos() {
   useEffect(() => {
     if (!evolInitRef.current) return
     const tsP = new URLSearchParams()
-    if (evolCat)    tsP.set('categoria',    evolCat)
-    if (evolSubcat) tsP.set('subcategoria', evolSubcat)
+    if (evolCat)           tsP.set('categoria',    evolCat)
+    if (evolSubcat.length) tsP.set('subcategoria', evolSubcat.join(','))
     const t5P = new URLSearchParams({ top: String(evolTopN) })
-    if (evolTop5Cat) t5P.set('categoria', evolTop5Cat)
-    if (evolSubcat)  t5P.set('subcategoria', evolSubcat)
+    if (evolTop5Cat)       t5P.set('categoria',    evolTop5Cat)
+    if (evolSubcat.length) t5P.set('subcategoria', evolSubcat.join(','))
     Promise.all([
       fetch(`/api/comercial/ejecucion/evolucion/selectos-timeseries?${tsP}`).then(r => r.json()),
       fetch(`/api/comercial/ejecucion/evolucion/selectos-top5?${t5P}`).then(r => r.json()),
@@ -217,8 +217,8 @@ export default function EjecucionSelectos() {
     if (!evolInitRef.current) return
     if (evolVista !== 'diaria') return
     const p = new URLSearchParams()
-    if (evolCat)    p.set('categoria',    evolCat)
-    if (evolSubcat) p.set('subcategoria', evolSubcat)
+    if (evolCat)           p.set('categoria',    evolCat)
+    if (evolSubcat.length) p.set('subcategoria', evolSubcat.join(','))
     // date range: desde/hasta as YYYY-MM → use first/last day of month
     if (evolDesde) p.set('desde', evolDesde + '-01')
     if (evolHasta) {
@@ -233,7 +233,7 @@ export default function EjecucionSelectos() {
   // Re-fetch cobertura when cobCat changes (reset subcat, reload subcategory options)
   useEffect(() => {
     if (!cobInitRef.current) return
-    setCobSubcat('')
+    setCobSubcat([])
     const scUrl = cobCat
       ? `/api/comercial/ejecucion/evolucion/selectos-subcategorias?categoria=${cobCat}`
       : '/api/comercial/ejecucion/evolucion/selectos-subcategorias'
@@ -254,11 +254,11 @@ export default function EjecucionSelectos() {
   useEffect(() => {
     if (!cobInitRef.current) return
     const q = new URLSearchParams({ pais: 'SV' })
-    if (cobCat)    q.set('categoria',    cobCat)
-    if (cobSubcat) q.set('subcategoria', cobSubcat)
+    if (cobCat)           q.set('categoria',    cobCat)
+    if (cobSubcat.length) q.set('subcategoria', cobSubcat.join(','))
     const nseQ = new URLSearchParams()
-    if (cobCat)    nseQ.set('categoria',    cobCat)
-    if (cobSubcat) nseQ.set('subcategoria', cobSubcat)
+    if (cobCat)           nseQ.set('categoria',    cobCat)
+    if (cobSubcat.length) nseQ.set('subcategoria', cobSubcat.join(','))
     setL('cobertura', true)
     Promise.all([
       fetch('/api/comercial/ejecucion/cobertura?' + q).then(r => r.json()),
@@ -318,11 +318,11 @@ export default function EjecucionSelectos() {
         fetch('/dashboards/selectos_data.json').then(r => r.json()).then(d => setSelectosData(d))
       }
       const tsP = new URLSearchParams()
-      if (evolCat)    tsP.set('categoria',    evolCat)
-      if (evolSubcat) tsP.set('subcategoria', evolSubcat)
+      if (evolCat)           tsP.set('categoria',    evolCat)
+      if (evolSubcat.length) tsP.set('subcategoria', evolSubcat.join(','))
       const t5P = new URLSearchParams({ top: String(evolTopN) })
-      if (evolTop5Cat) t5P.set('categoria', evolTop5Cat)
-      if (evolSubcat)  t5P.set('subcategoria', evolSubcat)
+      if (evolTop5Cat)       t5P.set('categoria',    evolTop5Cat)
+      if (evolSubcat.length) t5P.set('subcategoria', evolSubcat.join(','))
       // Load subcategory options for both sections
       const t5ScUrl = evolTop5Cat
         ? `/api/comercial/ejecucion/evolucion/selectos-subcategorias?categoria=${evolTop5Cat}`
@@ -1046,12 +1046,17 @@ export default function EjecucionSelectos() {
                 </button>
               ))}
             </div>
-            <span className="text-gray-400 font-medium">Subcategoría:</span>
-            <select value={evolSubcat} onChange={e => setEvolSubcat(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400">
-              <option value="">Todas</option>
-              {evolSubcatOpts.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            {evolSubcatOpts.length > 0 && (<>
+              <span className="text-gray-400 font-medium">Subcategoría:</span>
+              <div className="flex flex-wrap gap-1">
+                {evolSubcatOpts.map(s => (
+                  <button key={s} onClick={() => setEvolSubcat(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s])}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${evolSubcat.includes(s) ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-amber-50'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </>)}
             <span className="text-gray-400 font-medium">Medida:</span>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               {([['valor', 'Valor $'], ['unidades', 'Unidades']] as const).map(([k, l]) => (
@@ -1072,7 +1077,7 @@ export default function EjecucionSelectos() {
               className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400"
             />
             <button
-              onClick={() => { setEvolVista('mensual'); setEvolCat(''); setEvolSubcat(''); setEvolDesde(''); setEvolHasta('') }}
+              onClick={() => { setEvolVista('mensual'); setEvolCat(''); setEvolSubcat([]); setEvolDesde(''); setEvolHasta('') }}
               className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
               ↺ Reset
             </button>
@@ -1151,7 +1156,7 @@ export default function EjecucionSelectos() {
 
               {ts ? (
                 <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={displayedSeries} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                  <BarChart data={displayedSeries} margin={{ top: 4, right: 12, left: 0, bottom: 4 }} barCategoryGap="20%">
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
                     <YAxis
@@ -1172,20 +1177,20 @@ export default function EjecucionSelectos() {
                       <ReferenceLine y={ts.baseline_val} stroke="#f59e0b" strokeDasharray="4 4"
                         label={{ value: 'Baseline', fontSize: 9, fill: '#f59e0b', position: 'insideTopRight' }} />
                     )}
-                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
-                      stroke="#d1d5db" strokeWidth={1.5} dot={false} strokeDasharray="4 4" connectNulls />
-                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
-                      stroke="#60a5fa" strokeWidth={2} dot={false} connectNulls />
-                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
-                      stroke="#c8873a" strokeWidth={2.5} dot={{ r: 3, fill: '#c8873a' }} connectNulls />
-                  </LineChart>
+                    <Bar dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
+                      fill="#d1d5db" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
+                      fill="#93c5fd" radius={[2, 2, 0, 0]} />
+                    <Bar dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
+                      fill="#c8873a" radius={[2, 2, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               ) : <div className="h-[280px] bg-gray-50 rounded-lg animate-pulse" />}
 
               <div className="flex items-center gap-4 mt-3 text-[10px] text-gray-400 flex-wrap">
-                <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-gray-300 inline-block border-dashed" />2024</span>
-                <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-blue-400 inline-block" />2025</span>
-                <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 bg-amber-500 inline-block" />2026 YTD</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-gray-300 inline-block" />2024</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-300 inline-block" />2025</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" />2026 YTD</span>
                 {ts?.baseline_val > 0 && evolMedida === 'valor' && (
                   <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 border-t-2 border-dashed border-amber-400 inline-block" />Baseline {fmtFull(ts.baseline_val)}/mes</span>
                 )}
@@ -1220,12 +1225,17 @@ export default function EjecucionSelectos() {
                 </button>
               ))}
             </div>
-            <span className="text-gray-400 font-medium">Subcategoría:</span>
-            <select value={evolSubcat} onChange={e => setEvolSubcat(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400">
-              <option value="">Todas</option>
-              {evolSubcatOpts.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
+            {evolSubcatOpts.length > 0 && (<>
+              <span className="text-gray-400 font-medium">Subcategoría:</span>
+              <div className="flex flex-wrap gap-1">
+                {evolSubcatOpts.map(s => (
+                  <button key={s} onClick={() => setEvolSubcat(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s])}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${evolSubcat.includes(s) ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-amber-50'}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </>)}
             <span className="text-gray-400 font-medium">Mostrar:</span>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               <button onClick={() => setEvolTopN(5)}
@@ -1544,7 +1554,6 @@ export default function EjecucionSelectos() {
 
     // ── Bullet chart helpers ──
     const bulletRows = allRows
-      .filter((r: any) => !cobCat || r.categoria === cobCat)
       .map((r: any) => ({
         ...r,
         _actual: cobVista === 'ponderada' ? r.cobertura_ponderada : r.cobertura_pct,
@@ -1561,9 +1570,7 @@ export default function EjecucionSelectos() {
 
     // ── Heatmap helpers ──
     const nseGroups: string[] = (cobNse?.groups ?? []).map((g: any) => g.nse).sort()
-    const heatSkus: any[] = cobNse?.skus
-      ? cobNse.skus.filter((s: any) => !cobCat || s.categoria === cobCat)
-      : []
+    const heatSkus: any[] = cobNse?.skus ?? []
 
     // NSE cell color: 0% = red, 100% = green
     const heatBg = (pct: number) => {
@@ -1575,31 +1582,6 @@ export default function EjecucionSelectos() {
 
     return (
       <div className="space-y-5">
-
-        {/* ── Unified Category + Subcategory Controls ── */}
-        <div className="flex items-center gap-x-3 gap-y-2 flex-wrap text-xs p-3 bg-amber-50 rounded-xl border border-amber-100">
-          <span className="text-amber-700 font-semibold">Categoría:</span>
-          <div className="flex rounded-lg border border-amber-200 overflow-hidden">
-            {[{ key: '', label: 'Todas' }, { key: 'Quesos', label: 'Queso' }, { key: 'Leches', label: 'Leche' }].map(c => (
-              <button key={c.key} onClick={() => setCobCat(c.key)}
-                className={`px-3 py-1.5 font-medium transition-colors ${cobCat === c.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-amber-50'}`}>
-                {c.label}
-              </button>
-            ))}
-          </div>
-          <span className="text-amber-700 font-semibold">Subcategoría:</span>
-          <select value={cobSubcat} onChange={e => setCobSubcat(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400">
-            <option value="">Todas</option>
-            {cobSubcatOpts.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          {(cobCat || cobSubcat) && (
-            <button onClick={() => { setCobCat(''); setCobSubcat('') }}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
-              ↺ Reset
-            </button>
-          )}
-        </div>
 
         {/* ── Panel 1: Análisis Visual KPIs ── */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
@@ -1655,24 +1637,28 @@ export default function EjecucionSelectos() {
             Comparativa entre cobertura actual y máxima histórica por nivel socioeconómico de tienda.
           </p>
           {cobNse?.groups?.length > 0 ? (
-            <ResponsiveContainer width="100%" height={260}>
+            <ResponsiveContainer width="100%" height={280}>
               <BarChart
                 data={cobNse.groups.map((g: any) => ({
                   nse:    `NSE ${g.nse} (${g.n_tiendas} tiendas)`,
-                  actual: g.cob_actual_avg,
-                  maxima: g.cob_max_avg,
+                  actual: parseFloat(g.cob_actual_avg.toFixed(1)),
+                  maxima: parseFloat(Math.max(g.cob_actual_avg, g.cob_max_avg).toFixed(1)),
                 }))}
-                margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
+                margin={{ top: 24, right: 20, left: 0, bottom: 10 }}
                 barCategoryGap="30%"
               >
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="nse" tick={{ fontSize: 11 }} />
                 <YAxis domain={[0, 100]} tickFormatter={v => v + '%'} tick={{ fontSize: 11 }} width={42}
                   label={{ value: '% promedio cobertura SKUs Borden', angle: -90, position: 'insideLeft', fontSize: 9, fill: '#9ca3af', dx: -10 }} />
-                <Tooltip formatter={(v: number, n: string) => [v.toFixed(1) + '%', n === 'maxima' ? 'Cobertura Máxima Histórica' : 'Cobertura Actual']} />
-                <Legend formatter={(n: string) => n === 'maxima' ? 'Cobertura Máxima Histórica' : 'Cobertura Actual'} />
-                <Bar dataKey="maxima" name="maxima" fill="#d1d5db" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="actual" name="actual" fill="#1b3b5f" radius={[3, 3, 0, 0]} />
+                <Tooltip formatter={(v: number, n: string) => [v.toFixed(1) + '%', n === 'maxima' ? 'Máxima Histórica' : 'Cobertura Actual']} />
+                <Legend formatter={(n: string) => n === 'maxima' ? 'Máxima Histórica' : 'Cobertura Actual'} />
+                <Bar dataKey="maxima" name="maxima" fill="#d1d5db" radius={[3, 3, 0, 0]}>
+                  <LabelList dataKey="maxima" position="top" formatter={(v: number) => v.toFixed(0) + '%'} style={{ fontSize: 10, fill: '#9ca3af' }} />
+                </Bar>
+                <Bar dataKey="actual" name="actual" fill="#1b3b5f" radius={[3, 3, 0, 0]}>
+                  <LabelList dataKey="actual" position="top" formatter={(v: number) => v.toFixed(0) + '%'} style={{ fontSize: 10, fill: '#1b3b5f' }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -1720,12 +1706,12 @@ export default function EjecucionSelectos() {
                   <p className="text-xs font-semibold text-gray-700 truncate">{r.descripcion}</p>
                   <p className="text-[10px] text-gray-400">{r.sku} · {r.categoria}</p>
                 </div>
-                {/* Bullet bar */}
+                {/* Bullet bar — scale: 100% = total tiendas (121) */}
                 <div className="flex-1 relative h-7 bg-gray-100 rounded overflow-hidden">
-                  {/* Max historical background */}
+                  {/* Historical max % of total stores */}
                   <div className="absolute inset-y-0 left-0 bg-gray-200 rounded"
                     style={{ width: `${Math.min(r._max, 100)}%` }} />
-                  {/* Actual coverage */}
+                  {/* Actual % of total stores */}
                   <div className="absolute inset-y-0 left-0 rounded transition-all"
                     style={{ width: `${Math.min(r._actual, 100)}%`, backgroundColor: barColor(r._actual) }} />
                   {/* Max marker line */}
@@ -1739,10 +1725,12 @@ export default function EjecucionSelectos() {
                   <div className="w-12">
                     <p className="text-[9px] text-gray-400">Actual</p>
                     <p className="text-xs font-bold" style={{ color: barColor(r._actual) }}>{r._actual.toFixed(0)}%</p>
+                    <p className="text-[9px] text-gray-400">{r.pdvs_activos} PDVs</p>
                   </div>
-                  <div className="w-10">
-                    <p className="text-[9px] text-gray-400">Máx</p>
+                  <div className="w-12">
+                    <p className="text-[9px] text-gray-400">Máx hist.</p>
                     <p className="text-xs font-semibold text-gray-500">{r._max.toFixed(0)}%</p>
+                    <p className="text-[9px] text-gray-400">{r.pdvs_max} PDVs</p>
                   </div>
                   <div className="w-14">
                     <p className="text-[9px] text-gray-400">Gap</p>
@@ -1935,6 +1923,43 @@ export default function EjecucionSelectos() {
                   </div>
                 </div>
               )}
+            </div>
+          )
+        })()}
+
+        {/* ── DOH Cards ── */}
+        {ik && ik.baseline.uni_mes > 0 && (() => {
+          const vpd       = ik.baseline.uni_mes / 30
+          const dohTienda = ik.pdv.unidades  / vpd
+          const dohCedi   = ik.cedi.unidades / vpd
+          const dohTotal  = ik.total.unidades / vpd
+          const dohStyle = (d: number) => {
+            if (d < 7)   return { bg: 'bg-red-50 border-red-200',     tc: 'text-red-700' }
+            if (d < 14)  return { bg: 'bg-amber-50 border-amber-200', tc: 'text-amber-700' }
+            if (d < 60)  return { bg: 'bg-white border-gray-100',     tc: 'text-emerald-700' }
+            if (d < 120) return { bg: 'bg-blue-50 border-blue-100',   tc: 'text-blue-700' }
+            return { bg: 'bg-purple-50 border-purple-200', tc: 'text-purple-700' }
+          }
+          return (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">Days on Hand</p>
+              <p className="text-[10px] text-gray-400 mb-3">VPD baseline: {vpd.toFixed(1)} u/d · Inventario / Venta promedio diaria</p>
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { label: 'DOH EN TIENDA', value: dohTienda.toFixed(1) + 'd', sub: `${ik.pdv.unidades.toLocaleString('en-US')} u PDV`, icon: '🏪', ...dohStyle(dohTienda) },
+                  { label: 'DOH EN CEDI',   value: dohCedi.toFixed(1)   + 'd', sub: `${ik.cedi.unidades.toLocaleString('en-US')} u CEDI`, icon: '🏭', ...dohStyle(dohCedi) },
+                  { label: 'DOH TOTAL',     value: dohTotal.toFixed(1)  + 'd', sub: `${ik.total.unidades.toLocaleString('en-US')} u sistema`, icon: '📦', ...dohStyle(dohTotal) },
+                ].map(c => (
+                  <div key={c.label} className={`rounded-xl border shadow-sm p-4 ${c.bg}`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
+                      <span className="text-base">{c.icon}</span>
+                    </div>
+                    <p className={`text-2xl font-bold mb-0.5 ${c.tc}`}>{c.value}</p>
+                    <p className="text-xs text-gray-500">{c.sub}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )
         })()}

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { CADENA_NORM_SQL } from '@/lib/db/walmart-cadena'
 
 export const revalidate = 300
 
@@ -51,14 +52,14 @@ export async function GET(req: NextRequest) {
       `),
       // By cadena
       pool.query(`
-        SELECT cadena,
+        SELECT ${CADENA_NORM_SQL} AS cadena,
           SUM(CASE WHEN fecha >= '2026-01-01' AND fecha < '2027-01-01' THEN ventas_valor    ELSE 0 END) AS valor_2026,
           SUM(CASE WHEN fecha >= '2026-01-01' AND fecha < '2027-01-01' THEN ventas_unidades ELSE 0 END) AS uni_2026,
           SUM(CASE WHEN fecha >= '2025-01-01' AND fecha < '2026-01-01' THEN ventas_valor    ELSE 0 END) AS valor_2025
         FROM fact_ventas_walmart
         WHERE pais = '${paisSafe}' ${catFilter}
           AND fecha >= '2025-01-01' AND fecha < '2027-01-01'
-        GROUP BY cadena
+        GROUP BY ${CADENA_NORM_SQL}
         ORDER BY valor_2026 DESC
       `),
       // By categoria

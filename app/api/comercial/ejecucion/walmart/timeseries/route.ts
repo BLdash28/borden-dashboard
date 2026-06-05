@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { CADENA_NORM_SQL, cadenaWhereSQL } from '@/lib/db/walmart-cadena'
 
 export const revalidate = 300
 
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
     const paisSafe  = pais.replace(/'/g,"''")
     const catFilter    = categoria ? `AND categoria    = '${categoria.replace(/'/g,"''")}'` : ''
     const subcatFilter = subcat    ? `AND subcategoria = '${subcat.replace(/'/g,"''")}'`    : ''
-    const cadenaFilter = cadena    ? `AND cadena       = '${cadena.replace(/'/g,"''")}'`    : ''
+    const cadenaFilter = cadenaWhereSQL(cadena)
 
     const [monthlyR, byCadenaR, byCatR, baselineR] = await Promise.all([
       // Overall monthly 2024/2025/2026
@@ -35,15 +36,15 @@ export async function GET(req: NextRequest) {
       // Monthly by cadena (2026 only)
       pool.query(`
         SELECT
-          cadena,
+          ${CADENA_NORM_SQL} AS cadena,
           EXTRACT(MONTH FROM fecha)::int AS mes,
           ROUND(SUM(ventas_valor)::numeric, 2) AS valor
         FROM fact_ventas_walmart
         WHERE pais = '${paisSafe}'
           AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
           ${catFilter} ${subcatFilter}
-        GROUP BY cadena, mes
-        ORDER BY cadena, mes
+        GROUP BY ${CADENA_NORM_SQL}, mes
+        ORDER BY ${CADENA_NORM_SQL}, mes
       `),
       // Monthly by categoria (2026 only)
       pool.query(`

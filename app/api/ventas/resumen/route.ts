@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
     // ── Periods listing (no per-user restrictions needed) ────────
     if (tipo === 'periodos') {
       const { data: periodos } = await withCache(
-        'periodos-v12',
+        'periodos-v13',
         async () => {
           const r = await pool.query(
             'SELECT ano, mes, COUNT(DISTINCT pais) AS n_paises, COUNT(*) AS filas, ' +
@@ -107,12 +107,12 @@ export async function GET(req: NextRequest) {
       conds.push(`pais IN (${effectivePaises.map(() => `$${idx++}`).join(',')})`); params.push(...effectivePaises)
     }
 
-    // Categoría — exact match (allows index usage)
+    // Categoría — case-insensitive match to handle QUESOS vs Quesos
     const effectiveCats = catsArr.length > 0 ? catsArr : (categoria && categoria !== 'Todas' ? [categoria] : [])
     if (effectiveCats.length === 1) {
-      conds.push(`categoria = $${idx++}`); params.push(effectiveCats[0])
+      conds.push(`INITCAP(LOWER(categoria)) = $${idx++}`); params.push(effectiveCats[0])
     } else if (effectiveCats.length > 1) {
-      conds.push(`categoria IN (${effectiveCats.map(() => `$${idx++}`).join(',')})`); params.push(...effectiveCats)
+      conds.push(`INITCAP(LOWER(categoria)) IN (${effectiveCats.map(() => `$${idx++}`).join(',')})`); params.push(...effectiveCats)
     }
 
     if (cliente && cliente !== 'Todos') { conds.push(`cliente ILIKE $${idx++}`); params.push(`%${cliente}%`) }
@@ -145,7 +145,7 @@ export async function GET(req: NextRequest) {
     const where = conds.join(' AND ')
 
     // ── Full response cache (5 min TTL) ─────────────────────────
-    const cacheKey = `resumen-v10:${new URL(req.url).searchParams.toString()}`
+    const cacheKey = `resumen-v11:${new URL(req.url).searchParams.toString()}`
     const { data: result } = await withCache(
       cacheKey,
       async () => {
@@ -179,23 +179,24 @@ export async function GET(req: NextRequest) {
                          ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
                   FROM ${MV} WHERE ${where} GROUP BY ano, mes ORDER BY ano, mes`, params),
           pool.query(
-            `SELECT categoria, ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor,
+            `SELECT INITCAP(LOWER(categoria)) AS categoria, ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor,
                     ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
-             FROM ${MV} WHERE ${where} GROUP BY categoria ORDER BY ventas_valor DESC LIMIT 30`, params),
+             FROM ${MV} WHERE ${where} GROUP BY INITCAP(LOWER(categoria)) ORDER BY ventas_valor DESC LIMIT 30`, params),
           pool.query(
             `SELECT pais, ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor,
                     ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
              FROM ${MV} WHERE ${where} GROUP BY pais ORDER BY ventas_valor DESC`, params),
-          // skuQ: filtrar en subquery para evitar ambigüedad de columnas en el JOIN
+          // skuQ: agrupar por codigo_barras (no sku) para evitar mezclar productos con mismo SKU
           pool.query(
-            `SELECT m.sku, MAX(m.descripcion) AS descripcion, MIN(m.categoria) AS categoria,
-                    MIN(p.codigo_barras) AS codigo_barras,
+            `SELECT m.codigo_barras,
+                    MAX(m.sku) AS sku,
+                    MAX(m.descripcion) AS descripcion,
+                    MIN(m.categoria) AS categoria,
                     ROUND(SUM(m.ventas_valor)::numeric,2) AS ventas_valor,
                     ROUND(SUM(m.ventas_unidades)::numeric,0) AS ventas_unidades
-             FROM (SELECT sku, descripcion, categoria, ventas_valor, ventas_unidades
-                   FROM ${MV} WHERE ${where}) m
-             LEFT JOIN dim_producto p USING (sku)
-             GROUP BY m.sku ORDER BY ventas_valor DESC LIMIT 10`, params),
+             FROM (SELECT codigo_barras, sku, descripcion, categoria, ventas_valor, ventas_unidades
+                   FROM mv_sellout_mensual WHERE ${where} AND codigo_barras IS NOT NULL AND codigo_barras != '') m
+             GROUP BY m.codigo_barras ORDER BY ventas_valor DESC LIMIT 10`, params),
           pool.query(
             `SELECT subcategoria AS nombre,
                     ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor,

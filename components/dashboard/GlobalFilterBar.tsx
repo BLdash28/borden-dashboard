@@ -116,7 +116,7 @@ export default function GlobalFilterBar() {
             selectAllLabel="Todas las subcategorías"
           />
           <MultiSelect
-            label={loadingClientes ? 'Cliente…' : 'Cliente'}
+            label="Cliente"
             options={clientesOpts.map(c => ({ value: c, label: c }))}
             value={fClientes}
             onChange={setClientes}

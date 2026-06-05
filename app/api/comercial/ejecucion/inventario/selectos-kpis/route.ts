@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const revalidate = 300
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 const IS_PDV  = `NOT (tienda ILIKE '1001%' OR tienda ILIKE '1017%')`
 const IS_CEDI = `(tienda ILIKE '1001%' OR tienda ILIKE '1017%')`

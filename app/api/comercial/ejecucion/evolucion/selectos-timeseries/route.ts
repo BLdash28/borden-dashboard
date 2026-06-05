@@ -10,10 +10,10 @@ export async function GET(req: NextRequest) {
   try {
     const sp     = req.nextUrl.searchParams
     const cats   = sp.get('categoria')    ? sp.get('categoria')!.split(',').filter(Boolean) : []
-    const subcat = sp.get('subcategoria') ?? ''
+    const subcats = sp.get('subcategoria') ? sp.get('subcategoria')!.split(',').filter(Boolean) : []
 
-    const catFilter    = cats.length ? `AND categoria IN (${cats.map(c => `'${c.replace(/'/g, "''")}'`).join(',')})` : ''
-    const subcatFilter = subcat ? `AND subcategoria = '${subcat.replace(/'/g, "''")}'` : ''
+    const catFilter    = cats.length   ? `AND categoria    IN (${cats.map(c   => `'${c.replace(/'/g,"''")}'`).join(',')})` : ''
+    const subcatFilter = subcats.length ? `AND subcategoria IN (${subcats.map(s => `'${s.replace(/'/g,"''")}'`).join(',')})` : ''
 
     const [monthlyR, baselineR] = await Promise.all([
       pool.query(`

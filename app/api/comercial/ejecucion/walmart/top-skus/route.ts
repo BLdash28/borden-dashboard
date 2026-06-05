@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { cadenaWhereSQL } from '@/lib/db/walmart-cadena'
 
 export const revalidate = 300
 
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
     const top       = Math.min(parseInt(sp.get('top') ?? '20'), 50)
     const paisSafe     = pais.replace(/'/g,"''")
     const catFilter    = categoria ? `AND categoria = '${categoria.replace(/'/g,"''")}'` : ''
-    const cadenaFilter = cadena    ? `AND cadena = '${cadena.replace(/'/g,"''")}'`       : ''
+    const cadenaFilter = cadenaWhereSQL(cadena)
 
     const { rows } = await pool.query(`
       WITH cur AS (

@@ -8,7 +8,7 @@ const CATS_OPT = [
 ]
 
 const fmtQ = (v: number) =>
-  'Q' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtN = (v: number) => v.toLocaleString('en-US')
 
 type SortDir = 'asc' | 'desc'
@@ -107,7 +107,7 @@ export default function UnisuporVentas() {
     setExporting(true)
     try {
       const csv = [
-        'Fecha\tSucursal\tCategoría\tSubcategoría\tCódigo SKU\tDescripción\tUnidades\tVenta Neta (GTQ)',
+        'Fecha\tSucursal\tCategoría\tSubcategoría\tCódigo SKU\tDescripción\tUnidades\tVenta Neta (USD)',
         ...display.map(r =>
           `${r.fecha}\t${r.nombre_sucursal}\t${r.categoria}\t${r.subcategoria}\t` +
           `${r.codigo_sku}\t${r.descripcion_sku}\t${r.unidades}\t${r.venta_neta}`
@@ -144,7 +144,7 @@ export default function UnisuporVentas() {
       {kpis && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {[
-            { label: 'Venta Neta',  value: fmtQ(kpis.total_venta),          sub: 'GTQ' },
+            { label: 'Venta Neta',  value: fmtQ(kpis.total_venta),          sub: 'USD' },
             { label: 'Unidades',    value: fmtN(kpis.total_unidades),        sub: 'unidades' },
             { label: 'Sucursales',  value: fmtN(kpis.sucursales),            sub: 'activas' },
             { label: 'SKUs',        value: fmtN(kpis.skus),                  sub: 'productos' },

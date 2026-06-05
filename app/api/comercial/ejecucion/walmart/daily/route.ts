@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { CADENA_NORM_SQL, cadenaWhereSQL } from '@/lib/db/walmart-cadena'
 
 export const revalidate = 300
 
@@ -28,7 +29,7 @@ export async function GET(req: NextRequest) {
     const p    = `'${pais.replace(/'/g, "''")}'`
     const catF = categoria ? `AND categoria    = '${categoria.replace(/'/g, "''")}'` : ''
     const subF = subcat    ? `AND subcategoria = '${subcat.replace(/'/g, "''")}'`    : ''
-    const cadF = cadena    ? `AND cadena       = '${cadena.replace(/'/g, "''")}'`   : ''
+    const cadF = cadenaWhereSQL(cadena)
 
     // shared WHERE for simple queries
     const where  = `pais = ${p} AND fecha BETWEEN $1 AND $2 ${catF} ${subF} ${cadF}`
@@ -47,12 +48,12 @@ export async function GET(req: NextRequest) {
       `, [desde, hasta]),
 
       cadena ? Promise.resolve({ rows: [] as any[] }) : pool.query(`
-        SELECT fecha::date AS fecha, cadena,
+        SELECT fecha::date AS fecha, ${CADENA_NORM_SQL} AS cadena,
           ROUND(SUM(ventas_valor)::numeric,    2) AS valor,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
         FROM fact_ventas_walmart
         WHERE ${where}
-        GROUP BY fecha::date, cadena ORDER BY fecha::date, cadena
+        GROUP BY fecha::date, ${CADENA_NORM_SQL} ORDER BY fecha::date, ${CADENA_NORM_SQL}
       `, [desde, hasta]),
 
       pool.query(`

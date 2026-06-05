@@ -105,6 +105,9 @@ function calcTendencia(growth, isInnovation) {
 
 // ─── DB ──────────────────────────────────────────────────────────────────────
 function connect() {
+  if (process.env.DATABASE_URL) {
+    return new Pool({ connectionString: process.env.DATABASE_URL })
+  }
   const raw = readFileSync(join(__dirname, '../.env.local'), 'utf8')
   const env = Object.fromEntries(
     raw.split(/\r?\n/)

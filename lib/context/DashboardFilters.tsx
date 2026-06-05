@@ -15,6 +15,15 @@ function useDebounce<T>(value: T, delay: number): T {
 const MESES_LABEL = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const PAISES_OPTS  = ['CO','CR','GT','HN','NI','SV']
 const BASE_CATS    = ['Helados','Leches','Quesos']
+const STORAGE_KEY  = 'bl-dashboard-filters-v1'
+
+function getSavedFilters(): Record<string, string[]> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : {}
+  } catch { return {} }
+}
 
 export interface MesOpt {
   value: string
@@ -76,13 +85,13 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
   const curAno = now.getFullYear()
   const curMes = now.getMonth() + 1
 
-  const [fPaises,    setFPaises]    = useState<string[]>([])
-  const [fCats,      setFCats]      = useState<string[]>([])
-  const [fSubcats,   setFSubcats]   = useState<string[]>([])
-  const [fClientes,  setFClientes]  = useState<string[]>([])
-  const [fFormatos,  setFFormatos]  = useState<string[]>([])
-  const [fAnos,      setFAnos]      = useState<string[]>([])
-  const [fMeses,     setFMeses]     = useState<string[]>([])
+  const [fPaises,    setFPaises]    = useState<string[]>(() => getSavedFilters().fPaises    ?? [])
+  const [fCats,      setFCats]      = useState<string[]>(() => getSavedFilters().fCats      ?? [])
+  const [fSubcats,   setFSubcats]   = useState<string[]>(() => getSavedFilters().fSubcats   ?? [])
+  const [fClientes,  setFClientes]  = useState<string[]>(() => getSavedFilters().fClientes  ?? [])
+  const [fFormatos,  setFFormatos]  = useState<string[]>(() => getSavedFilters().fFormatos  ?? [])
+  const [fAnos,      setFAnos]      = useState<string[]>(() => getSavedFilters().fAnos      ?? [])
+  const [fMeses,     setFMeses]     = useState<string[]>(() => getSavedFilters().fMeses     ?? [])
 
   const [anosOpts,      setAnosOpts]      = useState<number[]>([])
   const [catsOpts,      setCatsOpts]      = useState<string[]>(BASE_CATS)
@@ -97,6 +106,15 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
   const [loadingFormatos,  setLoadingFormatos]  = useState(false)
 
   const initDone = useRef(false)
+
+  // ── Persist filter state to sessionStorage ────────────────────────────────
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
+        fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses,
+      }))
+    } catch {}
+  }, [fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses])
 
   // ── Debounced filter values (300 ms) to avoid waterfall on rapid changes ──
   const dPaises   = useDebounce(fPaises,   300)
@@ -162,7 +180,6 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
 
   // ── Cascade: países + cats + subcats → clientes (lazy) ────────────────────
   const fetchClientes = useCallback((paises: string[], cats: string[], subcats: string[]) => {
-    if (!paises.length && !cats.length && !subcats.length) { setClientesOpts([]); setFClientes([]); return }
     setLoadingClientes(true)
     const q = new URLSearchParams({ dim: 'cliente' })
     if (paises.length)  q.set('paises',       paises.join(','))
@@ -223,6 +240,7 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
     setFFormatos([])
     setFAnos([])
     setFMeses([])
+    try { sessionStorage.removeItem(STORAGE_KEY) } catch {}
   }
 
   const hayFiltros =
