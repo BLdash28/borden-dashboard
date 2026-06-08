@@ -85,13 +85,13 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
   const curAno = now.getFullYear()
   const curMes = now.getMonth() + 1
 
-  const [fPaises,    setFPaises]    = useState<string[]>(() => getSavedFilters().fPaises    ?? [])
-  const [fCats,      setFCats]      = useState<string[]>(() => getSavedFilters().fCats      ?? [])
-  const [fSubcats,   setFSubcats]   = useState<string[]>(() => getSavedFilters().fSubcats   ?? [])
-  const [fClientes,  setFClientes]  = useState<string[]>(() => getSavedFilters().fClientes  ?? [])
-  const [fFormatos,  setFFormatos]  = useState<string[]>(() => getSavedFilters().fFormatos  ?? [])
-  const [fAnos,      setFAnos]      = useState<string[]>(() => getSavedFilters().fAnos      ?? [])
-  const [fMeses,     setFMeses]     = useState<string[]>(() => getSavedFilters().fMeses     ?? [])
+  const [fPaises,    setFPaises]    = useState<string[]>([])
+  const [fCats,      setFCats]      = useState<string[]>([])
+  const [fSubcats,   setFSubcats]   = useState<string[]>([])
+  const [fClientes,  setFClientes]  = useState<string[]>([])
+  const [fFormatos,  setFFormatos]  = useState<string[]>([])
+  const [fAnos,      setFAnos]      = useState<string[]>([])
+  const [fMeses,     setFMeses]     = useState<string[]>([])
 
   const [anosOpts,      setAnosOpts]      = useState<number[]>([])
   const [catsOpts,      setCatsOpts]      = useState<string[]>(BASE_CATS)
@@ -106,6 +106,18 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
   const [loadingFormatos,  setLoadingFormatos]  = useState(false)
 
   const initDone = useRef(false)
+
+  // ── Restore from sessionStorage after hydration (client-only) ────────────
+  useEffect(() => {
+    const saved = getSavedFilters()
+    if (saved.fPaises?.length)   setFPaises(saved.fPaises)
+    if (saved.fCats?.length)     setFCats(saved.fCats)
+    if (saved.fSubcats?.length)  setFSubcats(saved.fSubcats)
+    if (saved.fClientes?.length) setFClientes(saved.fClientes)
+    if (saved.fFormatos?.length) setFFormatos(saved.fFormatos)
+    if (saved.fAnos?.length)     setFAnos(saved.fAnos)
+    if (saved.fMeses?.length)    setFMeses(saved.fMeses)
+  }, []) // eslint-disable-line
 
   // ── Persist filter state to sessionStorage ────────────────────────────────
   useEffect(() => {
