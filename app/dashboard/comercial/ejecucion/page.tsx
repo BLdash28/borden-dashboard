@@ -52,23 +52,7 @@ export default function EjecucionHub() {
         <p className="text-sm text-gray-400 mt-0.5">Sellout por país y cadena</p>
       </div>
 
-      {/* Inventario PDV — acceso directo */}
-      <Link href="/dashboard/comercial/ejecucion/inventario-pdv"
-        className="flex items-center justify-between bg-white border border-amber-200 rounded-xl px-5 py-4 shadow-sm hover:bg-amber-50 transition-colors group">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">📦</span>
-          <div>
-            <p className="text-sm font-bold text-gray-800 group-hover:text-amber-700">Inventario PDV · Walmart CA</p>
-            <p className="text-xs text-gray-400">CR · GT · HN · NI · SV — Surtido-Inv RetailLink</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-100">● Activo</span>
-          <ChevronRight size={15} className="text-gray-300 group-hover:text-amber-500" />
-        </div>
-      </Link>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+<div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
         {CLIENTES.map(c => (
           <div key={c.pais} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 bg-gray-50/50 border-b border-gray-100 flex items-center gap-3">
