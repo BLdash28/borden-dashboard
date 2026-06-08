@@ -186,21 +186,19 @@ export async function GET(req: NextRequest) {
             `SELECT pais, ROUND(SUM(ventas_valor)::numeric,2) AS ventas_valor,
                     ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
              FROM ${MV} WHERE ${where} GROUP BY pais ORDER BY ventas_valor DESC`, params),
-          // skuQ: agrupar por (sku, descripcion) — combina el mismo producto con múltiples barcodes
-          //        pero mantiene separados productos distintos que comparten SKU (ej: helados SKU 1234)
-          //        barcode canónico de dim_producto; fallback al mínimo del dato de venta
+          // skuQ: agrupar por codigo_barras — un barcode = un producto
           pool.query(
-            `SELECT m.sku,
-                    m.descripcion,
-                    MIN(m.categoria) AS categoria,
-                    COALESCE(MIN(p.codigo_barras), MIN(m.codigo_barras)) AS codigo_barras,
+            `SELECT m.codigo_barras,
+                    MAX(m.sku)         AS sku,
+                    MAX(m.descripcion) AS descripcion,
+                    MIN(m.categoria)   AS categoria,
                     ROUND(SUM(m.ventas_valor)::numeric,2)    AS ventas_valor,
                     ROUND(SUM(m.ventas_unidades)::numeric,0) AS ventas_unidades
-             FROM (SELECT sku, descripcion, categoria, codigo_barras, ventas_valor, ventas_unidades
+             FROM (SELECT codigo_barras, sku, descripcion, categoria, ventas_valor, ventas_unidades
                    FROM mv_sellout_mensual
-                   WHERE ${where} AND sku IS NOT NULL AND sku != '') m
-             LEFT JOIN dim_producto p USING (sku)
-             GROUP BY m.sku, m.descripcion
+                   WHERE ${where}
+                     AND codigo_barras IS NOT NULL AND codigo_barras != '') m
+             GROUP BY m.codigo_barras
              ORDER BY ventas_valor DESC LIMIT 10`, params),
           pool.query(
             `SELECT subcategoria AS nombre,
