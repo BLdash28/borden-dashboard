@@ -6,7 +6,8 @@
   "functions": {
     "app/api/ventas/resumen/route.ts": { "maxDuration": 60 },
     "app/api/ventas/dimension/route.ts": { "maxDuration": 30 },
-    "app/api/ventas/sellout/upload/route.ts": { "maxDuration": 60 }
+    "app/api/ventas/sellout/upload/route.ts": { "maxDuration": 60 },
+    "app/api/chat/route.ts": { "maxDuration": 60 }
   },
   "crons": [
     { "path": "/api/alertas/cron", "schedule": "0 8 * * *" }

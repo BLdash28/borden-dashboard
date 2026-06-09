@@ -4,6 +4,7 @@ import Sidebar from '@/components/layout/Sidebar'
 import Topbar from '@/components/layout/Topbar'
 import DashboardProvider from '@/components/dashboard/DashboardProvider'
 import MfaBanner from '@/components/auth/MfaBanner'
+import Elsie from '@/components/Elsie'
 
 export const dynamic = 'force-dynamic'
 
@@ -26,6 +27,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
             {children}
           </main>
         </DashboardProvider>
+        <Elsie />
       </div>
     </div>
   )

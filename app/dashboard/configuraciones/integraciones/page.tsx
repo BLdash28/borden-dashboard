@@ -31,6 +31,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   Plus, Pencil, Trash2, Play, Eye, EyeOff, X, ChevronDown,
   AlertTriangle, RefreshCw, CheckCircle2, XCircle, Loader2,
+  Bot, MessageCircle, Sparkles,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -448,6 +449,45 @@ export default function IntegracionesPage() {
           <Plus className="w-4 h-4" />
           Nuevo Bot
         </button>
+      </div>
+
+      {/* Elsie card */}
+      <div className="bg-white rounded-xl border border-amber-100 shadow-sm overflow-hidden">
+        <div className="flex items-center gap-4 px-5 py-4">
+          <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-100 flex items-center justify-center flex-shrink-0">
+            <Bot className="w-5 h-5 text-amber-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-bold text-gray-800">Elsie</p>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border bg-amber-50 text-amber-600 border-amber-200">
+                <Sparkles className="w-2.5 h-2.5" /> Asistente IA
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-600 border-emerald-200">
+                <CheckCircle2 className="w-2.5 h-2.5" /> Activa
+              </span>
+            </div>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Consulta ventas, inventario y sell-in en lenguaje natural. Genera reportes PDF. Disponible en todas las páginas del dashboard.
+            </p>
+          </div>
+          <button
+            onClick={() => {
+              const btn = document.querySelector<HTMLButtonElement>('[aria-label="Abrir Elsie"]')
+              btn?.click()
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500 hover:bg-amber-600 text-white transition-colors flex-shrink-0"
+          >
+            <MessageCircle className="w-3.5 h-3.5" />
+            Abrir chat
+          </button>
+        </div>
+        <div className="border-t border-amber-50 px-5 py-2.5 bg-amber-50/30 flex flex-wrap gap-4 text-xs text-gray-500">
+          <span>Modelo: <span className="text-gray-700 font-medium">Claude Sonnet 4.6</span></span>
+          <span>Proveedor: <span className="text-gray-700 font-medium">Anthropic</span></span>
+          <span>Herramientas: <span className="text-gray-700 font-medium">Ventas · Inventario · Sell-In · PDF</span></span>
+          <span>Idioma: <span className="text-gray-700 font-medium">Español</span></span>
+        </div>
       </div>
 
       {/* Table card */}
