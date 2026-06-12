@@ -676,12 +676,12 @@ export default function SelloutPage() {
                         <th className="text-left py-2 pr-3">Cadena</th>
                         <th className="text-left py-2 pr-3">Formato</th>
                         <th className="text-left py-2 pr-3">Punto Venta</th>
-                        <th className="text-left py-2 pr-3">Cód. Barras</th>
-                        <th className="text-left py-2 pr-3">SKU</th>
-                        <th className="text-left py-2 pr-3">Producto</th>
-                        <th className="text-left py-2 pr-3">Categoría</th>
-                        <th className="text-left py-2 pr-3">Subcategoría</th>
-                        <th className="text-right py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('ventas_unidades')}>
+                        <th className="text-left py-2 pl-6 pr-3">Cód. Barras</th>
+                        <th className="text-left py-2 pl-6 pr-3">SKU</th>
+                        <th className="text-left py-2 pl-6 pr-3">Producto</th>
+                        <th className="text-left py-2 pl-16 pr-3">Categoría</th>
+                        <th className="text-left py-2 pl-8 pr-8">Subcategoría</th>
+                        <th className="text-right py-2 pr-10 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('ventas_unidades')}>
                           Unidades{arrow('ventas_unidades')}
                         </th>
                         <th className="text-right py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('ventas_valor')}>
@@ -703,12 +703,12 @@ export default function SelloutPage() {
                           <td className="py-1.5 pr-3 max-w-[120px] truncate" style={{ color: 'var(--t2)' }}>{r.cadena}</td>
                           <td className="py-1.5 pr-3 max-w-[110px] truncate text-[11px]" style={{ color: 'var(--t3)' }}>{r.formato}</td>
                           <td className="py-1.5 pr-3 max-w-[120px] truncate text-[11px]" style={{ color: 'var(--t3)' }}>{r.punto_venta}</td>
-                          <td className="py-1.5 pr-3 font-mono text-[11px]" style={{ color: 'var(--t3)' }}>{r.codigo_barras}</td>
-                          <td className="py-1.5 pr-3 font-mono" style={{ color: 'var(--t3)' }}>{r.sku}</td>
-                          <td className="py-1.5 pr-3 max-w-[160px] truncate" style={{ color: 'var(--t1)' }}>{r.descripcion}</td>
-                          <td className="py-1.5 pr-3 max-w-[110px] truncate" style={{ color: 'var(--t2)' }}>{r.categoria}</td>
-                          <td className="py-1.5 pr-3" style={{ color: 'var(--t2)' }}>{r.subcategoria}</td>
-                          <td className="py-1.5 pr-3 text-right tabular-nums" style={{ color: 'var(--t2)' }}>{r.ventas_unidades.toLocaleString()}</td>
+                          <td className="py-1.5 pl-6 pr-3 font-mono text-[11px]" style={{ color: 'var(--t3)' }}>{r.codigo_barras}</td>
+                          <td className="py-1.5 pl-6 pr-3 font-mono" style={{ color: 'var(--t3)' }}>{r.sku}</td>
+                          <td className="py-1.5 pl-6 pr-3 min-w-[260px] max-w-[320px] truncate" style={{ color: 'var(--t1)' }}>{r.descripcion}</td>
+                          <td className="py-1.5 pl-16 pr-3 max-w-[110px] truncate" style={{ color: 'var(--t2)' }}>{r.categoria}</td>
+                          <td className="py-1.5 pl-8 pr-8" style={{ color: 'var(--t2)' }}>{r.subcategoria}</td>
+                          <td className="py-1.5 pr-10 text-right tabular-nums" style={{ color: 'var(--t2)' }}>{r.ventas_unidades.toLocaleString()}</td>
                           <td className="py-1.5 pr-3 text-right font-semibold tabular-nums" style={{ color: 'var(--t1)' }}>{fmtFull(r.ventas_valor)}</td>
                           <td className="py-1.5 text-right tabular-nums" style={{ color: 'var(--t3)' }}>{r.pct.toFixed(1)}%</td>
                         </tr>
