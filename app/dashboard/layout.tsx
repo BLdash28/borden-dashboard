@@ -19,7 +19,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="min-h-screen flex" style={{ background: 'var(--bg)' }}>
       <Sidebar profile={profile} />
-      <div className="flex-1 lg:ml-[260px] flex flex-col min-h-screen min-w-0">
+      <div className="sidebar-main flex-1 lg:ml-[260px] flex flex-col min-h-screen min-w-0 transition-[margin] duration-200">
         <Topbar profile={profile} />
         <MfaBanner />
         <DashboardProvider>

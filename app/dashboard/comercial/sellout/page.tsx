@@ -25,10 +25,13 @@ interface SelloutRow {
   dia: number
   pais: string
   cliente: string
+  cadena: string
+  formato: string
   punto_venta: string
   codigo_barras: string
   sku: string
   descripcion: string
+  categoria: string
   subcategoria: string
   ventas_unidades: number
   ventas_valor: number
@@ -226,10 +229,13 @@ export default function SelloutPage() {
           dia:             toNum(r.dia),
           pais:            String(r.pais || ''),
           cliente:         String(r.cliente || ''),
+          cadena:          String(r.cadena || ''),
+          formato:         String(r.formato || ''),
           punto_venta:     String(r.punto_venta || ''),
           codigo_barras:   String(r.codigo_barras || ''),
           sku:             String(r.sku || ''),
           descripcion:     String(r.descripcion || ''),
+          categoria:       String(r.categoria || ''),
           subcategoria:    String(r.subcategoria || ''),
           ventas_unidades: toNum(r.ventas_unidades),
           ventas_valor:    toNum(r.ventas_valor),
@@ -347,17 +353,20 @@ export default function SelloutPage() {
         dia:             toNum(x.dia),
         pais:            String(x.pais || ''),
         cliente:         String(x.cliente || ''),
+        cadena:          String(x.cadena || ''),
+        formato:         String(x.formato || ''),
         punto_venta:     String(x.punto_venta || ''),
         codigo_barras:   String(x.codigo_barras || ''),
         sku:             String(x.sku || ''),
         descripcion:     String(x.descripcion || ''),
+        categoria:       String(x.categoria || ''),
         subcategoria:    String(x.subcategoria || ''),
         ventas_unidades: toNum(x.ventas_unidades),
         ventas_valor:    toNum(x.ventas_valor),
       }))
       const gTotal = toNum(j.kpi?.total_valor) || allRows.reduce((s, x) => s + x.ventas_valor, 0)
 
-      const headers = ['Año','Mes','Día','País','Cliente','Punto Venta','Código de Barras','SKU','Producto','Subcategoría','Unidades','USD','% Total']
+      const headers = ['Año','Mes','Día','País','Cliente','Cadena','Formato','Punto Venta','Código de Barras','SKU','Producto','Categoría','Subcategoría','Unidades','USD','% Total']
       const escape = (v: string | number) => {
         const s = String(v)
         return s.includes(',') || s.includes('"') || s.includes('\n')
@@ -368,8 +377,8 @@ export default function SelloutPage() {
         ...allRows.map(x => {
           const pct = gTotal > 0 ? (x.ventas_valor / gTotal) * 100 : 0
           return [
-            x.ano, MESES[x.mes] || x.mes, x.dia, x.pais, x.cliente, x.punto_venta,
-            x.codigo_barras, x.sku, x.descripcion, x.subcategoria,
+            x.ano, MESES[x.mes] || x.mes, x.dia, x.pais, x.cliente, x.cadena, x.formato, x.punto_venta,
+            x.codigo_barras, x.sku, x.descripcion, x.categoria, x.subcategoria,
             x.ventas_unidades, x.ventas_valor.toFixed(2), pct.toFixed(2) + '%',
           ].map(escape).join(',')
         }),
@@ -664,10 +673,13 @@ export default function SelloutPage() {
                         <th className="text-left py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('dia')}>Día{arrow('dia')}</th>
                         <th className="text-left py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('pais')}>País{arrow('pais')}</th>
                         <th className="text-left py-2 pr-3">Cliente</th>
+                        <th className="text-left py-2 pr-3">Cadena</th>
+                        <th className="text-left py-2 pr-3">Formato</th>
                         <th className="text-left py-2 pr-3">Punto Venta</th>
                         <th className="text-left py-2 pr-3">Cód. Barras</th>
                         <th className="text-left py-2 pr-3">SKU</th>
                         <th className="text-left py-2 pr-3">Producto</th>
+                        <th className="text-left py-2 pr-3">Categoría</th>
                         <th className="text-left py-2 pr-3">Subcategoría</th>
                         <th className="text-right py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('ventas_unidades')}>
                           Unidades{arrow('ventas_unidades')}
@@ -688,10 +700,13 @@ export default function SelloutPage() {
                           <td className="py-1.5 pr-3" style={{ color: 'var(--t3)' }}>{r.dia}</td>
                           <td className="py-1.5 pr-3 font-semibold" style={{ color: '#f97316' }}>{r.pais}</td>
                           <td className="py-1.5 pr-3 max-w-[120px] truncate" style={{ color: 'var(--t2)' }}>{r.cliente}</td>
+                          <td className="py-1.5 pr-3 max-w-[120px] truncate" style={{ color: 'var(--t2)' }}>{r.cadena}</td>
+                          <td className="py-1.5 pr-3 max-w-[110px] truncate text-[11px]" style={{ color: 'var(--t3)' }}>{r.formato}</td>
                           <td className="py-1.5 pr-3 max-w-[120px] truncate text-[11px]" style={{ color: 'var(--t3)' }}>{r.punto_venta}</td>
                           <td className="py-1.5 pr-3 font-mono text-[11px]" style={{ color: 'var(--t3)' }}>{r.codigo_barras}</td>
                           <td className="py-1.5 pr-3 font-mono" style={{ color: 'var(--t3)' }}>{r.sku}</td>
                           <td className="py-1.5 pr-3 max-w-[160px] truncate" style={{ color: 'var(--t1)' }}>{r.descripcion}</td>
+                          <td className="py-1.5 pr-3 max-w-[110px] truncate" style={{ color: 'var(--t2)' }}>{r.categoria}</td>
                           <td className="py-1.5 pr-3" style={{ color: 'var(--t2)' }}>{r.subcategoria}</td>
                           <td className="py-1.5 pr-3 text-right tabular-nums" style={{ color: 'var(--t2)' }}>{r.ventas_unidades.toLocaleString()}</td>
                           <td className="py-1.5 pr-3 text-right font-semibold tabular-nums" style={{ color: 'var(--t1)' }}>{fmtFull(r.ventas_valor)}</td>

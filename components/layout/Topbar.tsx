@@ -45,8 +45,8 @@ export default function Topbar({ profile }: { profile?: any }) {
       {/* Hamburger — only on mobile, renders drawer inside */}
       <MobileNav profile={profile} />
 
-      {/* Page title */}
-      <div className="flex-1 font-display font-bold text-[19px] truncate" style={{ color: 'var(--t1)' }}>
+      {/* Page title — se oculta cuando el sidebar está colapsado (modo pantalla completa) */}
+      <div className="page-title flex-1 font-display font-bold text-[19px] truncate" style={{ color: 'var(--t1)' }}>
         {getTitle()}
       </div>
 

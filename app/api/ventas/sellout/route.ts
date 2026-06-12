@@ -94,10 +94,13 @@ export async function GET(req: NextRequest) {
                 dia,
                 pais,
                 cliente,
+                cadena,
+                formato,
                 punto_venta,
                 codigo_barras,
                 sku,
                 descripcion,
+                categoria,
                 subcategoria,
                 ROUND(ventas_unidades::numeric, 0) AS ventas_unidades,
                 ROUND(ventas_valor::numeric, 2)    AS ventas_valor

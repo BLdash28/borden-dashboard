@@ -25,6 +25,13 @@
 
 * { box-sizing: border-box; }
 
+/* Sidebar colapsado: anular el ml-[260px] del main (el título permanece visible) */
+@media (min-width: 1024px) {
+  html.sidebar-collapsed .sidebar-main {
+    margin-left: 0 !important;
+  }
+}
+
 body {
   font-family: 'DM Sans', sans-serif;
   background: var(--bg);

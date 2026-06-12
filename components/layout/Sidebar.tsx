@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/utils/helpers'
 import {
   FileText, LogOut, ChevronDown, ChevronRight, Settings, Shield, Bell, Zap,
+  PanelLeftClose, PanelLeftOpen,
 } from 'lucide-react'
 import { MENUS, DEPTS, DEPT_LABELS, DEPT_HOME } from './nav-config'
 
@@ -18,6 +19,7 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
   const [openItems, setOpenItems]       = useState<Record<string,boolean>>({})
   const [profile, setProfile]           = useState<any>(profileProp ?? null)
   const [footerOpen, setFooterOpen]     = useState(false)
+  const [collapsed, setCollapsed]       = useState(false)
 
   useEffect(() => {
     const load = async () => {
@@ -28,6 +30,24 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
     }
     load()
   }, [])
+
+  // Sidebar colapsado: persistir en localStorage y sincronizar con clase en <html>
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' && localStorage.getItem('sidebar-collapsed') === '1'
+    setCollapsed(saved)
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('sidebar-collapsed', saved)
+    }
+  }, [])
+
+  const toggleCollapsed = () => {
+    setCollapsed(prev => {
+      const next = !prev
+      if (typeof window !== 'undefined') localStorage.setItem('sidebar-collapsed', next ? '1' : '0')
+      if (typeof document !== 'undefined') document.documentElement.classList.toggle('sidebar-collapsed', next)
+      return next
+    })
+  }
 
   const currentDept = DEPTS.find(d => pathname.includes(`/dashboard/${d}`)) || null
   const menus       = currentDept ? (MENUS[currentDept] || []) : []
@@ -43,20 +63,59 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
   }
 
   const toggleSection = (s: string) =>
-    setOpenSections(prev => ({ ...prev, [s]: prev[s] === false ? true : false }))
+    setOpenSections(prev => ({ ...prev, [s]: !isSectionOpen(s) }))
   const toggleItem = (key: string) =>
     setOpenItems(prev => ({ ...prev, [key]: !prev[key] }))
 
-  const isSectionOpen = (s: string) => openSections[s] !== false
-  const isItemOpen    = (key: string) => !!openItems[key]
+  // Auto-abrir la sección cuyo item coincida con la URL actual
+  const sectionHasActiveItem = (section: string) => {
+    const group = menus.find(g => g.section === section)
+    if (!group) return false
+    return group.items.some(item => {
+      if (item.children) {
+        return item.children.some(c => pathname === c.href || pathname.startsWith(c.href + '/'))
+      }
+      const fullHref = currentDept ? `/dashboard/${currentDept}${item.href}` : '#'
+      return pathname === fullHref || pathname.startsWith(fullHref + '/')
+    })
+  }
+  const isSectionOpen = (s: string) => {
+    if (openSections[s] !== undefined) return openSections[s]
+    return sectionHasActiveItem(s)
+  }
+  const isItemOpen = (key: string) => !!openItems[key]
 
   return (
-    <aside className="fixed left-0 top-0 bottom-0 w-[260px] z-40 hidden lg:flex flex-col"
+    <>
+      {/* Botón flotante para reabrir cuando está colapsado (lg+) — posicionado debajo del topbar */}
+      {collapsed && (
+        <button
+          onClick={toggleCollapsed}
+          className="fixed left-4 top-14 z-50 hidden lg:flex items-center gap-2 px-3.5 h-10 rounded-xl text-white font-medium text-[13px] shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95 transition-all border border-white/10"
+          style={{ background: 'var(--acc)' }}
+          aria-label="Abrir menú"
+        >
+          <PanelLeftOpen size={17} strokeWidth={2.5} />
+          <span>Menú</span>
+        </button>
+      )}
+
+      <aside className={cn(
+        'sidebar-aside fixed left-0 top-0 bottom-0 w-[260px] z-40 hidden lg:flex flex-col transition-transform duration-200',
+        collapsed && '-translate-x-full'
+      )}
       style={{ background: '#111009' }}>
 
-      {/* Logo */}
-      <div className="px-4 py-5 border-b border-white/5 flex-shrink-0 flex items-center justify-center">
+      {/* Logo + toggle close */}
+      <div className="px-4 py-5 border-b border-white/5 flex-shrink-0 flex items-center justify-between gap-2">
         <img src="/borden-logo.png" alt="Borden" className="h-12 w-auto object-contain" />
+        <button
+          onClick={toggleCollapsed}
+          className="flex items-center justify-center w-7 h-7 rounded-md text-white/40 hover:text-white/80 hover:bg-white/5 transition-all flex-shrink-0"
+          aria-label="Cerrar menú"
+        >
+          <PanelLeftClose size={15} />
+        </button>
       </div>
 
       {/* Dept selector */}
@@ -234,5 +293,6 @@ export default function Sidebar({ profile: profileProp }: { profile?: any }) {
         )}
       </div>
     </aside>
+    </>
   )
 }
