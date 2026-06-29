@@ -48,9 +48,36 @@ body {
   box-shadow: 0 1px 14px rgba(28,23,20,0.06);
 }
 
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+/* Scrollbar visible — más ancho y con thumb visible para que se vea
+   claramente el control de scroll vertical y horizontal. */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track {
+  background: rgba(28,23,20,0.04);
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(28,23,20,0.30);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(28,23,20,0.50);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+::-webkit-scrollbar-thumb:active {
+  background: var(--acc);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+/* Firefox */
+* { scrollbar-width: auto; scrollbar-color: rgba(28,23,20,0.30) rgba(28,23,20,0.04); }
+
+.dark ::-webkit-scrollbar-track  { background: rgba(255,255,255,0.05); }
+.dark ::-webkit-scrollbar-thumb  { background: rgba(255,255,255,0.25); background-clip: padding-box; border: 2px solid transparent; }
+.dark ::-webkit-scrollbar-thumb:hover  { background: rgba(255,255,255,0.40); background-clip: padding-box; border: 2px solid transparent; }
+.dark * { scrollbar-color: rgba(255,255,255,0.25) rgba(255,255,255,0.05); }
 
 .skeleton {
   background: linear-gradient(90deg, var(--border) 25%, rgba(200,135,58,0.08) 50%, var(--border) 75%);

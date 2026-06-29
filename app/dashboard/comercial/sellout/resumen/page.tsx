@@ -33,6 +33,17 @@ const fmtFull = (n: number) =>
 
 const fmtP = (n: number) => isNaN(n) || !n ? '—' : '$' + n.toFixed(2)
 
+// Formateador para unidades (sin signo $)
+const fmtU = (n: number) =>
+  isNaN(n) || !isFinite(n) ? '0' :
+  n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' :
+  n >= 1e3 ? (n / 1e3).toFixed(1) + 'K' :
+  String(Math.round(n))
+
+const fmtUFull = (n: number) =>
+  isNaN(n) || !isFinite(n) ? '0' :
+  Math.round(n).toLocaleString('en-US') + ' un'
+
 const toNum = (v: any): number => {
   const n = parseFloat(String(v))
   return isNaN(n) ? 0 : n
@@ -114,11 +125,15 @@ export default function ResumenPage() {
   const [loading,       setLoading]      = useState(true)
   const [modo,          setModo]         = useState<'mes' | 'ano' | 'todos'>('todos')
 
-  // Chart range slider (local, index-based)
+  // Chart range slider (local, index-based) — USD
   const [sliderRange, setSliderRange] = useState<[number, number]>([0, 9999])
+  // Chart range slider — Unidades
+  const [sliderRangeU, setSliderRangeU] = useState<[number, number]>([0, 9999])
 
-  // Chart view toggle
+  // Chart view toggle — USD
   const [chartView, setChartView] = useState<'mensual' | 'anual'>('mensual')
+  // Chart view toggle — Unidades
+  const [chartViewU, setChartViewU] = useState<'mensual' | 'anual'>('mensual')
 
   // Modal state
   const [activeModal, setActiveModal] = useState<'ventas' | 'unidades' | 'precio' | 'meses' | null>(null)
@@ -166,9 +181,10 @@ export default function ResumenPage() {
         setClientes(     j.clientes      || [])
         setTopSkus(j.top_skus || [])
         setModo(j.modo === 'ano' ? 'ano' : j.modo === 'mes' ? 'mes' : 'todos')
-        // Reset slider to show all data
+        // Reset sliders to show all data
         const allData = diasRaw.length > 0 ? diasRaw : mesesLabeled
         setSliderRange([0, Math.max(allData.length - 1, 0)])
+        setSliderRangeU([0, Math.max(allData.length - 1, 0)])
       })
       .finally(() => setLoading(false))
   }, [])
@@ -563,6 +579,131 @@ export default function ResumenPage() {
                       className="w-full appearance-none bg-transparent"
                       style={{ zIndex: 4, height: 4, accentColor: 'var(--acc)' }}
                     />
+                  </div>
+                  <div className="flex justify-between mt-1.5 text-[10px]" style={{ color: 'var(--t3)' }}>
+                    <span>Desde: <span style={{ color: 'var(--t2)' }}>{labelLeft}</span></span>
+                    <span>Hasta: <span style={{ color: 'var(--t2)' }}>{labelRight}</span></span>
+                  </div>
+                </div>
+              )}
+            </>
+          )
+        })()}
+      </div>
+
+      {/* Tendencia — Unidades (same structure as USD, separate slider/toggle) */}
+      <div className="card p-5">
+        <div className="flex items-start justify-between mb-0.5">
+          <h3 className="font-semibold text-[13px]" style={{ color: 'var(--t1)' }}>
+            {chartViewU === 'anual' ? 'Ventas Anuales · Unidades' : (modo === 'mes' ? 'Ventas Diarias · Unidades' : 'Ventas Mensuales · Unidades')}
+          </h3>
+          <div className="flex rounded-lg p-0.5 flex-shrink-0 ml-3" style={{ background: 'var(--border)' }}>
+            {(['mensual', 'anual'] as const).map(v => (
+              <button
+                key={v}
+                onClick={() => { setChartViewU(v); setSliderRangeU([0, 9999]) }}
+                className="px-2.5 py-1 rounded-md text-[11px] font-medium transition-all"
+                style={chartViewU === v
+                  ? { background: 'var(--card)', color: '#3b82f6', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }
+                  : { color: 'var(--t3)' }}
+              >
+                {v === 'mensual' ? 'Mes' : 'Año'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="text-[11px] mb-4" style={{ color: 'var(--t3)' }}>Unidades · {titulo}</p>
+        {loading ? (
+          <div className="h-[380px] flex items-center justify-center animate-pulse rounded-lg" style={{ background: 'var(--border)' }} />
+        ) : chartViewU === 'anual' ? (
+          anoData.length === 0
+            ? <div className="h-[380px] flex items-center justify-center text-[12px]" style={{ color: 'var(--t3)' }}>Sin datos</div>
+            : <ResponsiveContainer width="100%" height={380}>
+                <ComposedChart data={anoData.map((r, i) => ({
+                  ...r,
+                  variacion_un: i === 0 ? null : (() => {
+                    const prev = anoData[i - 1].ventas_unidades
+                    return prev > 0 ? ((r.ventas_unidades - prev) / prev) * 100 : null
+                  })(),
+                }))} margin={{ top: 16, right: 56, left: 4, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="mes_label" tick={{ fontSize: 11, fill: 'var(--t3)' }} />
+                  <YAxis yAxisId="val" orientation="left"  tickFormatter={fmtU} tick={{ fontSize: 10, fill: 'var(--t3)' }} width={62} />
+                  <YAxis yAxisId="var" orientation="right" tickFormatter={(v: number) => v.toFixed(0) + '%'} tick={{ fontSize: 10, fill: 'var(--t3)' }} width={48} />
+                  <Tooltip
+                    content={({ active, payload, label }: any) => {
+                      if (!active || !payload?.length) return null
+                      const uni  = payload.find((p: any) => p.dataKey === 'ventas_unidades')
+                      const vari = payload.find((p: any) => p.dataKey === 'variacion_un')
+                      return (
+                        <div className="rounded-xl px-3 py-2.5 shadow-2xl min-w-[160px]"
+                          style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+                          <p className="text-[10px] uppercase tracking-widest mb-2" style={{ color: 'var(--t3)' }}>{label}</p>
+                          {uni && (
+                            <div className="flex justify-between gap-4 mb-1">
+                              <span className="text-[10px]" style={{ color: 'var(--t3)' }}>Unidades</span>
+                              <span className="text-[13px] font-bold" style={{ color: '#3b82f6' }}>{fmtUFull(Number(uni.value))}</span>
+                            </div>
+                          )}
+                          {vari && vari.value !== null && (
+                            <div className="flex justify-between gap-4">
+                              <span className="text-[10px]" style={{ color: 'var(--t3)' }}>Variación</span>
+                              <span className="text-[13px] font-bold"
+                                style={{ color: Number(vari.value) >= 0 ? '#10b981' : '#ef4444' }}>
+                                {Number(vari.value) >= 0 ? '+' : ''}{Number(vari.value).toFixed(1)}%
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }}
+                  />
+                  <Area yAxisId="val" dataKey="ventas_unidades" stroke="#3b82f6" fill="#3b82f618" strokeWidth={2}
+                    dot={false} activeDot={{ r: 4, fill: '#3b82f6', stroke: 'none' }} name="Unidades" type="monotone" />
+                  <ReferenceLine yAxisId="var" y={0} stroke="var(--t3)" strokeDasharray="4 4" strokeWidth={1} />
+                  <Line yAxisId="var" dataKey="variacion_un" stroke="#8b5cf6" strokeWidth={2.5} type="monotone"
+                    dot={(props: any) => {
+                      const { cx, cy, payload } = props
+                      if (payload.variacion_un === null || payload.variacion_un === undefined) return <g key={props.key ?? cx} />
+                      const color = payload.variacion_un >= 0 ? '#10b981' : '#ef4444'
+                      return (
+                        <g key={props.key ?? cx}>
+                          <circle cx={cx} cy={cy} r={5} fill={color} stroke="var(--surface)" strokeWidth={2} />
+                        </g>
+                      )
+                    }}
+                    activeDot={{ r: 6, stroke: 'none' }} name="Variación" connectNulls={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+        ) : chartData.length === 0 ? (
+          <div className="h-[380px] flex items-center justify-center text-[12px]" style={{ color: 'var(--t3)' }}>Sin datos</div>
+        ) : (() => {
+          const maxIdx = chartData.length - 1
+          const lo = Math.min(sliderRangeU[0], maxIdx)
+          const hi = Math.min(sliderRangeU[1], maxIdx)
+          const visible = chartData.slice(lo, hi + 1)
+          const labelLeft  = visible[0]                   ? (modo === 'mes' ? 'D' + visible[0].dia                  : visible[0].mes_label)                  : ''
+          const labelRight = visible[visible.length - 1]  ? (modo === 'mes' ? 'D' + visible[visible.length - 1].dia : visible[visible.length - 1].mes_label) : ''
+          return (
+            <>
+              <LineChartPro
+                data={visible} nameKey={chartKey} dataKey="ventas_unidades"
+                color="#3b82f6" height={380} formatter={fmtU} tooltipFormatter={fmtUFull} tooltipUnit="un"
+                xTickFmt={chartXFmt}
+                xInterval={modo === 'ano' ? 0 : Math.max(Math.ceil(visible.length / 10) - 1, 0)}
+                dot
+              />
+              {chartData.length > 1 && (
+                <div className="mt-4 px-1">
+                  <div className="relative">
+                    <input type="range" min={0} max={maxIdx} value={lo}
+                      onChange={e => setSliderRangeU([Math.min(Number(e.target.value), hi - 1), hi])}
+                      className="absolute w-full appearance-none bg-transparent pointer-events-none"
+                      style={{ zIndex: 3, height: 4 }} />
+                    <input type="range" min={0} max={maxIdx} value={hi}
+                      onChange={e => setSliderRangeU([lo, Math.max(Number(e.target.value), lo + 1)])}
+                      className="w-full appearance-none bg-transparent"
+                      style={{ zIndex: 4, height: 4, accentColor: '#3b82f6' }} />
                   </div>
                   <div className="flex justify-between mt-1.5 text-[10px]" style={{ color: 'var(--t3)' }}>
                     <span>Desde: <span style={{ color: 'var(--t2)' }}>{labelLeft}</span></span>
