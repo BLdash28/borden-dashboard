@@ -16,12 +16,23 @@ interface SkuRow {
   subcategoria: string
   canal:        string
   pais:         string
+  fecha_min:    string | null
+  fecha_max:    string | null
+  dias_venta:   number
   cajas:        number
   ingresos:     number
   margen_valor: number
   margen_pct:   number
   precio_prom:  number
   y_prev:       number
+}
+
+const fmtFecha = (v: string | null | undefined) => {
+  if (!v) return '—'
+  // "2026-06-27" → "27/06/26"
+  const parts = String(v).slice(0, 10).split('-')
+  if (parts.length !== 3) return String(v)
+  return `${parts[2]}/${parts[1]}/${parts[0].slice(2)}`
 }
 
 export default function SellInSkus() {
@@ -85,12 +96,26 @@ export default function SellInSkus() {
         if (!skuMap[key]) skuMap[key] = {
           sku: r.sku, descripcion: r.descripcion||'', categoria: r.categoria||'',
           subcategoria: r.subcategoria||'', canal: r.canal||'',
-          pais: r.pais, cajas: 0, ingresos: 0, margen_valor: 0, margen_pct: 0,
+          pais: r.pais,
+          fecha_min: r.fecha_min ?? null,
+          fecha_max: r.fecha_max ?? null,
+          dias_venta: toNum(r.dias_venta),
+          cajas: 0, ingresos: 0, margen_valor: 0, margen_pct: 0,
           precio_prom: 0, y_prev: 0,
         }
         skuMap[key].cajas       += toNum(r.cajas)
         skuMap[key].ingresos    += toNum(r.ingresos)
         skuMap[key].margen_valor+= toNum(r.margen_valor??0)
+        // Rango de fechas: mínimo de los mín, máximo de los máx
+        if (r.fecha_min) {
+          const fm = String(r.fecha_min).slice(0, 10)
+          if (!skuMap[key].fecha_min || fm < skuMap[key].fecha_min!) skuMap[key].fecha_min = fm
+        }
+        if (r.fecha_max) {
+          const fM = String(r.fecha_max).slice(0, 10)
+          if (!skuMap[key].fecha_max || fM > skuMap[key].fecha_max!) skuMap[key].fecha_max = fM
+        }
+        skuMap[key].dias_venta = Math.max(skuMap[key].dias_venta, toNum(r.dias_venta))
       })
       // Calc derived
       Object.values(skuMap).forEach(s=>{
@@ -144,11 +169,22 @@ export default function SellInSkus() {
         if (!skuMap[key]) skuMap[key] = {
           sku: r.sku, descripcion: r.descripcion || '', categoria: r.categoria || '',
           subcategoria: r.subcategoria || '', canal: r.canal || '',
-          pais: r.pais, cajas: 0, ingresos: 0, margen_valor: 0, margen_pct: 0, precio_prom: 0, y_prev: 0,
+          pais: r.pais,
+          fecha_min: r.fecha_min ?? null, fecha_max: r.fecha_max ?? null, dias_venta: toNum(r.dias_venta),
+          cajas: 0, ingresos: 0, margen_valor: 0, margen_pct: 0, precio_prom: 0, y_prev: 0,
         }
         skuMap[key].cajas        += toNum(r.cajas)
         skuMap[key].ingresos     += toNum(r.ingresos)
         skuMap[key].margen_valor += toNum(r.margen_valor ?? 0)
+        if (r.fecha_min) {
+          const fm = String(r.fecha_min).slice(0, 10)
+          if (!skuMap[key].fecha_min || fm < skuMap[key].fecha_min!) skuMap[key].fecha_min = fm
+        }
+        if (r.fecha_max) {
+          const fM = String(r.fecha_max).slice(0, 10)
+          if (!skuMap[key].fecha_max || fM > skuMap[key].fecha_max!) skuMap[key].fecha_max = fM
+        }
+        skuMap[key].dias_venta = Math.max(skuMap[key].dias_venta, toNum(r.dias_venta))
       })
       Object.values(skuMap).forEach(s => {
         s.margen_pct  = s.ingresos > 0 ? (s.margen_valor / s.ingresos) * 100 : 0
@@ -161,10 +197,11 @@ export default function SellInSkus() {
       })
       const gt = allSorted.reduce((s, r) => s + r.ingresos, 0) || 1
 
-      const h = ['País','SKU','Producto','Categoría','Subcategoría','Orden de Compra','Cajas','Valor','Precio Caja','Margen Valor','Margen %','% del Total']
+      const h = ['País','SKU','Producto','Categoría','Subcategoría','Orden de Compra','Primera venta','Última venta','Días con venta','Cajas','Valor','Precio Caja','Margen Valor','Margen %','% del Total']
       const csv = [h.join(','), ...allSorted.map(r => [
         r.pais, r.sku, `"${r.descripcion.replace(/"/g,'""')}"`, r.categoria,
         r.subcategoria, r.canal,
+        r.fecha_min ?? '', r.fecha_max ?? '', String(r.dias_venta),
         r.cajas.toFixed(0), r.ingresos.toFixed(2), r.precio_prom.toFixed(4),
         r.margen_valor.toFixed(2), r.margen_pct.toFixed(2) + '%',
         (r.ingresos / gt * 100).toFixed(2) + '%',
@@ -269,6 +306,9 @@ export default function SellInSkus() {
                       <th className="text-left py-2 pr-3">Cat.</th>
                       <th className="text-left py-2 pr-3">Subcategoría</th>
                       <th className="text-left py-2 pr-3">Orden de Compra</th>
+                      <th className="text-left py-2 pr-3">Primera venta</th>
+                      <th className="text-left py-2 pr-3">Última venta</th>
+                      <th className="text-right py-2 pr-3">Días</th>
                       <th className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600" onClick={()=>toggleSort('cajas')}>
                         Cajas{arrow('cajas')}
                       </th>
@@ -292,6 +332,9 @@ export default function SellInSkus() {
                         <td className="py-1.5 pr-3 text-gray-500">{r.categoria}</td>
                         <td className="py-1.5 pr-3 text-gray-500">{r.subcategoria}</td>
                         <td className="py-1.5 pr-3 text-gray-500 font-mono text-[11px]">{r.canal}</td>
+                        <td className="py-1.5 pr-3 text-gray-600 font-mono text-[11px]">{fmtFecha(r.fecha_min)}</td>
+                        <td className="py-1.5 pr-3 text-gray-800 font-mono text-[11px]">{fmtFecha(r.fecha_max)}</td>
+                        <td className="py-1.5 pr-3 text-right text-gray-500">{r.dias_venta || '—'}</td>
                         <td className="py-1.5 pr-3 text-right text-gray-700">{fmtN(r.cajas)}</td>
                         <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>
                         <td className="py-1.5 pr-3 text-right text-gray-500">{fmt(r.precio_prom)}</td>

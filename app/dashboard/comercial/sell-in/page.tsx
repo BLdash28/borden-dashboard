@@ -12,7 +12,7 @@ function readStorage() {
     if (!raw) return null
     return JSON.parse(raw) as {
       fAnos?: string[]; fMeses?: string[]; fPaises?: string[]; fCats?: string[]
-      fClientes?: string[]; fCanales?: string[]; fSkus?: string[]
+      fClientes?: string[]; fSkus?: string[]
     }
   } catch { return null }
 }
@@ -39,9 +39,19 @@ interface SellInRow {
   descripcion:     string
   categoria:       string
   subcategoria:    string
+  fecha_min:       string | null
+  fecha_max:       string | null
+  dias_venta:      number
   cajas:           number
   ingresos:        number
   precio_promedio: number
+}
+
+const fmtFecha = (v: string | null | undefined) => {
+  if (!v) return '—'
+  const parts = String(v).slice(0, 10).split('-')
+  if (parts.length !== 3) return String(v)
+  return `${parts[2]}/${parts[1]}/${parts[0].slice(2)}`
 }
 
 type SortKey = 'ingresos' | 'cajas' | 'pct'
@@ -58,14 +68,12 @@ export default function SellInPage() {
   const [fPaises,   setFPaises]   = useState<string[]>(() => readStorage()?.fPaises   ?? [])
   const [fCats,     setFCats]     = useState<string[]>(() => readStorage()?.fCats     ?? [])
   const [fClientes, setFClientes] = useState<string[]>(() => readStorage()?.fClientes ?? [])
-  const [fCanales,  setFCanales]  = useState<string[]>(() => readStorage()?.fCanales  ?? [])
   const [fSkus,     setFSkus]     = useState<string[]>(() => readStorage()?.fSkus     ?? [])
 
   // Options
   const [paisOpts,    setPaisOpts]    = useState<string[]>([])
   const [catOpts,     setCatOpts]     = useState<string[]>([])
   const [clienteOpts, setClienteOpts] = useState<string[]>([])
-  const [canalOpts,   setCanalOpts]   = useState<string[]>([])
   const [skuOpts,     setSkuOpts]     = useState<string[]>([])
 
   // Data
@@ -85,7 +93,7 @@ export default function SellInPage() {
   useEffect(() => {
     if (initDone.current) return
     initDone.current = true
-    cargar(fAnos, fMeses, fPaises, fCats, fClientes, fCanales, fSkus, 1)
+    cargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, 1)
     fetch('/api/ventas/resumen?tipo=periodos')
       .then(r => r.json())
       .then(j => {
@@ -115,30 +123,17 @@ export default function SellInPage() {
     fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => setPaisOpts(j.opts ?? []))
   }, [buildPeriodParams])
 
-  // ── NIVEL 2 — Canal: requiere País ──────────────────────────────────────────
-  useEffect(() => {
-    if (!fPaises.length) { setCanalOpts([]); setFCanales([]); return }
-    const p = buildPeriodParams(new URLSearchParams({ dim: 'canal' }))
-    p.set('paises', fPaises.join(','))
-    fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => {
-      const opts = j.opts ?? []
-      setCanalOpts(opts)
-      setFCanales(prev => prev.filter(v => opts.includes(v)))
-    })
-  }, [buildPeriodParams, fPaises])
-
-  // ── NIVEL 3 — Cliente: requiere País, filtra por Canal si está activo ────────
+  // ── NIVEL 2 — Cliente: requiere País ─────────────────────────────────────────
   useEffect(() => {
     if (!fPaises.length) { setClienteOpts([]); setFClientes([]); return }
     const p = buildPeriodParams(new URLSearchParams({ dim: 'cliente' }))
     p.set('paises', fPaises.join(','))
-    if (fCanales.length) p.set('canales', fCanales.join(','))
     fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => {
       const opts = j.opts ?? []
       setClienteOpts(opts)
       setFClientes(prev => prev.filter(v => opts.includes(v)))
     })
-  }, [buildPeriodParams, fPaises, fCanales])
+  }, [buildPeriodParams, fPaises])
 
   // ── NIVEL 1 producto — Categoría: siempre disponible ───────────────────────
   useEffect(() => {
@@ -153,19 +148,18 @@ export default function SellInPage() {
     const p = buildPeriodParams(new URLSearchParams({ dim: 'sku' }))
     p.set('categorias', fCats.join(','))
     if (fPaises.length)   p.set('paises',   fPaises.join(','))
-    if (fCanales.length)  p.set('canales',  fCanales.join(','))
     if (fClientes.length) p.set('clientes', fClientes.join(','))
     fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => {
       const opts = j.opts ?? []
       setSkuOpts(opts)
       setFSkus(prev => prev.filter(v => opts.includes(v)))
     })
-  }, [buildPeriodParams, fPaises, fCanales, fClientes, fCats])
+  }, [buildPeriodParams, fPaises, fClientes, fCats])
 
   // ── Fetch datos ─────────────────────────────────────────────────────────────
   const cargar = useCallback((
     anos: string[], meses: string[],
-    paises: string[], cats: string[], clientes: string[], canales: string[], skus: string[],
+    paises: string[], cats: string[], clientes: string[], skus: string[],
     pg: number
   ) => {
     setLoading(true)
@@ -175,7 +169,6 @@ export default function SellInPage() {
     if (paises.length)   p.set('paises',     paises.join(','))
     if (cats.length)     p.set('categorias', cats.join(','))
     if (clientes.length) p.set('clientes',   clientes.join(','))
-    if (canales.length)  p.set('canales',    canales.join(','))
     if (skus.length)     p.set('skus',       skus.join(','))
     p.set('page',     String(pg))
     p.set('pageSize', String(PAGE_SIZE))
@@ -192,6 +185,9 @@ export default function SellInPage() {
           descripcion:     String(r.descripcion  ?? ''),
           categoria:       String(r.categoria    ?? ''),
           subcategoria:    String(r.subcategoria ?? ''),
+          fecha_min:       r.fecha_min ? String(r.fecha_min).slice(0, 10) : null,
+          fecha_max:       r.fecha_max ? String(r.fecha_max).slice(0, 10) : null,
+          dias_venta:      toNum(r.dias_venta),
           cajas:           toNum(r.cajas),
           ingresos:        toNum(r.ingresos),
           precio_promedio: toNum(r.precio_promedio),
@@ -208,12 +204,12 @@ export default function SellInPage() {
 
   const saveStorage = (
     anos = fAnos, meses = fMeses, paises = fPaises, cats = fCats,
-    clientes = fClientes, canales = fCanales, skus = fSkus
+    clientes = fClientes, skus = fSkus
   ) => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         fAnos: anos, fMeses: meses, fPaises: paises, fCats: cats,
-        fClientes: clientes, fCanales: canales, fSkus: skus,
+        fClientes: clientes, fSkus: skus,
       }))
     } catch {}
   }
@@ -221,20 +217,20 @@ export default function SellInPage() {
   const triggerCargar = (
     anos     = fAnos,    meses    = fMeses,
     paises   = fPaises,  cats     = fCats,
-    clientes = fClientes, canales = fCanales,
+    clientes = fClientes,
     skus     = fSkus,    pg       = 1
   ) => {
     setPage(pg)
-    saveStorage(anos, meses, paises, cats, clientes, canales, skus)
-    cargar(anos, meses, paises, cats, clientes, canales, skus, pg)
+    saveStorage(anos, meses, paises, cats, clientes, skus)
+    cargar(anos, meses, paises, cats, clientes, skus, pg)
   }
 
   const limpiar = () => {
     setFAnos([]); setFMeses([])
-    setFPaises([]); setFCats([]); setFClientes([]); setFCanales([]); setFSkus([])
+    setFPaises([]); setFCats([]); setFClientes([]); setFSkus([])
     setPage(1)
     localStorage.removeItem(STORAGE_KEY)
-    cargar([], [], [], [], [], [], [], 1)
+    cargar([], [], [], [], [], [], 1)
   }
 
   // ── Sort ────────────────────────────────────────────────────────────────────
@@ -262,7 +258,7 @@ export default function SellInPage() {
 
   // ── CSV ─────────────────────────────────────────────────────────────────────
   const descargarCSV = () => {
-    const headers = ['País','Cliente','Orden de Compra','SKU','Producto','Categoría','Subcategoría','Cajas','Valor','Precio Caja','% Total']
+    const headers = ['País','Cliente','Orden de Compra','SKU','Producto','Categoría','Subcategoría','Primera venta','Última venta','Días con venta','Cajas','Valor','Precio Caja','% Total']
     const esc = (v: string | number) => {
       const s = String(v)
       return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
@@ -271,6 +267,7 @@ export default function SellInPage() {
       headers.join(','),
       ...sorted.map(r => [
         r.pais, r.cliente, r.canal, r.sku, r.descripcion, r.categoria, r.subcategoria,
+        r.fecha_min ?? '', r.fecha_max ?? '', String(r.dias_venta),
         r.cajas.toFixed(0), r.ingresos.toFixed(2), r.precio_promedio.toFixed(4), r.pct.toFixed(2) + '%',
       ].map(esc).join(',')),
     ].join('\n')
@@ -353,7 +350,7 @@ export default function SellInPage() {
           </div>
         </div>
 
-        {/* Jerarquía geográfica: País → Canal → Cliente */}
+        {/* Jerarquía geográfica: País → Cliente */}
         <div className="mb-3">
           <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Geografía / Ventas</p>
           <div className="flex items-start gap-1.5 flex-wrap">
@@ -364,23 +361,10 @@ export default function SellInPage() {
                 value={fPaises}
                 onChange={v => {
                   setFPaises(v)
-                  if (!v.length) { setFCanales([]); setFClientes([]) }
-                  triggerCargar(fAnos, fMeses, v, fCats, [], [], fSkus)
+                  if (!v.length) setFClientes([])
+                  triggerCargar(fAnos, fMeses, v, fCats, [], fSkus)
                 }}
                 placeholder="Todos los países"
-              />
-            </div>
-            <div className="flex items-center self-end pb-2 text-gray-300 text-sm select-none">›</div>
-            <div className={`flex-1 min-w-[160px] transition-opacity ${!fPaises.length ? 'opacity-40 pointer-events-none' : ''}`}>
-              <MultiSelect
-                label={`Canal${!fPaises.length ? ' — selecciona País' : ''}`}
-                options={canalOpts.map(c => ({ value: c, label: c }))}
-                value={fCanales}
-                onChange={v => {
-                  setFCanales(v)
-                  triggerCargar(fAnos, fMeses, fPaises, fCats, fClientes, v, fSkus)
-                }}
-                placeholder={fPaises.length ? 'Todos los canales' : '—'}
               />
             </div>
             <div className="flex items-center self-end pb-2 text-gray-300 text-sm select-none">›</div>
@@ -391,7 +375,7 @@ export default function SellInPage() {
                 value={fClientes}
                 onChange={v => {
                   setFClientes(v)
-                  triggerCargar(fAnos, fMeses, fPaises, fCats, v, fCanales, fSkus)
+                  triggerCargar(fAnos, fMeses, fPaises, fCats, v, fSkus)
                 }}
                 placeholder={fPaises.length ? 'Todos los clientes' : '—'}
               />
@@ -411,7 +395,7 @@ export default function SellInPage() {
                 onChange={v => {
                   setFCats(v)
                   if (!v.length) setFSkus([])
-                  triggerCargar(fAnos, fMeses, fPaises, v, fClientes, fCanales, [])
+                  triggerCargar(fAnos, fMeses, fPaises, v, fClientes, [])
                 }}
                 placeholder="Todas las categorías"
               />
@@ -424,7 +408,7 @@ export default function SellInPage() {
                 value={fSkus}
                 onChange={v => {
                   setFSkus(v)
-                  triggerCargar(fAnos, fMeses, fPaises, fCats, fClientes, fCanales, v)
+                  triggerCargar(fAnos, fMeses, fPaises, fCats, fClientes, v)
                 }}
                 placeholder={fCats.length ? 'Todos los SKUs' : '—'}
               />
@@ -495,6 +479,9 @@ export default function SellInPage() {
                         <th className="text-left py-2 pr-3">Producto</th>
                         <th className="text-left py-2 pr-3">Categoría</th>
                         <th className="text-left py-2 pr-3">Subcategoría</th>
+                        <th className="text-left py-2 pr-3">Primera venta</th>
+                        <th className="text-left py-2 pr-3">Última venta</th>
+                        <th className="text-right py-2 pr-3">Días</th>
                         <th
                           className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600 select-none"
                           onClick={() => toggleSort('cajas')}
@@ -520,6 +507,9 @@ export default function SellInPage() {
                           <td className="py-1.5 pr-3 text-gray-700 max-w-[160px] truncate">{r.descripcion}</td>
                           <td className="py-1.5 pr-3 text-gray-600">{r.categoria}</td>
                           <td className="py-1.5 pr-3 text-gray-500">{r.subcategoria}</td>
+                          <td className="py-1.5 pr-3 text-gray-600 font-mono text-[11px]">{fmtFecha(r.fecha_min)}</td>
+                          <td className="py-1.5 pr-3 text-gray-800 font-mono text-[11px]">{fmtFecha(r.fecha_max)}</td>
+                          <td className="py-1.5 pr-3 text-right text-gray-500">{r.dias_venta || '—'}</td>
                           <td className="py-1.5 pr-3 text-right text-gray-700">{fmtN(r.cajas)}</td>
                           <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>
                           <td className="py-1.5 pr-3 text-right text-gray-500">{fmt(r.precio_promedio)}</td>
@@ -533,13 +523,13 @@ export default function SellInPage() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                     <button
-                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fClientes, fCanales, fSkus, pg) }}
+                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, pg) }}
                       disabled={page === 1}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >← Anterior</button>
                     <span className="text-sm text-gray-500">Página {page} de {totalPages}</span>
                     <button
-                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fClientes, fCanales, fSkus, pg) }}
+                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, pg) }}
                       disabled={page === totalPages}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >Siguiente →</button>

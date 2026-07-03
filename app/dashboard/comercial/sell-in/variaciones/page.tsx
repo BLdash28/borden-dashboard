@@ -67,14 +67,19 @@ function qSubTotals(trimMeses: number[], totals: Totals, activeMeses: number[]) 
 }
 
 export default function SellInVariaciones() {
-  const [dim,    setDim]    = useState<DimKey>('cliente')
-  const [paises, setPaises] = useState<string[]>([])
-  const [tipos,  setTipos]  = useState<string[]>(['REGULAR'])
+  const [dim,        setDim]        = useState<DimKey>('cliente')
+  const [paises,     setPaises]     = useState<string[]>([])
+  const [tipos,      setTipos]      = useState<string[]>(['REGULAR'])
+  const [clientes,   setClientes]   = useState<string[]>([])
+  const [categorias, setCategorias] = useState<string[]>([])
   const initDone = useRef(false)
   const [rows,   setRows]   = useState<VarRow[]>([])
   const [totals, setTotals] = useState<Totals>({ total2025: 0, total2026: 0, meses: {} })
   const [meses,  setMeses]  = useState<number[]>([])
   const [loading,setLoading]= useState(true)
+
+  const [clienteOpts,   setClienteOpts]   = useState<{ value: string }[]>([])
+  const [categoriaOpts, setCategoriaOpts] = useState<{ value: string }[]>([])
 
   const [expanded,       setExpanded]       = useState<Set<string>>(new Set())
   const [subRows,        setSubRows]        = useState<Record<string, VarRow[]>>({})
@@ -82,11 +87,13 @@ export default function SellInVariaciones() {
 
   const buildQs = useCallback((extra?: Record<string, string>) => {
     const qs = new URLSearchParams({ dim })
-    if (paises.length) qs.set('pais',         paises.join(','))
-    if (tipos.length)  qs.set('tipo_negocio', tipos.join(','))
+    if (paises.length)     qs.set('pais',         paises.join(','))
+    if (tipos.length)      qs.set('tipo_negocio', tipos.join(','))
+    if (clientes.length)   qs.set('cliente',      clientes.join(','))
+    if (categorias.length) qs.set('categoria',    categorias.join(','))
     if (extra) Object.entries(extra).forEach(([k, v]) => qs.set(k, v))
     return qs
-  }, [dim, paises, tipos])
+  }, [dim, paises, tipos, clientes, categorias])
 
   const cargar = useCallback(async () => {
     setLoading(true)
@@ -113,13 +120,43 @@ export default function SellInVariaciones() {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) {
         const s = JSON.parse(raw)
-        if (s.dim)            setDim(s.dim)
-        if (s.paises?.length) setPaises(s.paises)
-        if (s.tipos?.length)  setTipos(s.tipos)
+        if (s.dim)                setDim(s.dim)
+        if (s.paises?.length)     setPaises(s.paises)
+        if (s.tipos?.length)      setTipos(s.tipos)
+        if (s.clientes?.length)   setClientes(s.clientes)
+        if (s.categorias?.length) setCategorias(s.categorias)
       }
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Cascada: cargar opciones de clientes/categorias filtradas por país
+  useEffect(() => {
+    const qs = new URLSearchParams({ dim: 'cliente' })
+    if (paises.length) qs.set('paises', paises.join(','))
+    fetch('/api/ventas/sell-in/opts?' + qs).then(r => r.json()).then(j => {
+      const opts = (j.opts ?? []).map((v: string) => ({ value: v }))
+      setClienteOpts(opts)
+      setClientes(prev => prev.filter(c => j.opts?.includes(c)))
+    })
+  }, [paises])
+
+  useEffect(() => {
+    const qs = new URLSearchParams({ dim: 'categoria' })
+    if (paises.length) qs.set('paises', paises.join(','))
+    fetch('/api/ventas/sell-in/opts?' + qs).then(r => r.json()).then(j => {
+      const opts = (j.opts ?? []).map((v: string) => ({ value: v }))
+      setCategoriaOpts(opts)
+      setCategorias(prev => prev.filter(c => j.opts?.includes(c)))
+    })
+  }, [paises])
+
+  const saveStorage = useCallback((patch: Record<string, unknown>) => {
+    try {
+      const base = { dim, paises, tipos, clientes, categorias }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...base, ...patch }))
+    } catch {}
+  }, [dim, paises, tipos, clientes, categorias])
 
   const toggleClient = useCallback(async (clientName: string) => {
     if (expanded.has(clientName)) {
@@ -201,24 +238,23 @@ export default function SellInVariaciones() {
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Vista</p>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               {(['cliente','categoria'] as DimKey[]).map(d => (
-                <button key={d} onClick={() => {
-                  setDim(d)
-                  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ dim: d, paises, tipos })) } catch {}
-                }}
+                <button key={d} onClick={() => { setDim(d); saveStorage({ dim: d }) }}
                   className={`px-4 py-2 text-sm font-medium transition-colors ${dim===d?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
                   {d === 'cliente' ? 'Por Cliente' : 'Por Categoría'}
                 </button>
               ))}
             </div>
           </div>
-          <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT}  value={tipos}  onChange={ts => {
-            setTipos(ts)
-            try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ dim, paises, tipos: ts })) } catch {}
-          }} placeholder="Todos" />
-          <FiltroMulti label="País"         options={PAISES_OPT} value={paises} onChange={ps => {
-            setPaises(ps)
-            try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ dim, paises: ps, tipos })) } catch {}
-          }} placeholder="Todos los países" />
+          <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT}  value={tipos}
+            onChange={ts => { setTipos(ts); saveStorage({ tipos: ts }) }} placeholder="Todos" />
+          <FiltroMulti label="País" options={PAISES_OPT} value={paises}
+            onChange={ps => { setPaises(ps); saveStorage({ paises: ps }) }} placeholder="Todos los países" />
+          <FiltroMulti label="Cliente" options={clienteOpts} value={clientes}
+            onChange={cs => { setClientes(cs); saveStorage({ clientes: cs }) }}
+            placeholder={paises.length ? 'Todos los clientes' : 'Todos los clientes'} />
+          <FiltroMulti label="Categoría" options={categoriaOpts} value={categorias}
+            onChange={cs => { setCategorias(cs); saveStorage({ categorias: cs }) }}
+            placeholder="Todas las categorías" />
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px]">
           <span className="text-gray-400">Variación:</span>

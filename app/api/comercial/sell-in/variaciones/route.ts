@@ -9,11 +9,12 @@ const inC = (col: string, vals: string[]) =>
 
 export async function GET(req: NextRequest) {
   try {
-    const sp       = req.nextUrl.searchParams
-    const dim      = sp.get('dim') || 'cliente'
-    const paises   = sp.get('pais')         ? sp.get('pais')!.split(',').filter(Boolean)         : []
-    const tipos    = sp.get('tipo_negocio') ? sp.get('tipo_negocio')!.split(',').filter(Boolean) : []
-    const clientes = sp.get('cliente')      ? sp.get('cliente')!.split(',').filter(Boolean)      : []
+    const sp         = req.nextUrl.searchParams
+    const dim        = sp.get('dim') || 'cliente'
+    const paises     = sp.get('pais')         ? sp.get('pais')!.split(',').filter(Boolean)         : []
+    const tipos      = sp.get('tipo_negocio') ? sp.get('tipo_negocio')!.split(',').filter(Boolean) : []
+    const clientes   = sp.get('cliente')      ? sp.get('cliente')!.split(',').filter(Boolean)      : []
+    const categorias = sp.get('categoria')    ? sp.get('categoria')!.split(',').filter(Boolean)    : []
 
     // Año completo — 12 meses
     const meses    = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -26,8 +27,9 @@ export async function GET(req: NextRequest) {
 
     const dimColNew  = dim === 'categoria' ? 'categoria' : 'cliente_nombre'
     const dimColOld  = dim === 'categoria' ? 'categoria' : 'cliente'
-    const clienteNew = clientes.length ? 'AND ' + inC('cliente_nombre', clientes) : ''
-    const clienteOld = clientes.length ? 'AND ' + inC('cliente',        clientes) : ''
+    const clienteNew = clientes.length   ? 'AND ' + inC('cliente_nombre', clientes) : ''
+    const clienteOld = clientes.length   ? 'AND ' + inC('cliente',        clientes) : ''
+    const catCond    = categorias.length ? 'AND ' + inC('categoria',      categorias) : ''
 
     // Usa fact_sales_sellin para 2025 y 2026 (consistente con resumen ejecutivo)
     // Suplementa 2025 con ventas_sell_in solo para meses no cubiertos por fact_sales_sellin
@@ -36,13 +38,13 @@ export async function GET(req: NextRequest) {
       FROM (
         SELECT ${dimColNew} AS dim, ano, mes, venta_neta AS ingresos
         FROM fact_sales_sellin
-        WHERE ano IN (2025, 2026) AND ${mesSql} ${paisCond} ${tipoCond} ${clienteNew}
+        WHERE ano IN (2025, 2026) AND ${mesSql} ${paisCond} ${tipoCond} ${clienteNew} ${catCond}
 
         UNION ALL
 
         SELECT ${dimColOld} AS dim, 2025 AS ano, mes, ingresos
         FROM ventas_sell_in
-        WHERE ano = 2025 AND ${mesSql} ${paisCondOld} ${clienteOld}
+        WHERE ano = 2025 AND ${mesSql} ${paisCondOld} ${clienteOld} ${catCond}
           AND (ano, mes) NOT IN (
             SELECT DISTINCT ano, mes FROM fact_sales_sellin WHERE ano = 2025
           )
