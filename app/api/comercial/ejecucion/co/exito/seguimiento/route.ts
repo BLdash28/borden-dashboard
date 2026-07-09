@@ -43,15 +43,20 @@ type RowOut = {
   plucd?: string
   sku?: string
   meses: Record<number, number>      // mes → COP
+  mesesUsd: Record<number, number>   // mes → USD (margen Borden)
   mesesUnd: Record<number, number>   // mes → unidades
   ytdCop: number
+  ytdUsd: number
   ytdUnd: number
   rrUnd: number     // unidades por día (mes en curso)
   rrCop: number     // COP por día (mes en curso)
+  rrUsd: number     // USD por día (mes en curso)
   undActual: number
   copActual: number
+  usdActual: number
   proyUnd: number   // proyección cierre mes (und)
   proyCop: number   // proyección cierre mes (COP)
+  proyUsd: number   // proyección cierre mes (USD)
 }
 
 export async function GET(req: NextRequest) {
@@ -79,7 +84,7 @@ export async function GET(req: NextRequest) {
     const diaActual = fNum % 100
     const ultimaFecha = `${ano}-${String(mesActual).padStart(2, '0')}-${String(diaActual).padStart(2, '0')}`
 
-    const [prodR, cadR, subR] = await Promise.all([
+    const [prodR, cadR, subR, geoR] = await Promise.all([
       pool.query(
         `SELECT sku, mes,
                 SUM(ventas_unidades)::numeric AS und,
@@ -110,6 +115,17 @@ export async function GET(req: NextRequest) {
          GROUP BY subformato, cadena, mes`,
         [ano],
       ),
+      pool.query(
+        `SELECT COALESCE(NULLIF(departamento, ''), 'SIN GEOGRAFÍA') AS grp, mes,
+                COUNT(DISTINCT punto_venta) AS pdvs,
+                SUM(ventas_unidades)::numeric AS und,
+                SUM(ventas_valorusd)::numeric  AS usd,
+                SUM(venta_valorcop)::numeric   AS cop
+         FROM fact_ventas_exito
+         WHERE pais='CO' AND ano=$1
+         GROUP BY COALESCE(NULLIF(departamento, ''), 'SIN GEOGRAFÍA'), mes`,
+        [ano],
+      ),
     ])
 
     // Agrupar producto por SKU
@@ -126,23 +142,30 @@ export async function GET(req: NextRequest) {
 
     const buildRow = (key: string, label: string, mesesData: Record<number, Bucket>, extra?: { plucd?: string; sku?: string }): RowOut => {
       const meses: Record<number, number> = {}
+      const mesesUsd: Record<number, number> = {}
       const mesesUnd: Record<number, number> = {}
       let ytdCop = 0
+      let ytdUsd = 0
       let ytdUnd = 0
       for (let m = 1; m <= mesActual; m++) {
         const b = mesesData[m]
         const cop = b?.cop ?? 0
+        const usd = b?.usd ?? 0
         const und = b?.und ?? 0
-        meses[m] = cop
+        meses[m]    = cop
+        mesesUsd[m] = usd
         mesesUnd[m] = und
         ytdCop += cop
+        ytdUsd += usd
         ytdUnd += und
       }
       const cur = mesesData[mesActual]
       const undActual = cur?.und ?? 0
       const copActual = cur?.cop ?? 0
+      const usdActual = cur?.usd ?? 0
       const rrUnd = diaActual > 0 ? undActual / diaActual : 0
       const rrCop = diaActual > 0 ? copActual / diaActual : 0
+      const rrUsd = diaActual > 0 ? usdActual / diaActual : 0
       const diasMes = DIAS_MES[mesActual] ?? 30
       return {
         key,
@@ -150,15 +173,20 @@ export async function GET(req: NextRequest) {
         plucd: extra?.plucd,
         sku: extra?.sku,
         meses,
+        mesesUsd,
         mesesUnd,
         ytdCop,
+        ytdUsd,
         ytdUnd,
         rrUnd: Math.round(rrUnd * 10) / 10,
         rrCop: Math.round(rrCop),
+        rrUsd: Math.round(rrUsd * 100) / 100,
         undActual,
         copActual,
+        usdActual,
         proyUnd: Math.round(rrUnd * diasMes),
         proyCop: Math.round(rrCop * diasMes),
+        proyUsd: Math.round(rrUsd * diasMes),
       }
     }
 
@@ -206,6 +234,27 @@ export async function GET(req: NextRequest) {
       .map(s => ({ ...buildRow(s, s, bySub[s].meses), cadena: bySub[s].cadena }))
       .sort((a, b) => b.ytdCop - a.ytdCop)
 
+    // Por Geografía (departamento)
+    const byGeo: Record<string, { pdvsMes: Record<number, number>; meses: Record<number, Bucket> }> = {}
+    for (const r of geoR.rows) {
+      const grp = r.grp as string
+      if (!byGeo[grp]) byGeo[grp] = { pdvsMes: {}, meses: {} }
+      const m = parseInt(r.mes)
+      byGeo[grp].meses[m] = {
+        und: Number(r.und ?? 0),
+        usd: Number(r.usd ?? 0),
+        cop: Number(r.cop ?? 0),
+      }
+      byGeo[grp].pdvsMes[m] = Math.max(byGeo[grp].pdvsMes[m] ?? 0, parseInt(r.pdvs ?? '0'))
+    }
+    const porGeografia: (RowOut & { pdvs?: number })[] = Object.keys(byGeo)
+      .map(g => {
+        const row = buildRow(g, g, byGeo[g].meses)
+        const pdvs = Math.max(...Object.values(byGeo[g].pdvsMes), 0)
+        return { ...row, pdvs }
+      })
+      .sort((a, b) => b.ytdCop - a.ytdCop)
+
     return NextResponse.json({
       ano,
       ultimo_mes: mesActual,
@@ -216,6 +265,7 @@ export async function GET(req: NextRequest) {
       por_producto: porProducto,
       por_cadena: porCadena,
       por_subformato: porSubformato,
+      por_geografia: porGeografia,
     })
   } catch (err) {
     return handleApiError(err)

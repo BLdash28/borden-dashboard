@@ -18,6 +18,7 @@ export async function GET(req: NextRequest) {
         WITH cur AS (
           SELECT
             SUM(ventas_valorusd) AS valor,
+            SUM(venta_valorcop)  AS valor_cop,
             SUM(ventas_unidades) AS unidades,
             MAX(ano*10000 + mes*100 + dia) AS ultima_fecha_n,
             MAX(mes) AS ultimo_mes
@@ -28,6 +29,7 @@ export async function GET(req: NextRequest) {
         prev AS (
           SELECT
             SUM(ventas_valorusd) AS valor,
+            SUM(venta_valorcop)  AS valor_cop,
             SUM(ventas_unidades) AS unidades
           FROM fact_ventas_exito
           WHERE pais = 'CO' AND ano = 2025
@@ -35,10 +37,12 @@ export async function GET(req: NextRequest) {
             ${catFilter} ${cadFilter}
         )
         SELECT
-          COALESCE(cur.valor, 0)     AS ytd_2026,
-          COALESCE(cur.unidades, 0)  AS uni_2026,
-          COALESCE(prev.valor, 0)    AS ytd_2025,
-          COALESCE(prev.unidades, 0) AS uni_2025,
+          COALESCE(cur.valor, 0)      AS ytd_2026,
+          COALESCE(cur.valor_cop, 0)  AS ytd_2026_cop,
+          COALESCE(cur.unidades, 0)   AS uni_2026,
+          COALESCE(prev.valor, 0)     AS ytd_2025,
+          COALESCE(prev.valor_cop, 0) AS ytd_2025_cop,
+          COALESCE(prev.unidades, 0)  AS uni_2025,
           cur.ultima_fecha_n,
           cur.ultimo_mes,
           CASE WHEN COALESCE(prev.valor, 0) > 0
@@ -49,8 +53,10 @@ export async function GET(req: NextRequest) {
       pool.query(`
         SELECT cadena,
           SUM(CASE WHEN ano = 2026 THEN ventas_valorusd ELSE 0 END) AS valor_2026,
+          SUM(CASE WHEN ano = 2026 THEN venta_valorcop  ELSE 0 END) AS valor_2026_cop,
           SUM(CASE WHEN ano = 2026 THEN ventas_unidades ELSE 0 END) AS uni_2026,
-          SUM(CASE WHEN ano = 2025 THEN ventas_valorusd ELSE 0 END) AS valor_2025
+          SUM(CASE WHEN ano = 2025 THEN ventas_valorusd ELSE 0 END) AS valor_2025,
+          SUM(CASE WHEN ano = 2025 THEN venta_valorcop  ELSE 0 END) AS valor_2025_cop
         FROM fact_ventas_exito
         WHERE pais = 'CO' AND ano IN (2025, 2026)
           AND cadena IS NOT NULL AND cadena <> ''
@@ -61,6 +67,7 @@ export async function GET(req: NextRequest) {
       pool.query(`
         SELECT categoria,
           SUM(ventas_valorusd) AS valor_2026,
+          SUM(venta_valorcop)  AS valor_2026_cop,
           SUM(ventas_unidades) AS uni_2026
         FROM fact_ventas_exito
         WHERE pais = 'CO' AND ano = 2026
@@ -72,6 +79,7 @@ export async function GET(req: NextRequest) {
       pool.query(`
         SELECT ano, mes,
           ROUND(SUM(ventas_valorusd)::numeric, 2) AS valor,
+          ROUND(SUM(venta_valorcop)::numeric, 0)  AS valor_cop,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
         FROM fact_ventas_exito
         WHERE pais = 'CO' AND ano IN (2025, 2026)
@@ -88,40 +96,66 @@ export async function GET(req: NextRequest) {
       ? `${Math.floor(ufN/10000)}-${String(Math.floor(ufN/100)%100).padStart(2,'0')}-${String(ufN%100).padStart(2,'0')}`
       : null
 
-    const monthly: Record<number, { mes: number; mes_nombre: string; y2025: number; y2026: number | null }> = {}
+    type MonthlyRow = {
+      mes: number; mes_nombre: string
+      y2025: number; y2026: number | null
+      cop2025: number; cop2026: number | null
+      uds2025: number; uds2026: number | null
+    }
+    const monthly: Record<number, MonthlyRow> = {}
     for (let m = 1; m <= 12; m++) {
-      monthly[m] = { mes: m, mes_nombre: MN[m], y2025: 0, y2026: null }
+      monthly[m] = { mes: m, mes_nombre: MN[m],
+        y2025: 0, y2026: null,
+        cop2025: 0, cop2026: null,
+        uds2025: 0, uds2026: null }
     }
     for (const r of monthlyR.rows) {
       const m = parseInt(r.mes)
       const a = parseInt(r.ano)
-      if (a === 2025) monthly[m].y2025 = parseFloat(r.valor)
-      if (a === 2026) monthly[m].y2026 = parseFloat(r.valor)
+      if (a === 2025) {
+        monthly[m].y2025   = parseFloat(r.valor)
+        monthly[m].cop2025 = parseFloat(r.valor_cop ?? '0')
+        monthly[m].uds2025 = parseFloat(r.unidades ?? '0')
+      }
+      if (a === 2026) {
+        monthly[m].y2026   = parseFloat(r.valor)
+        monthly[m].cop2026 = parseFloat(r.valor_cop ?? '0')
+        monthly[m].uds2026 = parseFloat(r.unidades ?? '0')
+      }
     }
-    for (let m = ultimoMes + 1; m <= 12; m++) monthly[m].y2026 = null
+    for (let m = ultimoMes + 1; m <= 12; m++) {
+      monthly[m].y2026 = null
+      monthly[m].cop2026 = null
+      monthly[m].uds2026 = null
+    }
 
     return NextResponse.json({
-      ytd_2026:  parseFloat(row.ytd_2026 ?? '0'),
-      uni_2026:  parseInt(row.uni_2026 ?? '0'),
-      ytd_2025:  parseFloat(row.ytd_2025 ?? '0'),
-      uni_2025:  parseInt(row.uni_2025 ?? '0'),
-      delta_ytd: row.delta_ytd !== null && row.delta_ytd !== undefined ? parseFloat(row.delta_ytd) : null,
+      ytd_2026:      parseFloat(row.ytd_2026 ?? '0'),
+      ytd_2026_cop:  parseFloat(row.ytd_2026_cop ?? '0'),
+      uni_2026:      parseInt(row.uni_2026 ?? '0'),
+      ytd_2025:      parseFloat(row.ytd_2025 ?? '0'),
+      ytd_2025_cop:  parseFloat(row.ytd_2025_cop ?? '0'),
+      uni_2025:      parseInt(row.uni_2025 ?? '0'),
+      delta_ytd:     row.delta_ytd !== null && row.delta_ytd !== undefined ? parseFloat(row.delta_ytd) : null,
       ultimo_mes: ultimoMes,
       ultimo_mes_nombre: MN[ultimoMes] ?? '',
       ultima_fecha: ultimaFecha,
       por_cadena: cadenaR.rows.map(r => ({
-        cadena:     r.cadena,
-        valor_2026: parseFloat(r.valor_2026 ?? '0'),
-        uni_2026:   parseInt(r.uni_2026 ?? '0'),
-        valor_2025: parseFloat(r.valor_2025 ?? '0'),
+        cadena:         r.cadena,
+        valor_2026:     parseFloat(r.valor_2026 ?? '0'),
+        valor_2026_cop: parseFloat(r.valor_2026_cop ?? '0'),
+        uni_2026:       parseInt(r.uni_2026 ?? '0'),
+        valor_2025:     parseFloat(r.valor_2025 ?? '0'),
+        valor_2025_cop: parseFloat(r.valor_2025_cop ?? '0'),
         delta: parseFloat(r.valor_2025 ?? '0') > 0
           ? ((parseFloat(r.valor_2026 ?? '0') - parseFloat(r.valor_2025 ?? '0')) / parseFloat(r.valor_2025)) * 100
           : null,
       })),
       por_categoria: catR.rows.map(r => ({
-        categoria:  r.categoria,
-        valor_2026: parseFloat(r.valor_2026 ?? '0'),
-        uni_2026:   parseInt(r.uni_2026 ?? '0'),
+        categoria:      r.categoria,
+        valor_2026:     parseFloat(r.valor_2026 ?? '0'),
+        valor_2026_cop: parseFloat(r.valor_2026_cop ?? '0'),
+        uni_2026:       parseInt(r.uni_2026 ?? '0'),
       })),
       monthly: Object.values(monthly),
     })

@@ -128,7 +128,9 @@ export const LineChartPro = memo(function LineChartPro({
   }
 
   const Chart = area ? AreaChart : LineChart
-  const Series = area ? Area : Line
+
+  // ID único por instancia para gradients (evita colisiones si hay múltiples charts)
+  const gradientId = (key: string) => `lcp-grad-${key.replace(/[^a-z0-9]/gi, '')}-${(dataKey ?? key)}-${height}`
 
   return (
     <div className="relative select-none">
@@ -168,6 +170,26 @@ export const LineChartPro = memo(function LineChartPro({
 
       <ResponsiveContainer width="100%" height={height}>
         <Chart data={data} margin={m}>
+          {/* Gradients para modo área */}
+          {area && (
+            <defs>
+              {isMulti
+                ? lines!.map(l => (
+                    <linearGradient key={l.key} id={gradientId(l.key)} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor={l.color} stopOpacity={0.35} />
+                      <stop offset="60%"  stopColor={l.color} stopOpacity={0.08} />
+                      <stop offset="100%" stopColor={l.color} stopOpacity={0} />
+                    </linearGradient>
+                  ))
+                : (
+                  <linearGradient id={gradientId(dataKey)} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor={color} stopOpacity={0.4} />
+                    <stop offset="60%"  stopColor={color} stopOpacity={0.1} />
+                    <stop offset="100%" stopColor={color} stopOpacity={0} />
+                  </linearGradient>
+                )}
+            </defs>
+          )}
           <CartesianGrid strokeDasharray="3 3" stroke="var(--border, #e4e4e7)" vertical={false} />
           <CartesianGrid vertical stroke="#b4b4c0" strokeDasharray="4 4" horizontal={false} />
 
@@ -208,9 +230,10 @@ export const LineChartPro = memo(function LineChartPro({
                       {...sharedLineProps}
                       dataKey={l.key}
                       stroke={l.color}
-                      fill={l.color + '20'}
+                      strokeWidth={2.5}
+                      fill={`url(#${gradientId(l.key)})`}
                       dot={dot ? { r: 3, fill: l.color } : false}
-                      activeDot={hiddenKeys.has(l.key) ? false : { r: 5, fill: l.color, stroke: 'none' }}
+                      activeDot={hiddenKeys.has(l.key) ? false : { r: 5, fill: '#fff', stroke: l.color, strokeWidth: 2 }}
                       name={l.label}
                       opacity={opacityOf(l.key)}
                       hide={hiddenKeys.has(l.key)}
@@ -237,9 +260,10 @@ export const LineChartPro = memo(function LineChartPro({
                   {...sharedLineProps}
                   dataKey={dataKey}
                   stroke={color}
-                  fill={color + '20'}
+                  strokeWidth={2.5}
+                  fill={`url(#${gradientId(dataKey)})`}
                   dot={dot ? { r: 3, fill: color } : false}
-                  activeDot={{ r: 5, fill: color, stroke: 'none' }}
+                  activeDot={{ r: 5, fill: '#fff', stroke: color, strokeWidth: 2 }}
                   name={tooltipUnit ?? dataKey}
                 />
               ) : (

@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import {
-  BarChart, Bar, LineChart, Line, ComposedChart,
+  BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
   PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, Cell, ReferenceLine,
@@ -649,24 +649,47 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           </div>
         )}
 
-        {/* Monthly line chart */}
+        {/* Monthly area chart */}
         {monthly.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Sell-Out Mensual — 2025 / 2026</h3>
-            <div className="h-[220px]">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Sell-Out Mensual — 2025 / 2026</h3>
+                <p className="text-[11px] text-gray-400">Evolución comparativa por año</p>
+              </div>
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
+              </div>
+            </div>
+            <div className="h-[240px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthly}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
+                <AreaChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="wmGrad2026" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#f59e0b" stopOpacity={0.4}/>
+                      <stop offset="60%"  stopColor="#f59e0b" stopOpacity={0.1}/>
+                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="wmGrad2025" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.25}/>
+                      <stop offset="60%"  stopColor="#94a3b8" stopOpacity={0.07}/>
+                      <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                   <Tooltip
                     formatter={(v: any, name: string) => [fmtFull(v), name]}
                     labelFormatter={(label: string) => label}
+                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Legend wrapperStyle={{ fontSize: 11, textAlign: 'center' }} verticalAlign="bottom" />
-                  <Line dataKey="y2025" name="2025" type="monotone" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
-                  <Line dataKey="y2026" name="2026" type="monotone" stroke="#c8873a" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
-                </LineChart>
+                  <Area type="monotone" dataKey="y2025" name="2025" stroke="#94a3b8" strokeWidth={2}
+                    fill="url(#wmGrad2025)" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
+                  <Area type="monotone" dataKey="y2026" name="2026" stroke="#f59e0b" strokeWidth={2.5}
+                    fill="url(#wmGrad2026)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }} connectNulls={false} />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>

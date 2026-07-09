@@ -47,11 +47,12 @@ interface SellInRow {
   precio_promedio: number
 }
 
-const fmtFecha = (v: string | null | undefined) => {
-  if (!v) return '—'
+const MES_LBL = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+const partesFecha = (v: string | null | undefined) => {
+  if (!v) return { ano: '—', mes: '—', dia: '—' }
   const parts = String(v).slice(0, 10).split('-')
-  if (parts.length !== 3) return String(v)
-  return `${parts[2]}/${parts[1]}/${parts[0].slice(2)}`
+  if (parts.length !== 3) return { ano: '—', mes: '—', dia: '—' }
+  return { ano: parts[0], mes: MES_LBL[parseInt(parts[1])] || parts[1], dia: parts[2] }
 }
 
 type SortKey = 'ingresos' | 'cajas' | 'pct'
@@ -61,14 +62,16 @@ export default function SellInPage() {
   // Period
   const [mesMap, setMesMap] = useState<Record<number, number[]>>({})
   const [anos,   setAnos]   = useState<number[]>([])
-  const [fAnos,  setFAnos]  = useState<string[]>(() => readStorage()?.fAnos  ?? [])
-  const [fMeses, setFMeses] = useState<string[]>(() => readStorage()?.fMeses ?? [])
+  // Inicializamos vacíos para que server y client rendericen igual;
+  // localStorage se hidrata en useEffect abajo (evita hydration mismatch).
+  const [fAnos,  setFAnos]  = useState<string[]>([])
+  const [fMeses, setFMeses] = useState<string[]>([])
 
   // Filters
-  const [fPaises,   setFPaises]   = useState<string[]>(() => readStorage()?.fPaises   ?? [])
-  const [fCats,     setFCats]     = useState<string[]>(() => readStorage()?.fCats     ?? [])
-  const [fClientes, setFClientes] = useState<string[]>(() => readStorage()?.fClientes ?? [])
-  const [fSkus,     setFSkus]     = useState<string[]>(() => readStorage()?.fSkus     ?? [])
+  const [fPaises,   setFPaises]   = useState<string[]>([])
+  const [fCats,     setFCats]     = useState<string[]>([])
+  const [fClientes, setFClientes] = useState<string[]>([])
+  const [fSkus,     setFSkus]     = useState<string[]>([])
 
   // Options
   const [paisOpts,    setPaisOpts]    = useState<string[]>([])
@@ -93,7 +96,24 @@ export default function SellInPage() {
   useEffect(() => {
     if (initDone.current) return
     initDone.current = true
-    cargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, 1)
+
+    // Hidratar filtros desde localStorage al montar (evita hydration mismatch
+    // porque no leemos localStorage en el initializer de useState).
+    const saved = readStorage()
+    const sAnos    = saved?.fAnos     ?? []
+    const sMeses   = saved?.fMeses    ?? []
+    const sPaises  = saved?.fPaises   ?? []
+    const sCats    = saved?.fCats     ?? []
+    const sClient  = saved?.fClientes ?? []
+    const sSkus    = saved?.fSkus     ?? []
+    if (sAnos.length)   setFAnos(sAnos)
+    if (sMeses.length)  setFMeses(sMeses)
+    if (sPaises.length) setFPaises(sPaises)
+    if (sCats.length)   setFCats(sCats)
+    if (sClient.length) setFClientes(sClient)
+    if (sSkus.length)   setFSkus(sSkus)
+
+    cargar(sAnos, sMeses, sPaises, sCats, sClient, sSkus, 1)
     fetch('/api/ventas/resumen?tipo=periodos')
       .then(r => r.json())
       .then(j => {
@@ -258,18 +278,21 @@ export default function SellInPage() {
 
   // ── CSV ─────────────────────────────────────────────────────────────────────
   const descargarCSV = () => {
-    const headers = ['País','Cliente','Orden de Compra','SKU','Producto','Categoría','Subcategoría','Primera venta','Última venta','Días con venta','Cajas','Valor','Precio Caja','% Total']
+    const headers = ['País','Cliente','Orden de Compra','SKU','Producto','Categoría','Subcategoría','Año','Mes','Cajas','Valor','Precio Caja','% Total']
     const esc = (v: string | number) => {
       const s = String(v)
       return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
     }
     const csv = [
       headers.join(','),
-      ...sorted.map(r => [
-        r.pais, r.cliente, r.canal, r.sku, r.descripcion, r.categoria, r.subcategoria,
-        r.fecha_min ?? '', r.fecha_max ?? '', String(r.dias_venta),
-        r.cajas.toFixed(0), r.ingresos.toFixed(2), r.precio_promedio.toFixed(4), r.pct.toFixed(2) + '%',
-      ].map(esc).join(',')),
+      ...sorted.map(r => {
+        const p = partesFecha(r.fecha_max)
+        return [
+          r.pais, r.cliente, r.canal, r.sku, r.descripcion, r.categoria, r.subcategoria,
+          p.ano, p.mes,
+          r.cajas.toFixed(0), r.ingresos.toFixed(2), r.precio_promedio.toFixed(4), r.pct.toFixed(2) + '%',
+        ].map(esc).join(',')
+      }),
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
@@ -474,14 +497,13 @@ export default function SellInPage() {
                       <tr className="text-gray-400 uppercase tracking-widest border-b border-gray-100">
                         <th className="text-left py-2 pr-3">País</th>
                         <th className="text-left py-2 pr-3">Cliente</th>
-                        <th className="text-left py-2 pr-3">Orden de Compra</th>
+                        <th className="text-left py-2 pr-6 w-1 whitespace-nowrap">OC</th>
                         <th className="text-left py-2 pr-3">SKU</th>
                         <th className="text-left py-2 pr-3">Producto</th>
-                        <th className="text-left py-2 pr-3">Categoría</th>
-                        <th className="text-left py-2 pr-3">Subcategoría</th>
-                        <th className="text-left py-2 pr-3">Primera venta</th>
-                        <th className="text-left py-2 pr-3">Última venta</th>
-                        <th className="text-right py-2 pr-3">Días</th>
+                        <th className="text-left py-2 pr-3 w-1 whitespace-nowrap">Categoría</th>
+                        <th className="text-left py-2 pr-3 whitespace-nowrap max-w-[110px]">Subcategoría</th>
+                        <th className="text-left py-2 pr-3 w-1 whitespace-nowrap">Año</th>
+                        <th className="text-left py-2 pr-3 w-1 whitespace-nowrap">Mes</th>
                         <th
                           className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600 select-none"
                           onClick={() => toggleSort('cajas')}
@@ -502,14 +524,15 @@ export default function SellInPage() {
                         <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="py-1.5 pr-3 font-semibold text-amber-600">{r.pais}</td>
                           <td className="py-1.5 pr-3 text-gray-700 max-w-[140px] truncate">{r.cliente}</td>
-                          <td className="py-1.5 pr-3 text-gray-500 font-mono text-[11px]">{r.canal}</td>
+                          <td className="py-1.5 pr-6 w-1 whitespace-nowrap text-gray-500 font-mono text-[11px]">{r.canal}</td>
                           <td className="py-1.5 pr-3 font-mono text-gray-500">{r.sku}</td>
-                          <td className="py-1.5 pr-3 text-gray-700 max-w-[160px] truncate">{r.descripcion}</td>
-                          <td className="py-1.5 pr-3 text-gray-600">{r.categoria}</td>
-                          <td className="py-1.5 pr-3 text-gray-500">{r.subcategoria}</td>
-                          <td className="py-1.5 pr-3 text-gray-600 font-mono text-[11px]">{fmtFecha(r.fecha_min)}</td>
-                          <td className="py-1.5 pr-3 text-gray-800 font-mono text-[11px]">{fmtFecha(r.fecha_max)}</td>
-                          <td className="py-1.5 pr-3 text-right text-gray-500">{r.dias_venta || '—'}</td>
+                          <td className="py-1.5 pr-3 text-gray-700 max-w-[260px] truncate" title={r.descripcion}>{r.descripcion}</td>
+                          <td className="py-1.5 pr-3 w-1 whitespace-nowrap text-gray-600">{r.categoria}</td>
+                          <td className="py-1.5 pr-3 max-w-[110px] truncate text-gray-500" title={r.subcategoria}>{r.subcategoria}</td>
+                          {(() => { const p = partesFecha(r.fecha_max); return <>
+                            <td className="py-1.5 pr-3 w-1 whitespace-nowrap text-gray-700 font-mono text-[11px]">{p.ano}</td>
+                            <td className="py-1.5 pr-3 w-1 whitespace-nowrap text-gray-800 font-mono text-[11px]">{p.mes}</td>
+                          </> })()}
                           <td className="py-1.5 pr-3 text-right text-gray-700">{fmtN(r.cajas)}</td>
                           <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>
                           <td className="py-1.5 pr-3 text-right text-gray-500">{fmt(r.precio_promedio)}</td>

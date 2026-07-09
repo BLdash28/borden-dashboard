@@ -668,26 +668,26 @@ export default function SelloutPage() {
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="uppercase tracking-widest border-b" style={{ color: 'var(--t3)', borderColor: 'var(--border)' }}>
-                        <th className="text-left py-2 pr-3">Año</th>
-                        <th className="text-left py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('mes')}>Mes{arrow('mes')}</th>
-                        <th className="text-left py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('dia')}>Día{arrow('dia')}</th>
-                        <th className="text-left py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('pais')}>País{arrow('pais')}</th>
-                        <th className="text-left py-2 pr-3">Cliente</th>
-                        <th className="text-left py-2 pr-3">Cadena</th>
-                        <th className="text-left py-2 pr-3">Formato</th>
-                        <th className="text-left py-2 pr-3">Punto Venta</th>
-                        <th className="text-left py-2 pl-6 pr-3">Cód. Barras</th>
-                        <th className="text-left py-2 pl-6 pr-3">SKU</th>
-                        <th className="text-left py-2 pl-6 pr-3">Producto</th>
-                        <th className="text-left py-2 pl-16 pr-3">Categoría</th>
-                        <th className="text-left py-2 pl-8 pr-8">Subcategoría</th>
-                        <th className="text-right py-2 pr-10 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('ventas_unidades')}>
+                        <th className="text-left py-2 pr-4 w-1 whitespace-nowrap">Año</th>
+                        <th className="text-left py-2 pr-4 w-1 whitespace-nowrap cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('mes')}>Mes{arrow('mes')}</th>
+                        <th className="text-left py-2 pr-4 w-1 whitespace-nowrap cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('dia')}>Día{arrow('dia')}</th>
+                        <th className="text-left py-2 pr-4 w-1 whitespace-nowrap cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('pais')}>País{arrow('pais')}</th>
+                        <th className="text-left py-2 pr-4">Cliente</th>
+                        <th className="text-left py-2 pr-4">Cadena</th>
+                        <th className="text-left py-2 pr-4">Formato</th>
+                        <th className="text-left py-2 pr-4">Punto Venta</th>
+                        <th className="text-left py-2 pr-4 w-1 whitespace-nowrap">Cód. Barras</th>
+                        <th className="text-left py-2 pr-4 w-1 whitespace-nowrap">SKU</th>
+                        <th className="text-left py-2 pr-4">Producto</th>
+                        <th className="text-left py-2 pr-4">Categoría</th>
+                        <th className="text-left py-2 pr-4">Subcategoría</th>
+                        <th className="text-right py-2 pr-4 w-1 whitespace-nowrap cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('ventas_unidades')}>
                           Unidades{arrow('ventas_unidades')}
                         </th>
-                        <th className="text-right py-2 pr-3 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('ventas_valor')}>
+                        <th className="text-right py-2 pr-4 w-1 whitespace-nowrap cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('ventas_valor')}>
                           USD{arrow('ventas_valor')}
                         </th>
-                        <th className="text-right py-2 cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('pct')}>
+                        <th className="text-right py-2 w-1 whitespace-nowrap cursor-pointer select-none hover:opacity-70" onClick={() => toggleSort('pct')}>
                           % Total{arrow('pct')}
                         </th>
                       </tr>
@@ -695,22 +695,22 @@ export default function SelloutPage() {
                     <tbody>
                       {sorted.map((r, i) => (
                         <tr key={i} className="border-b transition-colors hover:bg-white/3" style={{ borderColor: 'var(--border)' }}>
-                          <td className="py-1.5 pr-3" style={{ color: 'var(--t2)' }}>{r.ano}</td>
-                          <td className="py-1.5 pr-3" style={{ color: 'var(--t2)' }}>{MESES[r.mes] || r.mes}</td>
-                          <td className="py-1.5 pr-3" style={{ color: 'var(--t3)' }}>{r.dia}</td>
-                          <td className="py-1.5 pr-3 font-semibold" style={{ color: '#f97316' }}>{r.pais}</td>
-                          <td className="py-1.5 pr-3 max-w-[120px] truncate" style={{ color: 'var(--t2)' }}>{r.cliente}</td>
-                          <td className="py-1.5 pr-3 max-w-[120px] truncate" style={{ color: 'var(--t2)' }}>{r.cadena}</td>
-                          <td className="py-1.5 pr-3 max-w-[110px] truncate text-[11px]" style={{ color: 'var(--t3)' }}>{r.formato}</td>
-                          <td className="py-1.5 pr-3 max-w-[120px] truncate text-[11px]" style={{ color: 'var(--t3)' }}>{r.punto_venta}</td>
-                          <td className="py-1.5 pl-6 pr-3 font-mono text-[11px]" style={{ color: 'var(--t3)' }}>{r.codigo_barras}</td>
-                          <td className="py-1.5 pl-6 pr-3 font-mono" style={{ color: 'var(--t3)' }}>{r.sku}</td>
-                          <td className="py-1.5 pl-6 pr-3 min-w-[260px] max-w-[320px] truncate" style={{ color: 'var(--t1)' }}>{r.descripcion}</td>
-                          <td className="py-1.5 pl-16 pr-3 max-w-[110px] truncate" style={{ color: 'var(--t2)' }}>{r.categoria}</td>
-                          <td className="py-1.5 pl-8 pr-8" style={{ color: 'var(--t2)' }}>{r.subcategoria}</td>
-                          <td className="py-1.5 pr-10 text-right tabular-nums" style={{ color: 'var(--t2)' }}>{r.ventas_unidades.toLocaleString()}</td>
-                          <td className="py-1.5 pr-3 text-right font-semibold tabular-nums" style={{ color: 'var(--t1)' }}>{fmtFull(r.ventas_valor)}</td>
-                          <td className="py-1.5 text-right tabular-nums" style={{ color: 'var(--t3)' }}>{r.pct.toFixed(1)}%</td>
+                          <td className="py-1.5 pr-4 w-1 whitespace-nowrap" style={{ color: 'var(--t2)' }}>{r.ano}</td>
+                          <td className="py-1.5 pr-4 w-1 whitespace-nowrap" style={{ color: 'var(--t2)' }}>{MESES[r.mes] || r.mes}</td>
+                          <td className="py-1.5 pr-4 w-1 whitespace-nowrap" style={{ color: 'var(--t3)' }}>{r.dia}</td>
+                          <td className="py-1.5 pr-4 w-1 whitespace-nowrap font-semibold" style={{ color: '#f97316' }}>{r.pais}</td>
+                          <td className="py-1.5 pr-4 max-w-[140px] truncate" style={{ color: 'var(--t2)' }} title={r.cliente}>{r.cliente}</td>
+                          <td className="py-1.5 pr-4 max-w-[140px] truncate" style={{ color: 'var(--t2)' }} title={r.cadena}>{r.cadena}</td>
+                          <td className="py-1.5 pr-4 max-w-[130px] truncate text-[11px]" style={{ color: 'var(--t3)' }} title={r.formato}>{r.formato}</td>
+                          <td className="py-1.5 pr-4 max-w-[160px] truncate text-[11px]" style={{ color: 'var(--t3)' }} title={r.punto_venta}>{r.punto_venta}</td>
+                          <td className="py-1.5 pr-4 w-1 whitespace-nowrap font-mono text-[11px]" style={{ color: 'var(--t3)' }}>{r.codigo_barras}</td>
+                          <td className="py-1.5 pr-4 w-1 whitespace-nowrap font-mono" style={{ color: 'var(--t3)' }}>{r.sku}</td>
+                          <td className="py-1.5 pr-4 max-w-[260px] truncate" style={{ color: 'var(--t1)' }} title={r.descripcion}>{r.descripcion}</td>
+                          <td className="py-1.5 pr-4 max-w-[110px] truncate" style={{ color: 'var(--t2)' }}>{r.categoria}</td>
+                          <td className="py-1.5 pr-4 max-w-[130px] truncate" style={{ color: 'var(--t2)' }} title={r.subcategoria}>{r.subcategoria}</td>
+                          <td className="py-1.5 pr-4 w-1 whitespace-nowrap text-right tabular-nums" style={{ color: 'var(--t2)' }}>{r.ventas_unidades.toLocaleString()}</td>
+                          <td className="py-1.5 pr-4 w-1 whitespace-nowrap text-right font-semibold tabular-nums" style={{ color: 'var(--t1)' }}>{fmtFull(r.ventas_valor)}</td>
+                          <td className="py-1.5 w-1 whitespace-nowrap text-right tabular-nums" style={{ color: 'var(--t3)' }}>{r.pct.toFixed(1)}%</td>
                         </tr>
                       ))}
                     </tbody>

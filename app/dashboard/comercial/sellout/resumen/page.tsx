@@ -561,7 +561,7 @@ export default function ResumenPage() {
                 color="#c8873a" height={380} formatter={fmt} tooltipFormatter={fmtFull} tooltipUnit="USD"
                 xTickFmt={chartXFmt}
                 xInterval={modo === 'ano' ? 0 : Math.max(Math.ceil(visible.length / 10) - 1, 0)}
-                dot
+                area dot
               />
               {/* Range slider */}
               {chartData.length > 1 && (
@@ -691,7 +691,7 @@ export default function ResumenPage() {
                 color="#3b82f6" height={380} formatter={fmtU} tooltipFormatter={fmtUFull} tooltipUnit="un"
                 xTickFmt={chartXFmt}
                 xInterval={modo === 'ano' ? 0 : Math.max(Math.ceil(visible.length / 10) - 1, 0)}
-                dot
+                area dot
               />
               {chartData.length > 1 && (
                 <div className="mt-4 px-1">

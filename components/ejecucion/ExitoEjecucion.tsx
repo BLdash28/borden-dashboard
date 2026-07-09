@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus, Download } from 'lucide-react'
 import {
-  BarChart, Bar, LineChart, Line, ComposedChart,
+  BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, Cell,
 } from 'recharts'
@@ -16,11 +16,13 @@ const DIVS = [
 
 const SECTIONS = [
   { key: 'resumen',          label: 'Resumen'             },
+  { key: 'sellin',           label: 'Sell-In'             },
   { key: 'evolucion',        label: 'Evolución Ventas'    },
   { key: 'seguimiento',      label: 'Seguimiento Semanal' },
   { key: 'pareto',           label: 'Pareto'              },
   { key: 'cobertura',        label: 'Cobertura'           },
   { key: 'inventarios',      label: 'Inventarios'         },
+  { key: 'calidad',          label: 'Calidad Inventario'  },
   { key: 'innovaciones',     label: 'Innovaciones'        },
   { key: 'precios',          label: 'Lista Precios'       },
 ]
@@ -51,10 +53,11 @@ const fmtFull = (v: unknown) => {
 }
 const fmtCOP = (v: number) => {
   if (!isFinite(v)) return '$0'
-  if (Math.abs(v) >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B'
-  if (Math.abs(v) >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M'
-  if (Math.abs(v) >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K'
-  return '$' + Math.round(v).toLocaleString('en-US')
+  // Notación colombiana: MM = mil millones (10^9)
+  if (Math.abs(v) >= 1e9) return '$' + (v / 1e9).toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' MM'
+  if (Math.abs(v) >= 1e6) return '$' + (v / 1e6).toLocaleString('es-CO', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + 'M'
+  if (Math.abs(v) >= 1e3) return '$' + (v / 1e3).toLocaleString('es-CO', { maximumFractionDigits: 0 }) + 'K'
+  return '$' + Math.round(v).toLocaleString('es-CO')
 }
 const fmtNum = (v: number) => Math.round(v).toLocaleString('en-US')
 const fmtRR = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
@@ -118,17 +121,24 @@ function ProximamentePlaceholder({ section }: { section: string }) {
 // ── Tipos ────────────────────────────────────────────────────────────────
 
 type KpisData = {
-  ytd_2026:    number
-  uni_2026:    number
-  ytd_2025:    number
-  uni_2025:    number
-  delta_ytd:   number | null
-  ultimo_mes:  number
+  ytd_2026:     number
+  ytd_2026_cop: number
+  uni_2026:     number
+  ytd_2025:     number
+  ytd_2025_cop: number
+  uni_2025:     number
+  delta_ytd:    number | null
+  ultimo_mes:   number
   ultimo_mes_nombre: string
   ultima_fecha: string | null
-  por_cadena:  { cadena: string; valor_2026: number; uni_2026: number; valor_2025: number; delta: number | null }[]
-  por_categoria: { categoria: string; valor_2026: number; uni_2026: number }[]
-  monthly:     { mes: number; mes_nombre: string; y2025: number; y2026: number | null }[]
+  por_cadena:  { cadena: string; valor_2026: number; valor_2026_cop: number; uni_2026: number; valor_2025: number; valor_2025_cop: number; delta: number | null }[]
+  por_categoria: { categoria: string; valor_2026: number; valor_2026_cop: number; uni_2026: number }[]
+  monthly:     {
+    mes: number; mes_nombre: string
+    y2025: number; y2026: number | null
+    cop2025: number; cop2026: number | null
+    uds2025: number; uds2026: number | null
+  }[]
 }
 
 type TopSku = {
@@ -136,20 +146,24 @@ type TopSku = {
   descripcion: string
   categoria: string
   valor_2026: number
+  valor_2026_cop: number
   uni_2026: number
   valor_2025: number
+  valor_2025_cop: number
   delta: number | null
   share_pct: number
   cum_share: number
 }
 
 type SegRow = {
-  key: string; label: string; plucd?: string; sku?: string; cadena?: string
-  meses: Record<number, number>; mesesUnd: Record<number, number>
-  ytdCop: number; ytdUnd: number
-  rrUnd: number; rrCop: number
-  undActual: number; copActual: number
-  proyUnd: number; proyCop: number
+  key: string; label: string; plucd?: string; sku?: string; cadena?: string; pdvs?: number
+  meses: Record<number, number>
+  mesesUsd: Record<number, number>
+  mesesUnd: Record<number, number>
+  ytdCop: number; ytdUsd: number; ytdUnd: number
+  rrUnd: number; rrCop: number; rrUsd: number
+  undActual: number; copActual: number; usdActual: number
+  proyUnd: number; proyCop: number; proyUsd: number
 }
 type SegData = {
   ano: number
@@ -159,6 +173,127 @@ type SegData = {
   por_producto: SegRow[]
   por_cadena: SegRow[]
   por_subformato: SegRow[]
+  por_geografia: SegRow[]
+}
+type PrecioRow = {
+  ean13: string | null
+  plu: string | null
+  codigo_borden: string | null
+  sku: string | null
+  descripcion: string | null
+  gramos: number | null
+  precio_anterior_cop: number | null
+  precio_vigente_cop: number | null
+  fecha_vigencia_desde: string | null
+  es_oferta: boolean
+  es_innovacion: boolean
+}
+
+type InvKpi = {
+  combinaciones: number; con_stock: number; quiebres: number
+  pdvs: number; skus_unicos: number; cadenas: number
+  total_uds: number; total_cop: number; total_usd: number
+}
+type InvCadena = { cadena: string | null; combinaciones: number; con_stock: number; quiebres: number; pdvs: number; uds: number; cop: number; usd: number }
+type InvTopSku = { ean13: string | null; plu: string | null; sku: string | null; descripcion: string | null; categoria: string | null; subcategoria: string | null; pdvs: number; quiebres: number; uds: number; cop: number }
+type InvDetalle = { punto_venta: string; cadena: string | null; ean13: string | null; plu: string | null; sku: string | null; descripcion: string | null; inv_unidades: number; inv_valor_cop: number }
+type InvData = { fecha: string | null; kpi: InvKpi | null; por_cadena: InvCadena[]; top_skus: InvTopSku[]; detalle: InvDetalle[] }
+
+type InnovMonthly = { ano: number; mes: number; uds: number; cop: number; usd: number; pdvs: number; cadenas: number }
+type InnovDaily   = { fecha: string; uds: number; cop: number; usd: number; pdvs: number }
+
+type SellInKpi = {
+  ultimo_mes: number
+  uds_26: number; cop_26: number; usd_26: number; costo_26: number; ut_26: number
+  margen_pct: number | null
+  uds_25: number; cop_25: number; ut_25: number
+  margen_pct_25: number | null
+  delta_venta: number | null
+  delta_unidades: number | null
+  delta_utilidad: number | null
+}
+type SellInMonth = {
+  mes: number; mes_nombre: string
+  cop_25: number; cop_26: number | null
+  uds_25: number; uds_26: number | null
+  ut_25: number;  ut_26: number | null
+}
+type SellInSku = {
+  sku: string; descripcion: string | null; categoria: string | null; subcategoria: string | null
+  uds: number; cop: number; usd: number; ut: number
+  margen_pct: number | null
+}
+type SellInOc = {
+  orden_compra: string; ano: number; mes: number
+  n_lineas: number; uds: number; cop: number; ut: number
+}
+type SellInSkuMonthly = { sku: string; descripcion: string | null; months: Record<number, { uds: number; cop: number; usd: number }> }
+type SellInData = { kpi: SellInKpi; monthly: SellInMonth[]; top_skus: SellInSku[]; ocs: SellInOc[]; monthly_by_sku: SellInSkuMonthly[] }
+
+// Pareto PDVs
+type ParetoPdv = {
+  punto_venta: string
+  cadena: string | null
+  subcadena: string | null
+  departamento: string | null
+  ciudad: string | null
+  valor_usd: number
+  valor_cop: number
+  uds: number
+  share_pct: number
+  cum_share: number
+}
+type ParetoPdvBucket = { pdvs: number; pct_pdvs: number; cop: number; usd: number }
+type ParetoPdvData = {
+  total_pdvs: number
+  total_valor_usd: number
+  total_valor_cop: number
+  buckets: { p50: ParetoPdvBucket; p80: ParetoPdvBucket; p95: ParetoPdvBucket }
+  rows: ParetoPdv[]
+}
+
+// Calidad de Inventario
+type CalidadRow = {
+  sku: string; descripcion: string | null; categoria: string | null; subcategoria: string | null
+  menos_de_3: number; entre_3_y_10: number; mayor_a_10: number; total_pdvs: number
+  pct_menos_de_3: number; pct_entre_3_y_10: number; pct_mayor_a_10: number
+  cobertura_pct: number
+  unidades: number; valor_cop: number; valor_usd: number
+}
+type CalidadData = {
+  fecha: string | null
+  universo_pdvs: number
+  pdvs_con_stock: number
+  cobertura_efectiva: number
+  rows: CalidadRow[]
+  total: {
+    menos_de_3: number; entre_3_y_10: number; mayor_a_10: number; total_pdvs: number
+    pct_menos_de_3: number; pct_entre_3_y_10: number; pct_mayor_a_10: number
+    cobertura_pct: number
+    unidades: number; valor_cop: number; valor_usd: number
+  }
+  cadenas: { cadena: string; pdvs: number }[]
+}
+type InnovItem = {
+  ean13: string | null
+  plu: string | null
+  codigo_borden: string | null
+  sku: string | null
+  descripcion: string | null
+  gramos: number | null
+  precio_anterior_cop: number | null
+  precio_vigente_cop: number | null
+  fecha_vigencia_desde: string | null
+  sin_ventas: boolean
+  primera_venta: string | null
+  ultima_venta: string | null
+  total_uds: number
+  total_cop: number
+  total_usd: number
+  pdvs_unicos: number
+  cadenas_unicas: number
+  monthly: InnovMonthly[]
+  daily: InnovDaily[]
 }
 
 // ── Componente ────────────────────────────────────────────────────────────
@@ -169,14 +304,33 @@ export default function ExitoEjecucion() {
   const [section,      setSection]      = useState('resumen')
   const [div,          setDiv]          = useState('TOTAL')
   const [cadenaFilter, setCadenaFilter] = useState('')
-  const [topN,         setTopN]         = useState(15)
+  const [moneda,       setMoneda]       = useState<'cop' | 'usd'>('cop')
+  const [topN,         setTopN]         = useState(13)
   const [loading,      setLoading]      = useState<Record<string, boolean>>({})
 
   // Data
   const [kpis,    setKpis]    = useState<KpisData | null>(null)
   const [topSkus, setTopSkus] = useState<TopSku[]>([])
   const [seg,     setSeg]     = useState<SegData | null>(null)
-  const [segTab,  setSegTab]  = useState<'producto' | 'cadena' | 'subformato'>('producto')
+  const [segTab,  setSegTab]  = useState<'producto' | 'cadena' | 'subformato' | 'geografia'>('producto')
+  const [segMode, setSegMode] = useState<'cop' | 'usd' | 'und'>('cop')
+  const [precios,       setPrecios]       = useState<PrecioRow[] | null>(null)
+  const [preciosCarga,  setPreciosCarga]  = useState<string | null>(null)
+  const [innov,         setInnov]         = useState<InnovItem[] | null>(null)
+  const [inv,           setInv]           = useState<InvData | null>(null)
+  const [sellin,        setSellin]        = useState<SellInData | null>(null)
+  const [calidad,       setCalidad]       = useState<CalidadData | null>(null)
+  const [calidadDetalle, setCalidadDetalle] = useState<{
+    sku: string
+    descripcion: string | null
+    bucket: 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10' | 'todos'
+    loading: boolean
+    pdvs: {
+      gln: string; punto_venta: string; cadena: string | null; subcadena: string | null
+      departamento: string | null; ciudad: string | null; descripcion: string | null
+      inv_unidades: number; inv_valor_cop: number; inv_valor_usd: number
+    }[]
+  } | null>(null)
 
   const loadedRef = useRef<Record<string, boolean>>({})
   const setL = (k: string, v: boolean) => setLoading(p => ({ ...p, [k]: v }))
@@ -203,6 +357,8 @@ export default function ExitoEjecucion() {
     if (savedDiv && DIVS.some(d => d.key === savedDiv)) setDiv(savedDiv)
     const savedCadena = localStorage.getItem(`${storageKey}-cadena`)
     if (savedCadena !== null) setCadenaFilter(savedCadena)
+    const savedMon = localStorage.getItem(`${storageKey}-moneda`)
+    if (savedMon === 'cop' || savedMon === 'usd') setMoneda(savedMon)
   }, []) // eslint-disable-line
 
   // Fetch KPIs cada vez que cambia div/cadena
@@ -231,6 +387,54 @@ export default function ExitoEjecucion() {
       fetch(`/api/comercial/ejecucion/co/exito/seguimiento?ano=2026`)
         .then(r => r.json()).then(setSeg).finally(() => setL('seg', false))
     }
+
+    if (section === 'precios' && !loadedRef.current.precios) {
+      loadedRef.current.precios = true
+      setL('precios', true)
+      fetch(`/api/comercial/ejecucion/co/exito/precios`)
+        .then(r => r.json())
+        .then(d => { setPrecios(d.filas ?? []); setPreciosCarga(d.ultima_carga ?? null) })
+        .finally(() => setL('precios', false))
+    }
+
+    if (section === 'innovaciones' && !loadedRef.current.innov) {
+      loadedRef.current.innov = true
+      setL('innov', true)
+      fetch(`/api/comercial/ejecucion/co/exito/innovaciones`)
+        .then(r => r.json())
+        .then(d => setInnov(d.items ?? []))
+        .finally(() => setL('innov', false))
+    }
+
+    if ((section === 'inventarios' || section === 'cobertura') && !loadedRef.current.inv) {
+      loadedRef.current.inv = true
+      setL('inv', true)
+      const q = new URLSearchParams()
+      if (cadenaFilter) q.set('cadena', cadenaFilter)
+      fetch(`/api/comercial/ejecucion/co/exito/inventario?${q}`)
+        .then(r => r.json()).then(setInv)
+        .finally(() => setL('inv', false))
+    }
+
+    // SellIn: precargar también en Resumen para mostrar sus KPIs
+    if ((section === 'sellin' || section === 'resumen') && !loadedRef.current.sellin) {
+      loadedRef.current.sellin = true
+      setL('sellin', true)
+      fetch('/api/comercial/ejecucion/co/exito/sellin')
+        .then(r => r.json()).then(setSellin)
+        .finally(() => setL('sellin', false))
+    }
+
+    // Calidad Inventario
+    if (section === 'calidad' && !loadedRef.current.calidad) {
+      loadedRef.current.calidad = true
+      setL('calidad', true)
+      const q = new URLSearchParams()
+      if (cadenaFilter) q.set('cadena', cadenaFilter)
+      fetch(`/api/comercial/ejecucion/co/exito/calidad-inventario?${q}`)
+        .then(r => r.json()).then(setCalidad)
+        .finally(() => setL('calidad', false))
+    }
   }, [section, div, cadenaFilter, topN]) // eslint-disable-line
 
   // Cargar KPIs al primer mount
@@ -248,7 +452,12 @@ export default function ExitoEjecucion() {
     const L = isL('kpis')
     if (L || !kpis) return <div className="space-y-4"><CardSkeleton cols={4} /><ChartSkeleton /></div>
 
-    const soTotal  = kpis.ytd_2026
+    const isCop = moneda === 'cop'
+    const fmtVal = (v: number) => isCop ? fmtCOP(v) : fmtFull(v)
+    const yTick  = (v: any)    => isCop ? fmtCOP(Number(v)) : fmt$(v)
+
+    const soTotal  = isCop ? kpis.ytd_2026_cop : kpis.ytd_2026
+    const soPrev   = isCop ? kpis.ytd_2025_cop : kpis.ytd_2025
     const soUnits  = kpis.uni_2026
     const soDelta  = kpis.delta_ytd
     const soLast   = kpis.ultimo_mes_nombre || '—'
@@ -256,20 +465,36 @@ export default function ExitoEjecucion() {
     const cadenasR = kpis.por_cadena
     const cats     = kpis.por_categoria
     const monthlyRaw = kpis.monthly
-    const monthly    = monthlyRaw.map(m => ({ ...m, y2025: m.y2025 > 0 ? m.y2025 : null }))
+    const monthly    = monthlyRaw.map(m => ({
+      ...m,
+      v2025: isCop ? (m.cop2025 > 0 ? m.cop2025 : null) : (m.y2025 > 0 ? m.y2025 : null),
+      v2026: isCop ? m.cop2026 : m.y2026,
+    }))
+    const valCadena  = (v_usd: number, v_cop: number) => isCop ? v_cop : v_usd
+
+    const pdfUrl = `/api/comercial/ejecucion/co/exito/resumen-pdf?${new URLSearchParams({
+      ...(cadenaFilter ? { cadena: cadenaFilter } : {}),
+      moneda,
+    }).toString()}`
 
     return (
       <div className="space-y-5">
 
         {/* KPIs */}
         <div>
-          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Sell-Out</p>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sell-Out</p>
+            <a href={pdfUrl}
+               className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg transition-colors">
+              <Download size={12}/> Descargar PDF
+            </a>
+          </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { label: 'Sell-Out YTD 2026', value: fmtFull(soTotal), sub: `hasta ${soLast}`, icon: '🛒' },
-              { label: 'vs YTD 2025',       value: soDelta !== null ? <Delta d={soDelta} /> : <span className="text-sm text-gray-400">Sin hist.</span>, sub: kpis.ytd_2025 > 0 ? `2025: ${fmtFull(kpis.ytd_2025)}` : 'Sin dato 2025', icon: '📊' },
-              { label: 'Unidades YTD',      value: soUnits.toLocaleString('en-US'), sub: 'cajas vendidas', icon: '📦' },
-              { label: 'Promedio Mensual',  value: fmt$(soAvg), sub: `${kpis.ultimo_mes} meses`, icon: '📅' },
+              { label: `Sell-Out FY 2026 (${moneda.toUpperCase()})`, value: fmtVal(soTotal), sub: `hasta ${soLast}`, icon: '🛒' },
+              { label: 'vs YTD 2025',       value: soDelta !== null ? <Delta d={soDelta} /> : <span className="text-sm text-gray-400">Sin hist.</span>, sub: soPrev > 0 ? `2025: ${fmtVal(soPrev)}` : 'Sin dato 2025', icon: '📊' },
+              { label: 'Unidades FY',       value: soUnits.toLocaleString('en-US'), sub: `hasta ${soLast}`, icon: '📦' },
+              { label: 'Promedio Mensual',  value: fmtVal(soAvg), sub: `${kpis.ultimo_mes} meses`, icon: '📅' },
             ].map(c => (
               <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                 <div className="flex items-center justify-between mb-1">
@@ -283,19 +508,59 @@ export default function ExitoEjecucion() {
           </div>
         </div>
 
+        {/* Sell-In KPIs */}
+        {sellin && (
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sell-In</p>
+              <button
+                onClick={() => goSection('sellin')}
+                className="text-[11px] font-semibold text-blue-600 hover:text-blue-800"
+              >
+                Ver detalle Sell-In →
+              </button>
+            </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {(() => {
+                const k = sellin.kpi
+                const cop = moneda === 'usd' ? k.usd_26 : k.cop_26
+                const copFmt = moneda === 'usd' ? fmtFull(cop) : fmtCOP(cop)
+                return [
+                  { label: `Sell-In FY 2026 (${moneda.toUpperCase()})`, value: copFmt, sub: `hasta mes ${k.ultimo_mes || '—'}`, icon: '🧾' },
+                  { label: 'Unidades Sell-In',     value: fmtNum(k.uds_26), sub: `${fmtNum(k.uds_25)} en 2025`, icon: '📦' },
+                  { label: 'Utilidad Bruta (COP)', value: fmtCOP(k.ut_26), sub: k.margen_pct !== null ? `Margen ${k.margen_pct.toFixed(1)}%` : '—', icon: '💰' },
+                  { label: 'Margen Bruto %',       value: k.margen_pct !== null ? `${k.margen_pct.toFixed(1)}%` : '—', sub: k.margen_pct_25 !== null ? `2025: ${k.margen_pct_25.toFixed(1)}%` : 'Sin dato 2025', icon: '📈' },
+                ]
+              })().map(c => (
+                <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
+                    <span className="text-lg">{c.icon}</span>
+                  </div>
+                  <p className="text-2xl font-bold mb-1 text-gray-800">{c.value}</p>
+                  <p className="text-xs text-gray-400">{c.sub}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Dark card */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
-            <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-2">🛒 SELL-OUT REAL YTD 2026 · GRUPO ÉXITO CO</p>
-            <p className="text-3xl font-bold mb-1">{fmtFull(soTotal)}</p>
+            <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-2">🛒 SELL-OUT REAL FY 2026 · GRUPO ÉXITO CO ({moneda.toUpperCase()})</p>
+            <p className="text-3xl font-bold mb-1">{fmtVal(soTotal)}</p>
             <p className="text-xs text-blue-300 mb-4">
-              {cats.map(c => c.valor_2026 > 0 ? `${c.categoria} ${fmtFull(c.valor_2026)}` : null).filter(Boolean).join(' + ') || `YTD 2026 · hasta ${soLast}`}
+              {cats.map(c => {
+                const v = valCadena(c.valor_2026, c.valor_2026_cop)
+                return v > 0 ? `${c.categoria} ${fmtVal(v)}` : null
+              }).filter(Boolean).join(' + ') || `FY 2026 · hasta ${soLast}`}
             </p>
             <div className="border-t border-white/10 pt-3 grid grid-cols-3 gap-3">
               {cadenasR.slice(0, 3).map(c => (
                 <div key={c.cadena}>
                   <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-0.5 truncate">{c.cadena}</p>
-                  <p className="text-sm font-bold text-yellow-300">{fmtFull(c.valor_2026)}</p>
+                  <p className="text-sm font-bold text-yellow-300">{fmtVal(valCadena(c.valor_2026, c.valor_2026_cop))}</p>
                   <p className="text-[10px] text-blue-300">{c.uni_2026.toLocaleString('en-US')} u</p>
                 </div>
               ))}
@@ -306,8 +571,8 @@ export default function ExitoEjecucion() {
             <div>
               <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-2">📅 SEGUIMIENTO SEMANAL</p>
               <p className="text-sm text-blue-100 mb-3">
-                Reporte semanal solicitado por Ignacio (Grupo Éxito):<br/>
-                <span className="text-xs text-blue-300">Sell-Out por Producto, Cadena y Subformato con RR y proyección de cierre.</span>
+                Reporte semanal:<br/>
+                <span className="text-xs text-blue-300">Sell-Out por Producto, Cadena y Subcadena con RR y proyección de cierre.</span>
               </p>
             </div>
             <button onClick={() => goSection('seguimiento')}
@@ -320,10 +585,11 @@ export default function ExitoEjecucion() {
         {/* Por cadena cards */}
         {cadenasR.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Por Cadena · Sell-Out YTD 2026</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Por Cadena · Sell-Out FY 2026 ({moneda.toUpperCase()})</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {cadenasR.map(c => {
-                const pct   = soTotal > 0 ? (c.valor_2026 / soTotal * 100) : 0
+                const cVal  = valCadena(c.valor_2026, c.valor_2026_cop)
+                const pct   = soTotal > 0 ? (cVal / soTotal * 100) : 0
                 const color = CADENA_COLORS[c.cadena] ?? '#6b7280'
                 return (
                   <div key={c.cadena} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
@@ -331,7 +597,7 @@ export default function ExitoEjecucion() {
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
                       <p className="text-xs font-semibold text-gray-600 truncate">{c.cadena}</p>
                     </div>
-                    <p className="text-xl font-bold text-gray-800">{fmtFull(c.valor_2026)}</p>
+                    <p className="text-xl font-bold text-gray-800">{fmtVal(cVal)}</p>
                     <div className="flex items-center justify-between mt-1">
                       <p className="text-xs text-gray-400">{pct.toFixed(1)}% del total</p>
                       {c.delta !== null ? <Delta d={c.delta} /> : <span className="text-[11px] text-gray-300">Sin 2025</span>}
@@ -346,28 +612,155 @@ export default function ExitoEjecucion() {
           </div>
         )}
 
-        {/* Monthly line chart */}
+        {/* Monthly area chart */}
         {monthly.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Sell-Out Mensual — 2025 / 2026</h3>
-            <div className="h-[220px]">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Evolución Sell-Out</h3>
+                <p className="text-[11px] text-gray-400">2025 · 2026 ({moneda.toUpperCase()})</p>
+              </div>
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
+              </div>
+            </div>
+            <div className="h-[240px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={monthly}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
+                <AreaChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="grad2026" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.4}/>
+                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="grad2025" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.25}/>
+                      <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={yTick} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
                   <Tooltip
-                    formatter={(v: any, name: string) => [fmtFull(v), name]}
-                    labelFormatter={(label: string) => label}
+                    formatter={(v: any, name: string) => [fmtVal(Number(v)), name]}
+                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Legend wrapperStyle={{ fontSize: 11, textAlign: 'center' }} verticalAlign="bottom" />
-                  <Line dataKey="y2025" name="2025" type="monotone" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
-                  <Line dataKey="y2026" name="2026" type="monotone" stroke="#c8873a" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
-                </LineChart>
+                  <Area type="monotone" dataKey="v2025" name="2025" stroke="#94a3b8" strokeWidth={2}
+                    fill="url(#grad2025)" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
+                  <Area type="monotone" dataKey="v2026" name="2026" stroke="#f59e0b" strokeWidth={2.5}
+                    fill="url(#grad2026)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }} connectNulls={false} />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
         )}
+
+        {/* Chart Sell-Out vs Sell-In */}
+        {sellin && monthly.length > 0 && (() => {
+          const compare = kpis.monthly.map(m => {
+            const si = sellin.monthly.find(x => x.mes === m.mes)
+            return {
+              mes_nombre: m.mes_nombre,
+              sellout: isCop ? m.cop2026 : m.y2026,
+              sellin:  isCop ? (si?.cop_26 ?? null) : (si ? (si.cop_26 !== null && sellin.kpi.cop_26 > 0
+                        ? ((si.cop_26 as number) / sellin.kpi.cop_26) * sellin.kpi.usd_26
+                        : null) : null),
+            }
+          }).filter(m => (m.sellout && m.sellout > 0) || (m.sellin && m.sellin > 0))
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-800">Sell-Out vs Sell-In</h3>
+                  <p className="text-[11px] text-gray-400">Comparativo mensual · 2026 ({moneda.toUpperCase()})</p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"/> Sell-In</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> Sell-Out</span>
+                </div>
+              </div>
+              <div className="h-[260px] mt-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={compare} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                    <defs>
+                      <linearGradient id="gradSellin" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
+                      </linearGradient>
+                      <linearGradient id="gradSellout" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={yTick} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      formatter={(v: any, name: string) => [fmtVal(Number(v)), name]}
+                      cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                    />
+                    <Bar dataKey="sellin"  name="Sell-In"  fill="url(#gradSellin)"  radius={[8,8,0,0]} maxBarSize={38} />
+                    <Bar dataKey="sellout" name="Sell-Out" fill="url(#gradSellout)" radius={[8,8,0,0]} maxBarSize={38} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Chart Valor vs Unidades */}
+        {monthly.length > 0 && (() => {
+          const valUdsData = kpis.monthly
+            .map(m => ({ mes_nombre: m.mes_nombre, valor: isCop ? m.cop2026 : m.y2026, unidades: m.uds2026 }))
+            .filter(m => (m.valor && m.valor > 0) || (m.unidades && m.unidades > 0))
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-800">Venta Valor vs Unidades</h3>
+                  <p className="text-[11px] text-gray-400">Sell-Out mensual · 2026 ({moneda.toUpperCase()})</p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Venta ({moneda.toUpperCase()})</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> Unidades</span>
+                </div>
+              </div>
+              <div className="h-[260px] mt-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={valUdsData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="30%">
+                    <defs>
+                      <linearGradient id="gradValor" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#fde68a" stopOpacity={0.75}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="left" tickFormatter={yTick}
+                      tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="right" orientation="right"
+                      tickFormatter={(v: any) => Number(v) >= 1e3 ? (Number(v)/1e3).toFixed(0)+'K' : String(v)}
+                      tick={{ fontSize: 11, fill: '#94a3b8' }} width={45} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      formatter={(v: any, name: string) => name === 'Unidades'
+                        ? [Number(v).toLocaleString('es-CO') + ' und', name]
+                        : [fmtVal(Number(v)), name]}
+                      cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                    />
+                    <Bar yAxisId="left" dataKey="valor" name={`Venta (${moneda.toUpperCase()})`}
+                      fill="url(#gradValor)" radius={[8,8,0,0]} maxBarSize={44} />
+                    <Line yAxisId="right" type="monotone" dataKey="unidades" name="Unidades"
+                      stroke="#10b981" strokeWidth={2.5}
+                      dot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#10b981' }}
+                      activeDot={{ r: 6, strokeWidth: 2, fill: '#fff', stroke: '#10b981' }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )
+        })()}
 
         {soTotal === 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
@@ -384,57 +777,397 @@ export default function ExitoEjecucion() {
 
   function Evolucion() {
     const L = isL('kpis')
-    if (L || !kpis) return <div className="space-y-4"><ChartSkeleton /><ChartSkeleton /></div>
-    const monthly = kpis.monthly.map(m => ({ ...m, y2025: m.y2025 > 0 ? m.y2025 : null }))
-    const yFmt = (v: number) => v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v
+    if (L || !kpis) return <div className="space-y-4"><ChartSkeleton /><ChartSkeleton /><ChartSkeleton /></div>
+
+    // Data con 2025 en null si no hay ventas, para no dibujar la línea plana en 0
+    const monthly = kpis.monthly.map(m => ({
+      ...m,
+      cop2025: m.cop2025 > 0 ? m.cop2025 : null,
+      uds2025: m.uds2025 > 0 ? m.uds2025 : null,
+    }))
+
+    // Acumulado YTD por año
+    let ac25 = 0, ac26 = 0
+    const acumulado = kpis.monthly.map(m => {
+      ac25 += m.cop2025 || 0
+      if (m.cop2026 !== null) ac26 += m.cop2026
+      return {
+        mes_nombre: m.mes_nombre,
+        acum2025: ac25 > 0 ? ac25 : null,
+        acum2026: m.cop2026 !== null ? ac26 : null,
+      }
+    })
+
+    // ── Stats detallados ─────────────────────────────────────────────
+    const meses2026 = kpis.monthly.filter(m => m.cop2026 !== null && m.cop2026 > 0)
+    const totCop2026 = meses2026.reduce((s, m) => s + (m.cop2026 ?? 0), 0)
+    const totUds2026 = meses2026.reduce((s, m) => s + (m.uds2026 ?? 0), 0)
+    const promMensualCop = meses2026.length > 0 ? totCop2026 / meses2026.length : 0
+    const promMensualUds = meses2026.length > 0 ? totUds2026 / meses2026.length : 0
+    const DIAS_MES: Record<number, number> = { 1:31,2:28,3:31,4:30,5:31,6:30,7:31,8:31,9:30,10:31,11:30,12:31 }
+    const diasAcumulados = meses2026.reduce((s, m) => s + (DIAS_MES[m.mes] ?? 30), 0)
+    const promDiarioCop = diasAcumulados > 0 ? totCop2026 / diasAcumulados : 0
+    const promDiarioUds = diasAcumulados > 0 ? totUds2026 / diasAcumulados : 0
+
+    // Mejor / peor mes 2026
+    const sortedByCop = [...meses2026].sort((a, b) => (b.cop2026 ?? 0) - (a.cop2026 ?? 0))
+    const mejorMes = sortedByCop[0]
+    const peorMes  = sortedByCop[sortedByCop.length - 1]
+
+    // Ticket promedio (COP por unidad)
+    const ticketMedio = totUds2026 > 0 ? totCop2026 / totUds2026 : 0
+
+    // Growth MoM (crecimiento mes a mes 2026)
+    const growthMoM = kpis.monthly.map((m, i) => {
+      const prev = i > 0 ? kpis.monthly[i - 1] : null
+      const g = prev && prev.cop2026 && m.cop2026 !== null && prev.cop2026 > 0
+        ? ((m.cop2026 - prev.cop2026) / prev.cop2026) * 100
+        : null
+      return { mes_nombre: m.mes_nombre, growth: g }
+    })
+    const growthValidos = growthMoM.filter(x => x.growth !== null).map(x => x.growth as number)
+    const growthPromedio = growthValidos.length > 0
+      ? growthValidos.reduce((s, v) => s + v, 0) / growthValidos.length
+      : 0
+
+    // Formateo según moneda seleccionada
+    const isCop = moneda === 'cop'
+    const yFmtVal = (v: number) => {
+      if (!isCop) {
+        if (Math.abs(v) >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M'
+        if (Math.abs(v) >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K'
+        return '$' + v.toFixed(0)
+      }
+      if (Math.abs(v) >= 1e9) return '$' + (v / 1e9).toFixed(1) + ' MM'
+      if (Math.abs(v) >= 1e6) return '$' + (v / 1e6).toFixed(0) + 'M'
+      if (Math.abs(v) >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K'
+      return '$' + v
+    }
+    const yFmtUds = (v: number) => v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v)
+    const tipVal = (v: unknown) => isCop ? fmtCOP(Number(v)) : fmt$(v)
+    const tipUds = (v: unknown) => Number(v).toLocaleString('es-CO') + ' und'
+    // Cambia data si USD: kpis.monthly.y2025/y2026 son valores USD
+    const monthlyVal = kpis.monthly.map(m => ({
+      ...m,
+      val2025: isCop ? (m.cop2025 > 0 ? m.cop2025 : null) : (m.y2025 > 0 ? m.y2025 : null),
+      val2026: isCop ? m.cop2026 : m.y2026,
+    }))
+    let av25 = 0, av26 = 0
+    const acumuladoVal = kpis.monthly.map(m => {
+      const v25 = isCop ? (m.cop2025 || 0) : (m.y2025 || 0)
+      const v26 = isCop ? m.cop2026 : m.y2026
+      av25 += v25
+      if (v26 !== null) av26 += v26
+      return {
+        mes_nombre: m.mes_nombre,
+        acum2025: av25 > 0 ? av25 : null,
+        acum2026: v26 !== null ? av26 : null,
+      }
+    })
+
+    // Deltas: mes actual (ultimo_mes) vs mismo mes 2025
+    const mAct  = kpis.monthly.find(m => m.mes === kpis.ultimo_mes)
+    const dCop  = mAct && mAct.cop2025 > 0 && mAct.cop2026 !== null
+      ? ((mAct.cop2026 - mAct.cop2025) / mAct.cop2025) * 100 : null
+    const dUds  = mAct && mAct.uds2025 > 0 && mAct.uds2026 !== null
+      ? ((mAct.uds2026 - mAct.uds2025) / mAct.uds2025) * 100 : null
+
+    if (kpis.ytd_2026 === 0) {
+      return (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="py-16 text-center">
+            <p className="text-3xl mb-2">📭</p>
+            <p className="text-sm font-semibold text-gray-600">Sin datos de sell-out</p>
+          </div>
+        </div>
+      )
+    }
+
+    const monLabel = isCop ? 'COP' : 'USD'
+
     return (
       <div className="space-y-5">
+        {/* Header con 4 KPIs primarios */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center gap-2 mb-1">
             <h3 className="text-sm font-semibold text-gray-800">📈 Evolución de Ventas</h3>
             <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">SELLOUT</span>
+            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">{monLabel}</span>
           </div>
-          <p className="text-xs text-gray-400 mb-3">{currentCat || 'Todas las categorías'} · Grupo Éxito Colombia {cadenaFilter && `· ${cadenaFilter}`}</p>
+          <p className="text-xs text-gray-400 mb-3">Grupo Éxito Colombia {cadenaFilter && `· ${cadenaFilter}`}</p>
 
-          {kpis.ytd_2026 === 0 ? (
-            <div className="py-16 text-center">
-              <p className="text-3xl mb-2">📭</p>
-              <p className="text-sm font-semibold text-gray-600">Sin datos de sell-out</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className={`rounded-lg px-4 py-2.5 border ${(kpis.delta_ytd ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(kpis.delta_ytd ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                FY 2026 vs 2025
+              </p>
+              <p className={`text-lg font-bold ${(kpis.delta_ytd ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {kpis.ytd_2025 === 0 ? '—' : `${(kpis.delta_ytd ?? 0) > 0 ? '+' : ''}${(kpis.delta_ytd ?? 0).toFixed(1)}%`}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{kpis.ultimo_mes_nombre ? `Ene–${kpis.ultimo_mes_nombre}` : ''}</p>
             </div>
-          ) : (
-            <>
-              <div className="flex gap-3 mb-4 flex-wrap">
-                <div className={`flex-1 min-w-[180px] rounded-lg px-4 py-2.5 border ${(kpis.delta_ytd ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
-                  <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(kpis.delta_ytd ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                    Crecimiento YTD Sell-Out vs 2025
-                  </p>
-                  <p className={`text-lg font-bold ${(kpis.delta_ytd ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                    {kpis.ytd_2025 === 0 ? 'Sin datos 2025' : `${(kpis.delta_ytd ?? 0) > 0 ? '+' : ''}${(kpis.delta_ytd ?? 0).toFixed(1)}%`}
-                  </p>
-                  <p className="text-[10px] text-gray-500 mt-0.5">
-                    {fmtFull(kpis.ytd_2026)} · 2026 YTD {kpis.ultimo_mes_nombre ? `Ene–${kpis.ultimo_mes_nombre}` : ''}
-                  </p>
-                </div>
-                <div className="flex-1 min-w-[180px] rounded-lg px-4 py-2.5 bg-blue-50 border border-blue-100">
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-blue-700 mb-0.5">📅 Última carga</p>
-                  <p className="text-sm font-bold text-blue-700">{kpis.ultima_fecha ?? '—'}</p>
-                  <p className="text-[10px] text-gray-500 mt-0.5">Datos OneDrive (semanal)</p>
-                </div>
-              </div>
+            <div className="rounded-lg px-4 py-2.5 bg-amber-50 border border-amber-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-0.5">FY 2026 ({monLabel})</p>
+              <p className="text-lg font-bold text-amber-700">{isCop ? fmtCOP(totCop2026) : fmt$(kpis.ytd_2026)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(kpis.uni_2026)} und</p>
+            </div>
+            <div className={`rounded-lg px-4 py-2.5 border ${(dCop ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dCop ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {kpis.ultimo_mes_nombre} vs 2025
+              </p>
+              <p className={`text-lg font-bold ${(dCop ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {dCop === null ? '—' : `${dCop > 0 ? '+' : ''}${dCop.toFixed(1)}%`}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{isCop ? fmtCOP(mAct?.cop2026 ?? 0) : fmt$(mAct?.y2026 ?? 0)}</p>
+            </div>
+            <div className={`rounded-lg px-4 py-2.5 border ${(dUds ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {kpis.ultimo_mes_nombre} unidades vs 2025
+              </p>
+              <p className={`text-lg font-bold ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {dUds === null ? '—' : `${dUds > 0 ? '+' : ''}${dUds.toFixed(1)}%`}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(mAct?.uds2026 ?? 0)} und</p>
+            </div>
+          </div>
+        </div>
 
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={monthly}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 11 }} width={55} />
-                  <Tooltip formatter={(v: any) => [fmtFull(v), '']} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Line dataKey="y2025" name="2025" type="monotone" stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
-                  <Line dataKey="y2026" name="2026" type="monotone" stroke="#c8873a" strokeWidth={2} dot={{ r: 3 }} connectNulls={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </>
-          )}
+        {/* Fila de estadísticas detalladas */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3">📊 Estadísticas del período</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio mensual</p>
+              <p className="text-lg font-bold text-gray-800">{isCop ? fmtCOP(promMensualCop) : fmt$(kpis.ytd_2026 / (meses2026.length || 1))}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promMensualUds)} und/mes</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio diario</p>
+              <p className="text-lg font-bold text-gray-800">{isCop ? fmtCOP(promDiarioCop) : fmt$(kpis.ytd_2026 / (diasAcumulados || 1))}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promDiarioUds)} und/día</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-emerald-50 border border-emerald-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-0.5">Mejor mes 2026</p>
+              <p className="text-lg font-bold text-emerald-700">{mejorMes ? mejorMes.mes_nombre : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{mejorMes ? (isCop ? fmtCOP(mejorMes.cop2026 ?? 0) : fmt$(mejorMes.y2026 ?? 0)) : '—'}</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-red-50 border border-red-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-red-700 mb-0.5">Peor mes 2026</p>
+              <p className="text-lg font-bold text-red-700">{peorMes ? peorMes.mes_nombre : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{peorMes ? (isCop ? fmtCOP(peorMes.cop2026 ?? 0) : fmt$(peorMes.y2026 ?? 0)) : '—'}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            <div className="rounded-lg px-4 py-2.5 bg-blue-50 border border-blue-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-blue-700 mb-0.5">Ticket medio</p>
+              <p className="text-lg font-bold text-blue-700">{isCop ? fmtCOP(ticketMedio) : fmt$(kpis.ytd_2026 / (kpis.uni_2026 || 1))}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">por unidad</p>
+            </div>
+            <div className={`rounded-lg px-4 py-2.5 border ${growthPromedio >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${growthPromedio >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>Crecimiento MoM prom.</p>
+              <p className={`text-lg font-bold ${growthPromedio >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {growthPromedio > 0 ? '+' : ''}{growthPromedio.toFixed(1)}%
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">vs mes anterior</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Meses activos</p>
+              <p className="text-lg font-bold text-gray-800">{meses2026.length} <span className="text-xs font-normal text-gray-500">de 12</span></p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{diasAcumulados} días acumulados</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-purple-50 border border-purple-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-purple-700 mb-0.5">Cadenas activas</p>
+              <p className="text-lg font-bold text-purple-700">{(kpis.por_cadena ?? []).filter(c => c.valor_2026 > 0).length}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">con ventas 2026</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart 1: Ventas mensuales según moneda */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">Ventas mensuales</h4>
+              <p className="text-[11px] text-gray-400">Comparativo 2025 vs 2026 · {monLabel}</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
+            </div>
+          </div>
+          <div className="h-[300px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={monthlyVal} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradEvo25" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.25}/>
+                    <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="gradEvo26" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.4}/>
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v: unknown) => [tipVal(v), '']}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Area dataKey="val2025" name={`2025 ${monLabel}`} type="monotone" stroke="#94a3b8" strokeWidth={2}
+                  fill="url(#gradEvo25)" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
+                <Area dataKey="val2026" name={`2026 ${monLabel}`} type="monotone" stroke="#f59e0b" strokeWidth={2.5}
+                  fill="url(#gradEvo26)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }} connectNulls={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 2: Unidades mensuales — barras comparativas */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">Unidades vendidas</h4>
+              <p className="text-[11px] text-gray-400">Comparativo 2025 vs 2026</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> 2026</span>
+            </div>
+          </div>
+          <div className="h-[300px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                <defs>
+                  <linearGradient id="gradUds25" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.95}/>
+                    <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.75}/>
+                  </linearGradient>
+                  <linearGradient id="gradUds26" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={yFmtUds} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v: unknown) => [tipUds(v), '']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="uds2025" name="2025 Und" fill="url(#gradUds25)" radius={[8,8,0,0]} maxBarSize={38} />
+                <Bar dataKey="uds2026" name="2026 Und" fill="url(#gradUds26)" radius={[8,8,0,0]} maxBarSize={38} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 3: Growth MoM % */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">Crecimiento MoM %</h4>
+              <p className="text-[11px] text-gray-400">Variación mes vs mes anterior · 2026</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> Positivo</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500"/> Negativo</span>
+            </div>
+          </div>
+          <div className="h-[260px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={growthMoM} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%">
+                <defs>
+                  <linearGradient id="gradPos" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradNeg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f87171" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v: number) => v + '%'} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v: unknown) => v === null ? ['—', 'Growth'] : [(v as number).toFixed(1) + '%', 'Growth']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="growth" radius={[8,8,0,0]} maxBarSize={40}>
+                  {growthMoM.map((r, i) => (
+                    <Cell key={i} fill={r.growth === null ? '#e2e8f0' : r.growth >= 0 ? 'url(#gradPos)' : 'url(#gradNeg)'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 4: Acumulado YTD */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">Acumulado FY</h4>
+              <p className="text-[11px] text-gray-400">Suma corriente Ene → mes en curso · {monLabel}</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> 2026</span>
+            </div>
+          </div>
+          <div className="h-[280px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={acumuladoVal} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradAcum26" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#059669" stopOpacity={0.35}/>
+                    <stop offset="100%" stopColor="#059669" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v: unknown) => [tipVal(v), '']}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Line dataKey="acum2025" name="Acum 2025" type="monotone" stroke="#94a3b8" strokeWidth={2} strokeDasharray="4 3" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
+                <Area dataKey="acum2026" name="Acum 2026" type="monotone" stroke="#059669" strokeWidth={2.5}
+                  fill="url(#gradAcum26)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#059669' }} connectNulls={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 5: Distribución por cadena (2026) */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div>
+            <h4 className="text-sm font-bold text-gray-800">Distribución por cadena 2026</h4>
+            <p className="text-[11px] text-gray-400">Participación de ventas por cadena · {monLabel}</p>
+          </div>
+          <div className="h-[280px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={(kpis.por_cadena ?? []).filter(c => c.valor_2026 > 0)} layout="vertical" margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                <XAxis type="number" tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="cadena" tick={{ fontSize: 11, fill: '#64748b' }} width={110} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v: unknown) => [tipVal(v), '']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="valor_2026" radius={[0, 8, 8, 0]} maxBarSize={32}>
+                  {(kpis.por_cadena ?? []).map((c, i) => (
+                    <Cell key={i} fill={CADENA_COLORS[c.cadena] ?? '#c8873a'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
     )
@@ -444,14 +1177,20 @@ export default function ExitoEjecucion() {
 
   function Pareto() {
     const L = isL('pareto')
-    const grandTotal = topSkus.reduce((s, r) => s + r.valor_2026, 0)
+    const isCop = moneda === 'cop'
+    const fmtVal = (v: number) => isCop ? fmtCOP(v) : fmtFull(v)
+    const yTick  = (v: any)    => isCop ? fmtCOP(Number(v)) : fmt$(v)
+    const skuVal = (r: TopSku) => isCop ? r.valor_2026_cop : r.valor_2026
+    const skuVal25 = (r: TopSku) => isCop ? r.valor_2025_cop : r.valor_2025
+    const grandTotal = topSkus.reduce((s, r) => s + skuVal(r), 0)
+    const pareto = topSkus.map(r => ({ ...r, valor_display: skuVal(r) }))
     return (
       <div className="space-y-5">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex flex-wrap gap-4 items-end">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Top N</p>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {[10, 15, 20].map(n => (
+              {[5, 10, 13].map(n => (
                 <button key={n} onClick={() => setTopN(n)}
                   className={`px-3 py-1.5 text-xs font-medium transition-colors ${topN === n ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                   {n}
@@ -469,33 +1208,56 @@ export default function ExitoEjecucion() {
         )}
 
         {!L && topSkus.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">Pareto SKUs — Sell-Out YTD 2026</h3>
-            <p className="text-xs text-gray-400 mb-4">Valor en dólares · curva acumulada</p>
-            <div className="h-[280px]">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-start justify-between mb-1 gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Pareto SKUs — Sell-Out FY 2026 ({moneda.toUpperCase()})</h3>
+                <p className="text-[11px] text-gray-400">Valor en {isCop ? 'pesos colombianos' : 'dólares'} · curva acumulada</p>
+              </div>
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Clase A</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> Clase B</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-200"/> Clase C</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-600"/> Acum %</span>
+              </div>
+            </div>
+            <div className="h-[300px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={topSkus}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="descripcion" tick={{ fontSize: 9 }} interval={0} angle={-35} textAnchor="end" height={70} />
-                  <YAxis yAxisId="left"  tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
-                  <YAxis yAxisId="right" orientation="right" tickFormatter={v => v + '%'} tick={{ fontSize: 11 }} width={35} domain={[0,100]} />
-                  <Tooltip formatter={(v: any, name: string) => name === 'Acumulado %' ? v + '%' : fmtFull(v)} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar yAxisId="left" dataKey="valor_2026" name="Valor 2026" radius={[2,2,0,0]}>
-                    {topSkus.map((r, i) => (
-                      <Cell key={i} fill={r.cum_share <= 80 ? '#c8873a' : r.cum_share <= 95 ? '#94a3b8' : '#e2e8f0'} />
+                <ComposedChart data={pareto} margin={{ top: 10, right: 10, left: 0, bottom: 60 }} barCategoryGap="20%">
+                  <defs>
+                    <linearGradient id="gradClaseA" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                    </linearGradient>
+                    <linearGradient id="gradClaseB" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.75}/>
+                    </linearGradient>
+                    <linearGradient id="gradClaseC" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#e2e8f0" stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor="#f1f5f9" stopOpacity={0.75}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="descripcion" tick={{ fontSize: 10, fill: '#64748b' }} interval={0}
+                    angle={-30} textAnchor="end" height={70} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="left"  tickFormatter={yTick} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="right" orientation="right" tickFormatter={v => v + '%'} tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} domain={[0,100]} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    formatter={(v: any, name: string) => name === 'Acumulado %' ? (v as number).toFixed(1) + '%' : fmtVal(Number(v))}
+                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                  />
+                  <Bar yAxisId="left" dataKey="valor_display" name={`Valor 2026 ${moneda.toUpperCase()}`} radius={[8,8,0,0]} maxBarSize={44}>
+                    {pareto.map((r, i) => (
+                      <Cell key={i} fill={r.cum_share <= 80 ? 'url(#gradClaseA)' : r.cum_share <= 95 ? 'url(#gradClaseB)' : 'url(#gradClaseC)'} />
                     ))}
                   </Bar>
-                  <Line yAxisId="right" type="monotone" dataKey="cum_share" name="Acumulado %" stroke="#1d4ed8" strokeWidth={1.5} dot={false} />
+                  <Line yAxisId="right" type="monotone" dataKey="cum_share" name="Acumulado %" stroke="#2563eb" strokeWidth={2.5}
+                    dot={{ r: 3, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }}
+                    activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }} />
                 </ComposedChart>
               </ResponsiveContainer>
-            </div>
-            <div className="flex flex-wrap gap-4 mt-3">
-              {[['#c8873a','Clase A (≤80%)'],['#94a3b8','Clase B (80–95%)'],['#e2e8f0','Clase C (>95%)']].map(([c,l]) => (
-                <div key={l} className="flex items-center gap-1.5 text-[11px] text-gray-500">
-                  <div className="w-3 h-3 rounded-sm" style={{ background: c }} />{l}
-                </div>
-              ))}
             </div>
           </div>
         )}
@@ -504,9 +1266,9 @@ export default function ExitoEjecucion() {
           <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-gray-700">Detalle por SKU</h3>
-              <p className="text-xs text-gray-400">YTD 2026 · sell-out Grupo Éxito CO</p>
+              <p className="text-xs text-gray-400">FY 2026 · sell-out Grupo Éxito CO</p>
             </div>
-            {grandTotal > 0 && <span className="text-xs font-semibold text-gray-500">{fmtFull(grandTotal)} total</span>}
+            {grandTotal > 0 && <span className="text-xs font-semibold text-gray-500">{fmtVal(grandTotal)} total</span>}
           </div>
           {L ? (
             <div className="divide-y divide-gray-50">{Array(8).fill(0).map((_,i) => (
@@ -526,7 +1288,7 @@ export default function ExitoEjecucion() {
                     <th className="text-center px-3 py-2.5 w-8">#</th>
                     <th className="text-left px-4 py-2.5">Descripción</th>
                     <th className="text-left px-3 py-2.5">Cat.</th>
-                    <th className="text-right px-4 py-2.5">Valor 2026</th>
+                    <th className="text-right px-4 py-2.5">Valor 2026 ({moneda.toUpperCase()})</th>
                     <th className="text-right px-4 py-2.5">Unidades</th>
                     <th className="text-right px-4 py-2.5">Share</th>
                     <th className="text-right px-4 py-2.5">vs 2025</th>
@@ -539,7 +1301,7 @@ export default function ExitoEjecucion() {
                       <td className="px-3 py-2.5 text-center text-gray-400 font-mono">{i + 1}</td>
                       <td className="px-4 py-2.5 font-medium text-gray-700"><span className="text-gray-400 mr-1.5 font-normal">{r.sku}</span>{r.descripcion}</td>
                       <td className="px-3 py-2.5 text-gray-400">{r.categoria}</td>
-                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-700">{fmtFull(r.valor_2026)}</td>
+                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-700">{fmtVal(skuVal(r))}</td>
                       <td className="px-4 py-2.5 text-right font-mono text-gray-500">{r.uni_2026.toLocaleString('en-US')}</td>
                       <td className="px-4 py-2.5 text-right">
                         <div className="flex items-center justify-end gap-2">
@@ -568,63 +1330,117 @@ export default function ExitoEjecucion() {
     const L = isL('seg')
     if (L || !seg) return <div className="space-y-4"><CardSkeleton cols={4} /><ChartSkeleton /></div>
 
+    const isCop = moneda === 'cop'
+    // El modo unidades es independiente; para COP/USD respetamos el toggle global
+    const effectiveSegMode: 'cop'|'usd'|'und' = segMode === 'und' ? 'und' : (isCop ? 'cop' : 'usd')
+
     const dataRows: SegRow[] =
-      segTab === 'producto' ? seg.por_producto :
-      segTab === 'cadena'   ? seg.por_cadena   :
-                              seg.por_subformato
+      segTab === 'producto'  ? seg.por_producto  :
+      segTab === 'cadena'    ? seg.por_cadena    :
+      segTab === 'subformato'? seg.por_subformato:
+                               (seg.por_geografia ?? [])
+
+    // Selector de "modo" (COP / USD / Unidades) — cambia qué se muestra en las celdas.
+    const modeCfg = {
+      cop: {
+        cellFmt: (v: number) => fmtCOP(v),
+        rrFmt:   (v: number) => fmtCOP(v),
+        pickMes: (r: SegRow, m: number) => r.meses[m] ?? 0,
+        pickYtd: (r: SegRow) => r.ytdCop,
+        pickRR:  (r: SegRow) => r.rrCop,
+        pickAct: (r: SegRow) => r.copActual,
+        pickProy:(r: SegRow) => r.proyCop,
+        colLabel: 'COP',
+      },
+      usd: {
+        cellFmt: (v: number) => fmt$(v),
+        rrFmt:   (v: number) => fmt$(v),
+        pickMes: (r: SegRow, m: number) => r.mesesUsd[m] ?? 0,
+        pickYtd: (r: SegRow) => r.ytdUsd,
+        pickRR:  (r: SegRow) => r.rrUsd,
+        pickAct: (r: SegRow) => r.usdActual,
+        pickProy:(r: SegRow) => r.proyUsd,
+        colLabel: 'USD',
+      },
+      und: {
+        cellFmt: (v: number) => fmtNum(v),
+        rrFmt:   (v: number) => fmtRR(v),
+        pickMes: (r: SegRow, m: number) => r.mesesUnd[m] ?? 0,
+        pickYtd: (r: SegRow) => r.ytdUnd,
+        pickRR:  (r: SegRow) => r.rrUnd,
+        pickAct: (r: SegRow) => r.undActual,
+        pickProy:(r: SegRow) => r.proyUnd,
+        colLabel: 'Und',
+      },
+    } as const
+    const mode = modeCfg[effectiveSegMode]
 
     // totales
     const total: SegRow = {
       key: '__total', label: 'TOTAL GENERAL',
-      meses: {}, mesesUnd: {},
-      ytdCop: 0, ytdUnd: 0,
-      rrUnd: 0, rrCop: 0,
-      undActual: 0, copActual: 0,
-      proyUnd: 0, proyCop: 0,
+      meses: {}, mesesUsd: {}, mesesUnd: {},
+      ytdCop: 0, ytdUsd: 0, ytdUnd: 0,
+      rrUnd: 0, rrCop: 0, rrUsd: 0,
+      undActual: 0, copActual: 0, usdActual: 0,
+      proyUnd: 0, proyCop: 0, proyUsd: 0,
     }
     for (const r of dataRows) {
       for (let m = 1; m <= seg.ultimo_mes; m++) {
-        total.meses[m]    = (total.meses[m] ?? 0) + (r.meses[m] ?? 0)
+        total.meses[m]    = (total.meses[m] ?? 0)    + (r.meses[m] ?? 0)
+        total.mesesUsd[m] = (total.mesesUsd[m] ?? 0) + (r.mesesUsd[m] ?? 0)
         total.mesesUnd[m] = (total.mesesUnd[m] ?? 0) + (r.mesesUnd[m] ?? 0)
       }
       total.ytdCop    += r.ytdCop
+      total.ytdUsd    += r.ytdUsd
       total.ytdUnd    += r.ytdUnd
       total.rrUnd     += r.rrUnd
       total.rrCop     += r.rrCop
+      total.rrUsd     += r.rrUsd
       total.undActual += r.undActual
       total.copActual += r.copActual
+      total.usdActual += r.usdActual
       total.proyUnd   += r.proyUnd
       total.proyCop   += r.proyCop
+      total.proyUsd   += r.proyUsd
     }
     total.rrUnd = Math.round(total.rrUnd * 10) / 10
     total.rrCop = Math.round(total.rrCop)
+    total.rrUsd = Math.round(total.rrUsd * 100) / 100
 
     const ultimoMes    = seg.ultimo_mes
     const mesActualLbl = MES_LBL_YR(ultimoMes, seg.ano)
     const cobertura    = seg.ultimo_dia && seg.dias_mes ? `${seg.ultimo_dia}/${seg.dias_mes} días` : '—'
 
     const exportCsv = () => {
-      const firstColLabel = segTab === 'producto' ? 'Producto' : segTab === 'cadena' ? 'Cadena' : 'Subformato'
+      const firstColLabel =
+        segTab === 'producto'  ? 'Producto' :
+        segTab === 'cadena'    ? 'Cadena' :
+        segTab === 'subformato'? 'Subcadena' :
+                                 'Departamento'
       const headers: string[] = []
-      if (segTab === 'producto') headers.push('PluCD', 'SKU', 'Producto')
-      else headers.push(firstColLabel)
-      for (let m = 1; m <= ultimoMes; m++) headers.push(`${MES_LBL_YR(m, seg.ano)} (COP)`)
-      headers.push('Total YTD (COP)', 'Total YTD (und)',
-                   `RR und/día (${mesActualLbl})`, `RR COP/día`,
-                   `Und ${mesActualLbl}`, `COP ${mesActualLbl}`,
-                   `Proy. ${mesActualLbl} und`, `Proy. ${mesActualLbl} COP`)
+      headers.push(segTab === 'producto' ? 'Producto' : firstColLabel)
+      if (segTab === 'geografia') headers.push('PDVs')
+      for (let m = 1; m <= ultimoMes; m++) headers.push(`${MES_LBL_YR(m, seg.ano)} (COP)`, `${MES_LBL_YR(m, seg.ano)} (USD)`, `${MES_LBL_YR(m, seg.ano)} (und)`)
+      headers.push(`Total FY ${seg.ano} (COP)`, `Total FY ${seg.ano} (USD)`, `Total FY ${seg.ano} (und)`,
+                   `RR und/día (${mesActualLbl})`, `RR COP/día`, `RR USD/día`,
+                   `Und ${mesActualLbl}`, `COP ${mesActualLbl}`, `USD ${mesActualLbl}`,
+                   `Proy. ${mesActualLbl} und`, `Proy. ${mesActualLbl} COP`, `Proy. ${mesActualLbl} USD`)
 
       const lines: string[] = [headers.join(',')]
       const allRows = [...dataRows, total]
       for (const r of allRows) {
         const cells: (string | number)[] = []
-        if (segTab === 'producto') cells.push(r.plucd ?? '', r.sku ?? '', `"${r.label}"`)
-        else cells.push(`"${r.label}"`)
-        for (let m = 1; m <= ultimoMes; m++) cells.push(Math.round(r.meses[m] ?? 0))
-        cells.push(Math.round(r.ytdCop), Math.round(r.ytdUnd),
-                   r.rrUnd, Math.round(r.rrCop),
-                   Math.round(r.undActual), Math.round(r.copActual),
-                   Math.round(r.proyUnd), Math.round(r.proyCop))
+        cells.push(`"${r.label}"`)
+        if (segTab === 'geografia') cells.push(r.pdvs ?? '')
+        for (let m = 1; m <= ultimoMes; m++) {
+          cells.push(Math.round(r.meses[m] ?? 0),
+                     Math.round((r.mesesUsd[m] ?? 0) * 100) / 100,
+                     Math.round(r.mesesUnd[m] ?? 0))
+        }
+        cells.push(Math.round(r.ytdCop), Math.round(r.ytdUsd * 100) / 100, Math.round(r.ytdUnd),
+                   r.rrUnd, Math.round(r.rrCop), Math.round(r.rrUsd * 100) / 100,
+                   Math.round(r.undActual), Math.round(r.copActual), Math.round(r.usdActual * 100) / 100,
+                   Math.round(r.proyUnd), Math.round(r.proyCop), Math.round(r.proyUsd * 100) / 100)
         lines.push(cells.join(','))
       }
       const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
@@ -643,15 +1459,11 @@ export default function ExitoEjecucion() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
-                Informe Seguimiento Semanal · Sell-Out · COP
+                Informe Seguimiento Semanal · Sell-Out · {moneda.toUpperCase()}
               </p>
               <h2 className="text-base font-bold text-gray-800 mt-0.5">
                 Grupo Éxito · Colombia
               </h2>
-              <p className="text-xs text-gray-500 mt-1">
-                Última carga: <strong>{seg.ultima_fecha ?? '—'}</strong> ·
-                Mes en curso: <strong>{mesActualLbl}</strong> · {cobertura}
-              </p>
             </div>
             <div className="flex items-center gap-2">
               <button onClick={exportCsv}
@@ -662,25 +1474,60 @@ export default function ExitoEjecucion() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-            <KpiCard label="Total YTD (COP)" value={fmtCOP(total.ytdCop)} sub={`${ultimoMes} meses`} />
-            <KpiCard label="Total YTD (und)" value={fmtNum(total.ytdUnd)} sub="cajas vendidas" />
+            <KpiCard
+              label={`Total FY ${seg.ano} (${moneda.toUpperCase()})`}
+              value={isCop ? fmtCOP(total.ytdCop) : fmt$(total.ytdUsd)}
+              sub={`${ultimoMes} meses acumulados`}
+            />
+            <KpiCard label={`Total FY ${seg.ano} (und)`} value={fmtNum(total.ytdUnd)} sub={`${ultimoMes} meses acumulados`} />
             <KpiCard label={`RR und/día (${mesActualLbl})`} value={fmtRR(total.rrUnd)} sub={`base ${cobertura}`} />
-            <KpiCard label={`Proy. cierre ${mesActualLbl}`} value={fmtCOP(total.proyCop)} sub={`${fmtNum(total.proyUnd)} und`} highlight />
+            <KpiCard
+              label={`Proy. cierre ${mesActualLbl} (${moneda.toUpperCase()})`}
+              value={isCop ? fmtCOP(total.proyCop) : fmt$(total.proyUsd)}
+              sub={`${fmtNum(total.proyUnd)} und`}
+              highlight
+            />
           </div>
         </div>
 
-        {/* Tabs internos */}
-        <div className="flex items-center gap-1 border-b border-gray-200">
-          {(['producto', 'cadena', 'subformato'] as const).map(t => (
-            <button key={t}
-              onClick={() => setSegTab(t)}
-              className={`px-4 py-2 text-xs font-semibold transition-colors border-b-2 -mb-px capitalize
-                ${segTab === t
-                  ? 'text-amber-700 border-amber-500'
-                  : 'text-gray-500 border-transparent hover:text-gray-800'}`}>
-              Por {t}
-            </button>
-          ))}
+        {/* Tabs internos + Toggle modo (COP / USD / Und) */}
+        <div className="flex items-center justify-between flex-wrap gap-2 border-b border-gray-200">
+          <div className="flex items-center gap-1">
+            {([
+              { key: 'producto',   label: 'Producto'  },
+              { key: 'cadena',     label: 'Cadena'    },
+              { key: 'subformato', label: 'Subcadena' },
+              { key: 'geografia',  label: 'Geografía' },
+            ] as const).map(t => (
+              <button key={t.key}
+                onClick={() => setSegTab(t.key)}
+                className={`px-4 py-2 text-xs font-semibold transition-colors border-b-2 -mb-px
+                  ${segTab === t.key
+                    ? 'text-amber-700 border-amber-500'
+                    : 'text-gray-500 border-transparent hover:text-gray-800'}`}>
+                Por {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex items-center gap-1 py-1">
+            {([
+              { k: 'valor', lbl: `Valor (${moneda.toUpperCase()})`, hint: 'Valor de venta según moneda seleccionada' },
+              { k: 'und',   lbl: 'Unidades',                         hint: 'Cajas vendidas' },
+            ] as const).map(t => {
+              const isActive = t.k === 'und' ? effectiveSegMode === 'und' : effectiveSegMode !== 'und'
+              return (
+                <button key={t.k}
+                  onClick={() => setSegMode(t.k === 'und' ? 'und' : (isCop ? 'cop' : 'usd'))}
+                  title={t.hint}
+                  className={`px-3 py-1 text-[11px] font-semibold rounded-md transition-colors
+                    ${isActive
+                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                      : 'text-gray-500 hover:text-gray-800 border border-transparent'}`}>
+                  {t.lbl}
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Tabla */}
@@ -690,44 +1537,41 @@ export default function ExitoEjecucion() {
               <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
                 <tr>
                   {segTab === 'producto' && (
-                    <>
-                      <th className="px-3 py-2 text-left font-semibold sticky left-0 bg-gray-50 z-10">PluCD</th>
-                      <th className="px-3 py-2 text-left font-semibold">SKU</th>
-                      <th className="px-3 py-2 text-left font-semibold">Producto</th>
-                    </>
+                    <th className="px-3 py-2 text-left font-semibold sticky left-0 bg-gray-50 z-10">Producto</th>
                   )}
                   {segTab !== 'producto' && (
-                    <th className="px-3 py-2 text-left font-semibold sticky left-0 bg-gray-50 z-10 capitalize">{segTab}</th>
+                    <th className="px-3 py-2 text-left font-semibold sticky left-0 bg-gray-50 z-10">{segTab === 'subformato' ? 'Subcadena' : segTab === 'cadena' ? 'Cadena' : 'Geografía'}</th>
                   )}
                   {segTab === 'subformato' && <th className="px-3 py-2 text-left font-semibold">Cadena</th>}
+                  {segTab === 'geografia'  && <th className="px-3 py-2 text-right font-semibold">PDVs</th>}
                   {Array.from({ length: ultimoMes }, (_, i) => i + 1).map(m => (
                     <th key={m} className="px-3 py-2 text-right font-semibold whitespace-nowrap">
                       {MES_LBL_YR(m, seg.ano)}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-right font-semibold bg-gray-100 whitespace-nowrap">YTD</th>
-                  <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">RR und/día</th>
-                  <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">RR COP/día</th>
-                  <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">{mesActualLbl} und</th>
-                  <th className="px-3 py-2 text-right font-semibold bg-amber-50 text-amber-700 whitespace-nowrap">Proy. und</th>
-                  <th className="px-3 py-2 text-right font-semibold bg-amber-50 text-amber-700 whitespace-nowrap">Proy. COP</th>
+                  <th className="px-3 py-2 text-right font-semibold bg-gray-100 whitespace-nowrap">FY {mode.colLabel}</th>
+                  <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">RR {mode.colLabel}/día</th>
+                  <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">{mesActualLbl} {mode.colLabel}</th>
+                  <th className="px-3 py-2 text-right font-semibold bg-amber-50 text-amber-700 whitespace-nowrap">Proy. {mode.colLabel}</th>
                 </tr>
               </thead>
               <tbody>
                 {dataRows.length === 0 && (
                   <tr><td colSpan={20} className="px-6 py-10 text-center text-gray-400">Sin datos para {seg.ano}.</td></tr>
                 )}
-                {dataRows.map((r, i) => (
-                  <tr key={r.key} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                {dataRows.map((r, i) => {
+                  const isSinGeo = segTab === 'geografia' && r.label === 'SIN GEOGRAFÍA'
+                  const bg = isSinGeo ? 'bg-amber-50/60' : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')
+                  return (
+                  <tr key={r.key} className={bg}>
                     {segTab === 'producto' && (
-                      <>
-                        <td className="px-3 py-2 font-mono text-[11px] text-gray-700 sticky left-0 bg-inherit">{r.plucd}</td>
-                        <td className="px-3 py-2 font-mono text-[11px] text-gray-500">{r.sku}</td>
-                        <td className="px-3 py-2 text-gray-800">{r.label}</td>
-                      </>
+                      <td className="px-3 py-2 text-gray-800 sticky left-0 bg-inherit">{r.label}</td>
                     )}
                     {segTab !== 'producto' && (
-                      <td className="px-3 py-2 font-semibold text-gray-800 sticky left-0 bg-inherit">{r.label}</td>
+                      <td className={`px-3 py-2 font-semibold sticky left-0 bg-inherit ${isSinGeo ? 'text-amber-700 italic' : 'text-gray-800'}`}>
+                        {r.label}
+                        {isSinGeo && <span className="ml-1 text-[10px] font-normal text-amber-600">· pendiente en base</span>}
+                      </td>
                     )}
                     {segTab === 'subformato' && (
                       <td className="px-3 py-2">
@@ -739,22 +1583,24 @@ export default function ExitoEjecucion() {
                         )}
                       </td>
                     )}
+                    {segTab === 'geografia' && (
+                      <td className="px-3 py-2 text-right tabular-nums text-gray-600">{r.pdvs ?? '—'}</td>
+                    )}
                     {Array.from({ length: ultimoMes }, (_, i) => i + 1).map(m => (
                       <td key={m} className="px-3 py-2 text-right tabular-nums text-gray-700">
-                        {r.meses[m] ? fmtCOP(r.meses[m]) : <span className="text-gray-300">—</span>}
+                        {mode.pickMes(r, m) ? mode.cellFmt(mode.pickMes(r, m)) : <span className="text-gray-300">—</span>}
                       </td>
                     ))}
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50">{fmtCOP(r.ytdCop)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{fmtRR(r.rrUnd)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{fmtCOP(r.rrCop)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{fmtNum(r.undActual)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-700 bg-amber-50/50">{fmtNum(r.proyUnd)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-700 bg-amber-50/50">{fmtCOP(r.proyCop)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50">{mode.cellFmt(mode.pickYtd(r))}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{mode.rrFmt(mode.pickRR(r))}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-gray-700">{mode.cellFmt(mode.pickAct(r))}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-700 bg-amber-50/50">{mode.cellFmt(mode.pickProy(r))}</td>
                   </tr>
-                ))}
+                  )
+                })}
                 {dataRows.length > 0 && (
                   <tr className="bg-gray-900 text-white font-semibold">
-                    {segTab === 'producto' && <td className="px-3 py-2 sticky left-0 bg-gray-900" colSpan={3}>TOTAL GENERAL</td>}
+                    {segTab === 'producto' && <td className="px-3 py-2 sticky left-0 bg-gray-900">TOTAL GENERAL</td>}
                     {segTab === 'cadena'   && <td className="px-3 py-2 sticky left-0 bg-gray-900">TOTAL GENERAL</td>}
                     {segTab === 'subformato' && (
                       <>
@@ -762,26 +1608,37 @@ export default function ExitoEjecucion() {
                         <td className="px-3 py-2"></td>
                       </>
                     )}
+                    {segTab === 'geografia' && (
+                      <>
+                        <td className="px-3 py-2 sticky left-0 bg-gray-900">TOTAL GENERAL</td>
+                        <td className="px-3 py-2 text-right">
+                          {fmtNum(dataRows.reduce((a, r) => Math.max(a, r.pdvs ?? 0), 0))}
+                        </td>
+                      </>
+                    )}
                     {Array.from({ length: ultimoMes }, (_, i) => i + 1).map(m => (
                       <td key={m} className="px-3 py-2 text-right tabular-nums">
-                        {total.meses[m] ? fmtCOP(total.meses[m]) : '—'}
+                        {mode.pickMes(total, m) ? mode.cellFmt(mode.pickMes(total, m)) : '—'}
                       </td>
                     ))}
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtCOP(total.ytdCop)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtRR(total.rrUnd)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtCOP(total.rrCop)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtNum(total.undActual)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-amber-300">{fmtNum(total.proyUnd)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums text-amber-300">{fmtCOP(total.proyCop)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{mode.cellFmt(mode.pickYtd(total))}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{mode.rrFmt(mode.pickRR(total))}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{mode.cellFmt(mode.pickAct(total))}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-amber-300">{mode.cellFmt(mode.pickProy(total))}</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
           <p className="text-[10px] text-gray-400 px-4 py-2 border-t border-gray-100 bg-gray-50">
-            Valores en COP. <strong>RR</strong> = Run Rate (ventas del mes ÷ días transcurridos, {cobertura}).
+            Valores en <strong>{mode.colLabel}</strong>.
+            {segMode === 'cop' && ' Bruto de venta al público, sin margen.'}
+            {segMode === 'usd' && ' Aproximación del margen para Borden (venta convertida a USD).'}
+            {segMode === 'und' && ' Cajas vendidas.'}
+            {' '}<strong>RR</strong> = Run Rate (ventas del mes ÷ días transcurridos, {cobertura}).
             <strong> Proyección</strong> = RR × días totales del mes ({seg.dias_mes}d).
-            {segTab === 'producto' && ' Solo SKUs con PluCD del listado de Ignacio.'}
+            {segTab === 'producto' && ' Solo SKUs del listado priorizado.'}
+            {segTab === 'geografia' && ' Agrupado por Departamento (fuente: base punto de venta).'}
           </p>
         </div>
       </div>
@@ -790,16 +1647,1331 @@ export default function ExitoEjecucion() {
 
   // ── Render ──────────────────────────────────────────────────────────────
 
+  // ── Inventarios ──────────────────────────────────────────────────────────
+
+  function Inventarios() {
+    const L = isL('inv')
+    if (L || !inv || !inv.kpi) return <div className="space-y-4"><CardSkeleton cols={4} /></div>
+    if (!inv.fecha) return <ProximamentePlaceholder section="inventarios" />
+
+    const isCop = moneda === 'cop'
+    const fmtCop = (v: number) => '$ ' + Math.round(v).toLocaleString('es-CO')
+    const fmtValInv = (cop: number, usd: number) => isCop ? fmtCop(cop) : fmt$(usd)
+    const kpi = inv.kpi
+    const pctQuiebres = kpi.combinaciones > 0 ? (kpi.quiebres / kpi.combinaciones) * 100 : 0
+    const usdRate = kpi.total_cop > 0 && kpi.total_usd > 0 ? kpi.total_usd / kpi.total_cop : 0
+
+    return (
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Inventario · Grupo Éxito CO
+              </p>
+              <h2 className="text-base font-bold text-gray-800 mt-0.5">
+                Snapshot al <strong>{inv.fecha}</strong>
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">Valores en {isCop ? 'COP (pesos colombianos)' : 'USD (dólares)'}.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <KpiCard label="Total unidades" value={fmtNum(kpi.total_uds)} sub={`${kpi.pdvs} PDVs`} />
+            <KpiCard
+              label={`Valor inventario (${moneda.toUpperCase()})`}
+              value={isCop ? fmtCOP(kpi.total_cop) : fmtFull(kpi.total_usd)}
+              sub={isCop ? `${fmtFull(kpi.total_usd)} USD` : `${fmtCOP(kpi.total_cop)} COP`}
+              highlight
+            />
+            <KpiCard label="SKUs con stock" value={String(kpi.con_stock)} sub={`de ${kpi.combinaciones} combos`} />
+            <KpiCard label="Quiebres" value={String(kpi.quiebres)} sub={`${pctQuiebres.toFixed(1)}% del total`} />
+          </div>
+        </div>
+
+        {/* Por cadena */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">Por Cadena</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-2 text-left">Cadena</th>
+                  <th className="px-4 py-2 text-right">PDVs</th>
+                  <th className="px-4 py-2 text-right">Combos</th>
+                  <th className="px-4 py-2 text-right">Con stock</th>
+                  <th className="px-4 py-2 text-right">Quiebres</th>
+                  <th className="px-4 py-2 text-right">Unidades</th>
+                  <th className="px-4 py-2 text-right">% Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inv.por_cadena.map(c => {
+                  const totalUds = inv.por_cadena.reduce((s, x) => s + x.uds, 0)
+                  const pct = totalUds > 0 ? (c.uds / totalUds) * 100 : 0
+                  const color = CADENA_COLORS[c.cadena ?? ''] ?? '#6b7280'
+                  return (
+                    <tr key={c.cadena ?? '—'} className="border-b border-gray-50">
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+                          <span className="font-semibold text-gray-800">{c.cadena ?? '—'}</span>
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-gray-700 tabular-nums">{c.pdvs}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">{c.combinaciones}</td>
+                      <td className="px-4 py-2.5 text-right text-emerald-700 tabular-nums">{c.con_stock}</td>
+                      <td className="px-4 py-2.5 text-right text-red-600 tabular-nums font-semibold">{c.quiebres}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-gray-800 tabular-nums">{fmtNum(c.uds)}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-500">{pct.toFixed(1)}%</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Top 20 SKUs por unidades */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">Top 20 SKUs · por inventario</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-3 py-2 text-left">#</th>
+                  <th className="px-3 py-2 text-left">SKU</th>
+                  <th className="px-3 py-2 text-left">Descripción</th>
+                  <th className="px-3 py-2 text-left">Categoría</th>
+                  <th className="px-3 py-2 text-right">PDVs</th>
+                  <th className="px-3 py-2 text-right">Quiebres</th>
+                  <th className="px-3 py-2 text-right">Unidades</th>
+                </tr>
+              </thead>
+              <tbody>
+                {inv.top_skus.map((s, i) => (
+                  <tr key={s.ean13 ?? i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                    <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+                    <td className="px-3 py-2 font-mono text-[11px] text-amber-700">{s.sku ?? '—'}</td>
+                    <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate">{s.descripcion}</td>
+                    <td className="px-3 py-2 text-gray-500 text-[11px]">{s.categoria ?? '—'}</td>
+                    <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{s.pdvs}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {s.quiebres > 0
+                        ? <span className="text-red-600 font-semibold">{s.quiebres}</span>
+                        : <span className="text-gray-300">0</span>}
+                    </td>
+                    <td className="px-3 py-2 text-right font-semibold text-gray-800 tabular-nums">{fmtNum(s.uds)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Cobertura ─────────────────────────────────────────────────────────────
+  // Métricas tipo Excel CR/GT pero embebidas: Quiebres, Inv. Bajo, y SKU × PDV.
+
+  function Cobertura() {
+    const L = isL('inv')
+    if (L || !inv || !inv.kpi) return <div className="space-y-4"><CardSkeleton cols={4} /></div>
+    if (!inv.fecha) return <ProximamentePlaceholder section="cobertura" />
+
+    const isCop = moneda === 'cop'
+    const fmtCop = (v: number) => '$ ' + Math.round(v).toLocaleString('es-CO')
+    const kpi = inv.kpi
+    const usdRate = kpi.total_cop > 0 && kpi.total_usd > 0 ? kpi.total_usd / kpi.total_cop : 0
+
+    // Filtramos del detalle: quiebres (uds=0) e inv bajo (1..3)
+    const quiebres = inv.detalle.filter(d => d.inv_unidades === 0)
+    const bajos    = inv.detalle.filter(d => d.inv_unidades > 0 && d.inv_unidades <= 3)
+
+    const pctCoberturaSkus = kpi.combinaciones > 0 ? (kpi.con_stock / kpi.combinaciones) * 100 : 0
+    const pctQuiebres      = kpi.combinaciones > 0 ? (kpi.quiebres  / kpi.combinaciones) * 100 : 0
+
+    return (
+      <div className="space-y-5">
+        {/* Header + KPIs */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Cobertura · Grupo Éxito CO
+              </p>
+              <h2 className="text-base font-bold text-gray-800 mt-0.5">
+                Snapshot al <strong>{inv.fecha}</strong>
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">Detalle limitado a los 500 casos de mayor valor.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <KpiCard label="Cobertura SKUs" value={`${pctCoberturaSkus.toFixed(1)}%`} sub={`${kpi.con_stock}/${kpi.combinaciones} combos`} />
+            <KpiCard label="Quiebres" value={String(kpi.quiebres)} sub={`${pctQuiebres.toFixed(1)}% del total`} highlight={kpi.quiebres > 0} />
+            <KpiCard label="Inventario bajo (≤3)" value={String(bajos.length)} sub="Detectados en detalle" />
+            <KpiCard label="PDVs cubiertos" value={String(kpi.pdvs)} sub={`${kpi.skus_unicos} SKUs únicos`} />
+          </div>
+        </div>
+
+        {/* Quiebres */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">🚨 Quiebres de Stock</h3>
+              <p className="text-xs text-gray-400">Combinaciones PDV × SKU con inv = 0 (muestra top 500 por valor de referencia)</p>
+            </div>
+            <span className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full">{quiebres.length} casos en detalle</span>
+          </div>
+          <div className="overflow-x-auto max-h-[400px]">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left">Cadena</th>
+                  <th className="px-3 py-2 text-left">Punto de Venta</th>
+                  <th className="px-3 py-2 text-left">PluCD</th>
+                  <th className="px-3 py-2 text-left">Descripción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {quiebres.length === 0
+                  ? <tr><td colSpan={4} className="px-6 py-8 text-center text-gray-400">Sin quiebres en el detalle 🎉</td></tr>
+                  : quiebres.map((d, i) => (
+                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                      <td className="px-3 py-2">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                              style={{ background: CADENA_COLORS[d.cadena ?? ''] ?? '#6b7280' }}>{d.cadena ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2 text-gray-800">{d.punto_venta}</td>
+                      <td className="px-3 py-2 font-mono text-[11px] text-gray-500">{d.plu ?? '—'}</td>
+                      <td className="px-3 py-2 text-gray-700 max-w-[280px] truncate">{d.descripcion}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Inventario bajo */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">⚠️ Inventario Bajo</h3>
+              <p className="text-xs text-gray-400">Combinaciones con 1 a 3 unidades disponibles</p>
+            </div>
+            <span className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">{bajos.length} casos</span>
+          </div>
+          <div className="overflow-x-auto max-h-[400px]">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left">Cadena</th>
+                  <th className="px-3 py-2 text-left">Punto de Venta</th>
+                  <th className="px-3 py-2 text-left">PluCD</th>
+                  <th className="px-3 py-2 text-left">Descripción</th>
+                  <th className="px-3 py-2 text-right">Unidades</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bajos.length === 0
+                  ? <tr><td colSpan={5} className="px-6 py-8 text-center text-gray-400">Sin inv bajo en el detalle</td></tr>
+                  : bajos.map((d, i) => (
+                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                      <td className="px-3 py-2">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                              style={{ background: CADENA_COLORS[d.cadena ?? ''] ?? '#6b7280' }}>{d.cadena ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-2 text-gray-800">{d.punto_venta}</td>
+                      <td className="px-3 py-2 font-mono text-[11px] text-gray-500">{d.plu ?? '—'}</td>
+                      <td className="px-3 py-2 text-gray-700 max-w-[240px] truncate">{d.descripcion}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-orange-700 font-bold">{d.inv_unidades}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Innovaciones ─────────────────────────────────────────────────────────
+
+  function Innovaciones() {
+    const L = isL('innov')
+    if (L || innov === null) return <div className="space-y-4"><CardSkeleton cols={2} /></div>
+
+    if (innov.length === 0) return <ProximamentePlaceholder section="innovaciones" />
+
+    const fmtCop = (v: number) => '$ ' + Math.round(v).toLocaleString('es-CO')
+    const fmtMes = (m: number) => ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][m] ?? String(m)
+
+    // KPIs a nivel score card
+    const totUds = innov.reduce((s, x) => s + x.total_uds, 0)
+    const totCop = innov.reduce((s, x) => s + x.total_cop, 0)
+    const totUsd = innov.reduce((s, x) => s + x.total_usd, 0)
+    const conVenta = innov.filter(x => !x.sin_ventas).length
+
+    return (
+      <div className="space-y-5">
+        {/* Header + KPIs */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Score Card Innovaciones
+              </p>
+              <h2 className="text-base font-bold text-gray-800 mt-0.5">
+                🆕 Extracontenido Parmesano · Grupo Éxito CO
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                {conVenta > 0
+                  ? `${conVenta}/${innov.length} con ventas registradas`
+                  : ' '}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <KpiCard label="SKUs innovación" value={String(innov.length)} sub="En catálogo" />
+            <KpiCard label="Con ventas" value={`${conVenta}/${innov.length}`} sub="Ya activados" />
+            <KpiCard label="Unidades acumuladas" value={fmtNum(totUds)} sub="YTD" highlight={totUds > 0} />
+            <KpiCard
+              label={`Valor acumulado (${moneda.toUpperCase()})`}
+              value={moneda === 'cop' ? fmtCOP(totCop) : fmtFull(totUsd)}
+              sub={moneda === 'cop' ? `${fmtFull(totUsd)} USD` : `${fmtCOP(totCop)} COP`}
+              highlight={totCop > 0}
+            />
+          </div>
+        </div>
+
+        {/* Cards por SKU */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {innov.map(it => {
+            const bg = it.sin_ventas ? 'bg-white border-gray-200' : 'bg-emerald-50/40 border-emerald-200'
+            return (
+              <div key={it.ean13 || it.plu} className={`rounded-xl border shadow-sm p-5 ${bg}`}>
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                      PluCD {it.plu} · Cód. {it.codigo_borden}
+                    </p>
+                    <h3 className="text-sm font-bold text-gray-800 mt-0.5 leading-snug">{it.descripcion}</h3>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      EAN: <span className="font-mono">{it.ean13}</span>
+                      {it.gramos !== null && <span> · {it.gramos}g</span>}
+                    </p>
+                  </div>
+                  {it.sin_ventas ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 whitespace-nowrap">
+                      🕓 Sin ventas aún
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 whitespace-nowrap">
+                      ✓ Activo
+                    </span>
+                  )}
+                </div>
+
+                {/* Precios */}
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  <div className="rounded-lg bg-white/60 border border-gray-100 px-3 py-2">
+                    <p className="text-[9px] uppercase tracking-widest text-gray-400">Precio anterior</p>
+                    <p className="text-sm font-semibold text-gray-600">{fmtCop(it.precio_anterior_cop ?? 0)}</p>
+                  </div>
+                  <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+                    <p className="text-[9px] uppercase tracking-widest text-amber-700">Precio vigente</p>
+                    <p className="text-sm font-bold text-amber-800">{fmtCop(it.precio_vigente_cop ?? 0)}</p>
+                  </div>
+                </div>
+
+                {/* Métricas de venta */}
+                {it.sin_ventas ? (
+                  <div className="mt-4 py-4 text-center bg-white/60 rounded-lg border border-dashed border-gray-200">
+                    <p className="text-xs text-gray-500">
+                      Aún no se registran ventas en <code className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded">fact_ventas_exito</code>
+                    </p>
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      Este panel se pobla automáticamente cuando el bot OneDrive detecte la primera venta
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-4 gap-2 mt-3">
+                      <div className="text-center">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400">Primera venta</p>
+                        <p className="text-xs font-semibold text-gray-800">{it.primera_venta}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400">Unidades</p>
+                        <p className="text-sm font-bold text-gray-800">{fmtNum(it.total_uds)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400">Valor {moneda.toUpperCase()}</p>
+                        <p className="text-sm font-bold text-emerald-700">{moneda === 'cop' ? fmtCop(it.total_cop) : fmtFull(it.total_usd)}</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400">PDVs</p>
+                        <p className="text-sm font-bold text-gray-800">{it.pdvs_unicos}</p>
+                      </div>
+                    </div>
+
+                    {it.monthly.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400 mb-1.5">Evolución mensual</p>
+                        <div className="flex gap-1 flex-wrap">
+                          {it.monthly.map((m, i) => (
+                            <div key={i} className="flex-1 min-w-[42px] text-center bg-white/70 rounded p-1.5">
+                              <p className="text-[9px] text-gray-400">{fmtMes(m.mes)}-{String(m.ano).slice(2)}</p>
+                              <p className="text-[11px] font-bold text-gray-700">{Math.round(m.uds)}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Evolución diaria (chart) */}
+                    {it.daily && it.daily.length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400 mb-1.5">
+                          Evolución diaria · {it.daily.length} días con venta
+                        </p>
+                        <ResponsiveContainer width="100%" height={200}>
+                          <AreaChart data={it.daily} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
+                            <defs>
+                              <linearGradient id={`gradInnov-${it.plu}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#10b981" stopOpacity={0.35}/>
+                                <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                            <XAxis
+                              dataKey="fecha"
+                              tick={{ fontSize: 9, fill: '#64748b' }}
+                              tickFormatter={(v: string) => v.slice(5)}
+                              interval="preserveStartEnd"
+                              minTickGap={20}
+                              axisLine={false} tickLine={false}
+                            />
+                            <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} width={35} axisLine={false} tickLine={false} />
+                            <Tooltip
+                              formatter={(v: unknown, name: string) => {
+                                if (name === 'uds') return [Math.round(Number(v)) + ' und', 'Unidades']
+                                if (name === 'cop') return [fmtCop(Number(v)), 'COP']
+                                return [String(v), name]
+                              }}
+                              labelFormatter={(l: string) => `Fecha: ${l}`}
+                              contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                            />
+                            <Area
+                              type="monotone"
+                              dataKey="uds"
+                              stroke="#059669"
+                              strokeWidth={2}
+                              fill={`url(#gradInnov-${it.plu})`}
+                              dot={false}
+                              activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#059669' }}
+                              name="uds"
+                            />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Precios ──────────────────────────────────────────────────────────────
+
+  function Precios() {
+    const L = isL('precios')
+    if (L || precios === null) return <div className="space-y-4"><CardSkeleton cols={3} /></div>
+
+    const fmtCop = (v: number | null) => v === null || v === undefined
+      ? '—'
+      : '$ ' + Math.round(v).toLocaleString('es-CO')
+
+    const delta = (a: number | null, b: number | null) => {
+      if (a === null || b === null || a === 0) return null
+      return ((b - a) / a) * 100
+    }
+
+    const regulares    = precios.filter(p => !p.es_oferta && !p.es_innovacion)
+    const ofertas      = precios.filter(p => p.es_oferta && !p.es_innovacion)
+    const innovaciones = precios.filter(p => p.es_innovacion)
+
+    const renderRow = (p: PrecioRow, i: number) => {
+      const d = delta(p.precio_anterior_cop, p.precio_vigente_cop)
+      const bg = p.es_innovacion ? 'bg-emerald-50/60'
+               : p.es_oferta     ? 'bg-red-50/60'
+               : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')
+      return (
+        <tr key={p.ean13 || i} className={bg}>
+          <td className="px-3 py-2 font-mono text-[11px] text-gray-700">{p.ean13}</td>
+          <td className="px-3 py-2 font-mono text-[11px] text-gray-700">{p.plu}</td>
+          <td className="px-3 py-2 font-mono text-[11px] text-gray-500">{p.codigo_borden}</td>
+          <td className="px-3 py-2 text-gray-800 max-w-[300px] truncate" title={p.descripcion ?? ''}>{p.descripcion}</td>
+          <td className="px-3 py-2 text-right tabular-nums text-gray-600">{p.gramos ?? '—'}</td>
+          <td className="px-3 py-2 text-right tabular-nums text-gray-600 bg-orange-50/40">{fmtCop(p.precio_anterior_cop)}</td>
+          <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-900 bg-orange-100/50">{fmtCop(p.precio_vigente_cop)}</td>
+          <td className="px-3 py-2 text-right tabular-nums">
+            {d === null
+              ? <span className="text-gray-300">—</span>
+              : (
+                <span className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                  d > 0 ? 'bg-emerald-50 text-emerald-700' :
+                  d < 0 ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {d > 0 ? '+' : ''}{d.toFixed(1)}%
+                </span>
+              )}
+          </td>
+        </tr>
+      )
+    }
+
+    // KPIs
+    const nRegulares   = regulares.length
+    const nOfertas     = ofertas.length
+    const nInnovacion  = innovaciones.length
+    const avgIncrPct = (() => {
+      const ds = precios.map(p => delta(p.precio_anterior_cop, p.precio_vigente_cop)).filter(x => x !== null) as number[]
+      return ds.length ? ds.reduce((s, x) => s + x, 0) / ds.length : 0
+    })()
+
+    return (
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Lista de Precios · Grupo Éxito CO
+              </p>
+              <h2 className="text-base font-bold text-gray-800 mt-0.5">
+                Precios vigentes por SKU
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">Precios anteriores vs vigentes.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <KpiCard
+              label="Total SKUs"
+              value={String(precios.length)}
+              sub={`${nRegulares} reg · ${nInnovacion} innov${nOfertas > 0 ? ` · ${nOfertas} ofertas` : ''}`}
+            />
+            <KpiCard
+              label="Ajuste promedio"
+              value={`${avgIncrPct >= 0 ? '+' : ''}${avgIncrPct.toFixed(1)}%`}
+              sub="Vigente vs anterior"
+              highlight
+            />
+            <KpiCard label="SKU con mayor subida" value={(() => {
+              let best = precios[0]; let bd = -Infinity
+              for (const p of precios) {
+                const d = delta(p.precio_anterior_cop, p.precio_vigente_cop) ?? -Infinity
+                if (d > bd) { bd = d; best = p }
+              }
+              return best?.descripcion?.slice(0, 22) ?? '—'
+            })()} sub={(() => {
+              const ds = precios.map(p => delta(p.precio_anterior_cop, p.precio_vigente_cop) ?? -Infinity)
+              const bd = Math.max(...ds)
+              return isFinite(bd) ? `+${bd.toFixed(1)}%` : '—'
+            })()} />
+            <KpiCard label="SKU con menor subida" value={(() => {
+              let low = precios[0]; let ld = Infinity
+              for (const p of precios) {
+                const d = delta(p.precio_anterior_cop, p.precio_vigente_cop) ?? Infinity
+                if (d < ld) { ld = d; low = p }
+              }
+              return low?.descripcion?.slice(0, 22) ?? '—'
+            })()} sub={(() => {
+              const ds = precios.map(p => delta(p.precio_anterior_cop, p.precio_vigente_cop) ?? Infinity)
+              const ld = Math.min(...ds)
+              return isFinite(ld) ? `${ld >= 0 ? '+' : ''}${ld.toFixed(1)}%` : '—'
+            })()} />
+          </div>
+        </div>
+
+        {/* Tabla */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-cyan-50 text-cyan-800">
+                <tr>
+                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">EAN 13</th>
+                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">PLU</th>
+                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Código</th>
+                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Descripción del Item</th>
+                  <th className="px-3 py-2.5 text-right font-semibold uppercase tracking-wider">GR</th>
+                  <th className="px-3 py-2.5 text-right font-semibold uppercase tracking-wider bg-orange-100 text-orange-800">Precio hasta MARZ-26</th>
+                  <th className="px-3 py-2.5 text-right font-semibold uppercase tracking-wider bg-orange-200 text-orange-900">Precio ABRIL-26 en adelante</th>
+                  <th className="px-3 py-2.5 text-right font-semibold uppercase tracking-wider">Ajuste %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {regulares.map((p, i) => renderRow(p, i))}
+                {innovaciones.length > 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold text-emerald-700 bg-emerald-100/60 border-t border-emerald-200">
+                      🆕 Innovaciones · Extracontenido Parmesano
+                    </td>
+                  </tr>
+                )}
+                {innovaciones.map((p, i) => renderRow(p, i + regulares.length))}
+                {ofertas.length > 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold text-red-700 bg-red-100/50 border-t border-red-200">
+                      🔖 Ofertas
+                    </td>
+                  </tr>
+                )}
+                {ofertas.map((p, i) => renderRow(p, i + regulares.length + innovaciones.length))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-gray-400 px-4 py-2 border-t border-gray-100 bg-gray-50">
+            Precios en COP (pesos colombianos). Innovaciones (fondo verde) · Ofertas (fondo rosado). Columna "Ajuste %" = variación entre precio anterior y vigente.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Sell-In ──────────────────────────────────────────────────────────────
+  function SellIn() {
+    const L = isL('sellin')
+    if (L || !sellin) return <div className="space-y-4"><CardSkeleton cols={4} /><ChartSkeleton /></div>
+
+    const { kpi, monthly, top_skus, ocs } = sellin
+    const useUsd = moneda === 'usd'
+
+    const fmtVal = (v: number) => useUsd ? fmtFull(v) : fmtCOP(v)
+    const yFmt = (v: any) => useUsd ? fmt$(Number(v)) : fmtCOP(Number(v))
+
+    // KPIs
+    const ventaCur = useUsd ? kpi.usd_26 : kpi.cop_26
+    const venta25  = kpi.cop_25 // 2025 solo en COP; para USD se muestra delta % solamente
+
+    // Monthly filtrado a los meses cargados
+    const monthlyF = monthly.filter(m => (m.cop_25 || 0) > 0 || (m.cop_26 || 0) > 0)
+
+    // Utilidad y margen mensuales
+    const monthlyPlus = monthlyF.map(m => ({
+      ...m,
+      margen_26_pct: (m.cop_26 && m.cop_26 > 0 && m.ut_26 !== null) ? (m.ut_26 / m.cop_26) * 100 : null,
+      margen_25_pct: (m.cop_25 > 0)                                 ? (m.ut_25 / m.cop_25) * 100 : null,
+    }))
+
+    // Top SKUs — filtrado por categoría/cadenaFilter no aplica (SellIn es solo GRUPO ÉXITO)
+    const topSkus = top_skus.slice(0, 15)
+    const totalSku = top_skus.reduce((s, x) => s + x.cop, 0)
+
+    // Distribución por subcategoría
+    const porSubcatMap: Record<string, { cop: number; uds: number; ut: number }> = {}
+    for (const s of top_skus) {
+      const c = s.subcategoria || 'Sin subcategoría'
+      if (!porSubcatMap[c]) porSubcatMap[c] = { cop: 0, uds: 0, ut: 0 }
+      porSubcatMap[c].cop += s.cop; porSubcatMap[c].uds += s.uds; porSubcatMap[c].ut += s.ut
+    }
+    const porSubcat = Object.entries(porSubcatMap)
+      .map(([subcategoria, v]) => ({ subcategoria, ...v, margen_pct: v.cop > 0 ? (v.ut / v.cop) * 100 : null }))
+      .sort((a, b) => b.cop - a.cop)
+
+    return (
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+            Sell-In · Grupo Éxito CO · FY 2026
+          </p>
+          <h2 className="text-base font-bold text-gray-800 mt-0.5">
+            Facturación a Grupo Éxito ({useUsd ? 'USD' : 'COP'})
+          </h2>
+          <p className="text-xs text-gray-500 mt-1">
+            {kpi.ultimo_mes > 0 ? `Datos cargados hasta mes ${kpi.ultimo_mes}.` : 'Sin movimientos cargados.'} Fuente: OC recibidas por SKU.
+          </p>
+        </div>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <KpiCard
+            label={`Venta FY 2026 (${useUsd ? 'USD' : 'COP'})`}
+            value={fmtVal(ventaCur)}
+            sub={kpi.ultimo_mes > 0 ? `Hasta mes ${kpi.ultimo_mes}` : 'Sin dato'}
+            highlight
+          />
+          <KpiCard
+            label="Unidades FY 2026"
+            value={fmtNum(kpi.uds_26)}
+            sub={kpi.delta_unidades !== null ? `${kpi.delta_unidades > 0 ? '+' : ''}${kpi.delta_unidades.toFixed(1)}% vs 2025` : 'Sin comparativo'}
+          />
+          <KpiCard
+            label="Utilidad Bruta (COP)"
+            value={fmtCOP(kpi.ut_26)}
+            sub={kpi.delta_utilidad !== null ? `${kpi.delta_utilidad > 0 ? '+' : ''}${kpi.delta_utilidad.toFixed(1)}% vs 2025` : 'Sin comparativo'}
+          />
+          <KpiCard
+            label="Margen Bruto %"
+            value={kpi.margen_pct !== null ? `${kpi.margen_pct.toFixed(1)}%` : '—'}
+            sub={kpi.margen_pct_25 !== null ? `2025: ${kpi.margen_pct_25.toFixed(1)}%` : 'Sin dato 2025'}
+          />
+        </div>
+
+        {/* Comparativos vs 2025 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Venta 2026 vs 2025 (COP)</p>
+            <p className="text-2xl font-bold text-gray-800">{fmtCOP(kpi.cop_26)}</p>
+            <p className="text-xs text-gray-500 mt-0.5">2025 mismo período: {fmtCOP(venta25)}</p>
+            <div className="mt-2">
+              {kpi.delta_venta !== null ? <Delta d={kpi.delta_venta} /> : <span className="text-xs text-gray-400">Sin comparativo</span>}
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Utilidad 2026 vs 2025</p>
+            <p className="text-2xl font-bold text-gray-800">{fmtCOP(kpi.ut_26)}</p>
+            <p className="text-xs text-gray-500 mt-0.5">2025 mismo período: {fmtCOP(kpi.ut_25)}</p>
+            <div className="mt-2">
+              {kpi.delta_utilidad !== null ? <Delta d={kpi.delta_utilidad} /> : <span className="text-xs text-gray-400">Sin comparativo</span>}
+            </div>
+          </div>
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Costo Venta 2026 (COP)</p>
+            <p className="text-2xl font-bold text-gray-800">{fmtCOP(kpi.costo_26)}</p>
+            <p className="text-xs text-gray-500 mt-0.5">Ratio costo/venta: {kpi.cop_26 > 0 ? ((kpi.costo_26 / kpi.cop_26) * 100).toFixed(1) : '—'}%</p>
+          </div>
+        </div>
+
+        {/* Ventas mensuales chart */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">Sell-In Mensual</h3>
+              <p className="text-[11px] text-gray-400">2025 vs 2026 ({useUsd ? 'USD' : 'COP'})</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> 2026</span>
+            </div>
+          </div>
+          <div className="h-[260px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={monthlyPlus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                <defs>
+                  <linearGradient id="gradSellIn25" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
+                    <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.7}/>
+                  </linearGradient>
+                  <linearGradient id="gradSellIn26" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v: any) => fmtVal(Number(v))}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="cop_25" name="2025" fill="url(#gradSellIn25)" radius={[8,8,0,0]} maxBarSize={38} />
+                <Bar dataKey="cop_26" name="2026" fill="url(#gradSellIn26)" radius={[8,8,0,0]} maxBarSize={38} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Utilidad y Margen mensual */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Utilidad Bruta Mensual</h3>
+                <p className="text-[11px] text-gray-400">2025 vs 2026 · COP</p>
+              </div>
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> 2026</span>
+              </div>
+            </div>
+            <div className="h-[220px] mt-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyPlus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                  <defs>
+                    <linearGradient id="gradUt25" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.7}/>
+                    </linearGradient>
+                    <linearGradient id="gradUt26" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={(v: any) => fmtCOP(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    formatter={(v: any) => fmtCOP(Number(v))}
+                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                  />
+                  <Bar dataKey="ut_25" name="2025" fill="url(#gradUt25)" radius={[8,8,0,0]} maxBarSize={32} />
+                  <Bar dataKey="ut_26" name="2026" fill="url(#gradUt26)" radius={[8,8,0,0]} maxBarSize={32} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-1">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Margen Bruto % por Mes</h3>
+                <p className="text-[11px] text-gray-400">Evolución del margen · 2025 vs 2026</p>
+              </div>
+              <div className="flex items-center gap-3 text-[11px]">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-violet-500"/> 2026</span>
+              </div>
+            </div>
+            <div className="h-[220px] mt-3">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={monthlyPlus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="gradMargen26" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.35}/>
+                      <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={(v: any) => `${Math.round(Number(v))}%`} tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    formatter={(v: any) => v === null ? '—' : `${Number(v).toFixed(1)}%`}
+                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                  />
+                  <Line dataKey="margen_25_pct" name="2025" type="monotone" stroke="#94a3b8" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
+                  <Area dataKey="margen_26_pct" name="2026" type="monotone" stroke="#8b5cf6" strokeWidth={2.5}
+                    fill="url(#gradMargen26)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#8b5cf6' }} connectNulls />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        {/* Distribución por subcategoría */}
+        {porSubcat.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <h3 className="text-sm font-bold text-gray-800 mb-4">Sell-In por Subcategoría — FY 2026</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Subcategoría</th>
+                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Venta {useUsd ? 'USD' : 'COP'}</th>
+                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Unidades</th>
+                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Utilidad COP</th>
+                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Margen %</th>
+                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">% del total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {porSubcat.map((c, i) => {
+                    const val = useUsd ? (c.cop / (kpi.cop_26 || 1)) * kpi.usd_26 : c.cop
+                    const pct = totalSku > 0 ? (c.cop / totalSku) * 100 : 0
+                    return (
+                      <tr key={c.subcategoria} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                        <td className="px-3 py-2 font-semibold text-gray-800">{c.subcategoria}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{fmtVal(val)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{fmtNum(c.uds)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{fmtCOP(c.ut)}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{c.margen_pct !== null ? `${c.margen_pct.toFixed(1)}%` : '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{pct.toFixed(1)}%</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Top SKUs */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Top SKUs por Venta — FY 2026</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-600">
+                <tr>
+                  <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">#</th>
+                  <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Descripción</th>
+                  <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Categoría</th>
+                  <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Unidades</th>
+                  <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Venta {useUsd ? 'USD' : 'COP'}</th>
+                  <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Utilidad COP</th>
+                  <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Margen %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topSkus.map((s, i) => (
+                  <tr key={s.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                    <td className="px-3 py-2 text-gray-400 tabular-nums">{i + 1}</td>
+                    <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate" title={s.descripcion ?? ''}>{s.descripcion ?? s.sku}</td>
+                    <td className="px-3 py-2 text-gray-500">{s.categoria ?? '—'}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmtNum(s.uds)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{useUsd ? fmtFull(s.usd) : fmtCOP(s.cop)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{fmtCOP(s.ut)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{s.margen_pct !== null ? `${s.margen_pct.toFixed(1)}%` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {top_skus.length > 15 && (
+            <p className="text-[10px] text-gray-400 mt-2">Mostrando 15 de {top_skus.length} SKUs con Sell-In.</p>
+          )}
+        </div>
+
+        {/* Órdenes de compra recientes */}
+        {ocs.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-4">Órdenes de Compra Recientes</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">OC</th>
+                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Mes</th>
+                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider"># Líneas</th>
+                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Unidades</th>
+                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Venta COP</th>
+                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Utilidad COP</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ocs.map((o, i) => (
+                    <tr key={`${o.orden_compra}-${o.mes}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                      <td className="px-3 py-2 font-mono text-[11px] text-gray-700">{o.orden_compra}</td>
+                      <td className="px-3 py-2 text-gray-500">{MN12[o.mes]}-{String(o.ano).slice(-2)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{o.n_lineas}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmtNum(o.uds)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmtCOP(o.cop)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">{fmtCOP(o.ut)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // ── Calidad Inventario ───────────────────────────────────────────────────
+  function Calidad() {
+    const L = isL('calidad')
+    if (L || !calidad) return <div className="space-y-4"><CardSkeleton cols={4} /><ChartSkeleton /></div>
+    if (calidad.rows.length === 0) return <ProximamentePlaceholder section="cobertura" />
+
+    const t = calidad.total
+    const universo = calidad.universo_pdvs
+
+    const openDetalle = (sku: string, descripcion: string | null, bucket: 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10' | 'todos') => {
+      setCalidadDetalle({ sku, descripcion, bucket, loading: true, pdvs: [] })
+      const q = new URLSearchParams()
+      q.set('sku', sku)
+      q.set('bucket', bucket)
+      if (cadenaFilter) q.set('cadena', cadenaFilter)
+      fetch(`/api/comercial/ejecucion/co/exito/calidad-inventario/pdvs?${q}`)
+        .then(r => r.json())
+        .then(d => setCalidadDetalle(prev => prev ? { ...prev, loading: false, pdvs: d.pdvs ?? [] } : null))
+        .catch(() => setCalidadDetalle(prev => prev ? { ...prev, loading: false } : null))
+    }
+
+    // Chart de barras apiladas por SKU (top 15 por total de PDVs)
+    const chartData = calidad.rows.slice(0, 15).map(r => ({
+      producto: (r.descripcion ?? r.sku).split(' ').slice(0, 4).join(' '),
+      sku: r.sku,
+      'Menos de 3': r.menos_de_3,
+      'Entre 3 y 10': r.entre_3_y_10,
+      'Mayor a 10': r.mayor_a_10,
+    }))
+
+    // KPIs generales
+    const pctCritico = t.total_pdvs > 0 ? (t.menos_de_3 / t.total_pdvs) * 100 : 0
+    const pctSaludable = t.total_pdvs > 0 ? (t.mayor_a_10 / t.total_pdvs) * 100 : 0
+
+    return (
+      <div className="space-y-5">
+        {/* Header + KPIs */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Calidad de Inventario · Grupo Éxito CO
+              </p>
+              <h2 className="text-base font-bold text-gray-800 mt-0.5">
+                Nivel de inventario por SKU
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Snapshot al <strong>{calidad.fecha}</strong> · Universo: <strong>{universo}</strong> PDVs con presencia Borden.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <div className="rounded-xl border border-red-100 bg-red-50/60 p-4">
+              <p className="text-[10px] font-semibold text-red-500 uppercase tracking-widest mb-1">🚨 Stock crítico (&lt;3)</p>
+              <p className="text-2xl font-bold text-red-700">{t.menos_de_3}</p>
+              <p className="text-[10px] text-red-600 mt-0.5">{pctCritico.toFixed(1)}% de los PDVs con stock</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-4">
+              <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-widest mb-1">⚠️ Stock medio (3–10)</p>
+              <p className="text-2xl font-bold text-amber-700">{t.entre_3_y_10}</p>
+              <p className="text-[10px] text-amber-600 mt-0.5">{t.total_pdvs > 0 ? ((t.entre_3_y_10 / t.total_pdvs) * 100).toFixed(1) : '0'}% de los PDVs con stock</p>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-widest mb-1">✓ Stock saludable (&gt;10)</p>
+              <p className="text-2xl font-bold text-emerald-700">{t.mayor_a_10}</p>
+              <p className="text-[10px] text-emerald-600 mt-0.5">{pctSaludable.toFixed(1)}% de los PDVs con stock</p>
+            </div>
+            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+              <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-widest mb-1">Cobertura efectiva</p>
+              <p className="text-2xl font-bold text-blue-700">{(calidad.cobertura_efectiva ?? 0).toFixed(1)}%</p>
+              <p className="text-[10px] text-blue-600 mt-0.5">{calidad.pdvs_con_stock ?? 0} / {universo} PDVs con al menos 1 SKU</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart apilado */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">Distribución de PDVs por Nivel de Stock</h3>
+              <p className="text-[11px] text-gray-400">Cantidad de PDVs con inventario por producto</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500"/> Menos de 3</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Entre 3 y 10</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> Mayor a 10</span>
+            </div>
+          </div>
+          <div className="h-[380px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 80 }}>
+                <defs>
+                  <linearGradient id="gradCritico" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f87171" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradMedio" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradSaludable" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="producto" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+                  angle={-30} textAnchor="end" interval={0} height={80} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="Menos de 3"   stackId="a" fill="url(#gradCritico)"   radius={[0,0,0,0]} maxBarSize={40} />
+                <Bar dataKey="Entre 3 y 10" stackId="a" fill="url(#gradMedio)"     radius={[0,0,0,0]} maxBarSize={40} />
+                <Bar dataKey="Mayor a 10"   stackId="a" fill="url(#gradSaludable)" radius={[8,8,0,0]} maxBarSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Tabla nivel inventario */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-bold text-gray-800">Nivel Inventario — Detalle por Producto</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5"># de PDVs por nivel de stock · cobertura vs universo total</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-semibold">Producto</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-red-600">Menos de 3</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-amber-600">Entre 3 y 10</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-emerald-600">Mayor a 10</th>
+                  <th className="px-3 py-2.5 text-right font-semibold bg-gray-100">Total PDVs</th>
+                  <th className="px-3 py-2.5 text-right font-semibold bg-blue-50 text-blue-700">Cobertura %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {calidad.rows.map((r, i) => (
+                  <tr key={r.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                    <td className="px-4 py-2.5 font-medium text-gray-800">
+                      {r.descripcion ?? r.sku}
+                      <span className="ml-2 text-[10px] text-gray-400 font-mono">{r.sku}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {r.menos_de_3 > 0 ? (
+                        <button
+                          onClick={() => openDetalle(r.sku, r.descripcion, 'menos_de_3')}
+                          className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-red-100 text-red-700 hover:bg-red-200 hover:ring-2 hover:ring-red-300 transition-all cursor-pointer"
+                          title="Ver PDVs con stock < 3">
+                          {r.menos_de_3}
+                        </button>
+                      ) : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {r.entre_3_y_10 > 0 ? (
+                        <button
+                          onClick={() => openDetalle(r.sku, r.descripcion, 'entre_3_y_10')}
+                          className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-amber-100 text-amber-700 hover:bg-amber-200 hover:ring-2 hover:ring-amber-300 transition-all cursor-pointer"
+                          title="Ver PDVs con stock 3–10">
+                          {r.entre_3_y_10}
+                        </button>
+                      ) : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {r.mayor_a_10 > 0 ? (
+                        <button
+                          onClick={() => openDetalle(r.sku, r.descripcion, 'mayor_a_10')}
+                          className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-700 hover:bg-emerald-200 hover:ring-2 hover:ring-emerald-300 transition-all cursor-pointer"
+                          title="Ver PDVs con stock > 10">
+                          {r.mayor_a_10}
+                        </button>
+                      ) : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums bg-gray-50/60">
+                      <button
+                        onClick={() => openDetalle(r.sku, r.descripcion, 'todos')}
+                        className="font-bold text-gray-800 hover:text-blue-700 hover:underline cursor-pointer"
+                        title="Ver todos los PDVs con stock">
+                        {r.total_pdvs}
+                      </button>
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums bg-blue-50/40">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
+                          <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${Math.min(100, r.cobertura_pct)}%` }} />
+                        </div>
+                        <span className="font-bold text-blue-700 min-w-[42px]">{r.cobertura_pct.toFixed(1)}%</span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-gray-900 text-white font-bold">
+                  <td className="px-4 py-2.5">TOTAL <span className="text-[9px] font-normal text-gray-400 ml-1">(suma por SKU)</span></td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{t.menos_de_3}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{t.entre_3_y_10}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{t.mayor_a_10}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{t.total_pdvs}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-blue-300" title="Cobertura efectiva: PDVs distintos con al menos 1 SKU con stock / universo total">
+                    {(calidad.cobertura_efectiva ?? 0).toFixed(1)}% <span className="text-[9px] font-normal text-gray-400">efectiva</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Tabla % composición */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-bold text-gray-800">Composición % del Stock por Producto</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Distribución porcentual de los PDVs con stock</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-semibold">Producto</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-red-600">% &lt; 3</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-amber-600">% 3–10</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-emerald-600">% &gt; 10</th>
+                  <th className="px-3 py-2.5 text-left font-semibold">Barra composición</th>
+                </tr>
+              </thead>
+              <tbody>
+                {calidad.rows.map((r, i) => (
+                  <tr key={r.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                    <td className="px-4 py-2.5 font-medium text-gray-800 max-w-[240px] truncate" title={r.descripcion ?? ''}>
+                      {r.descripcion ?? r.sku}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-red-600 font-semibold">{r.pct_menos_de_3.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-amber-600 font-semibold">{r.pct_entre_3_y_10.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 font-semibold">{r.pct_mayor_a_10.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 w-[280px]">
+                      <div className="flex w-full h-3 rounded-full overflow-hidden bg-gray-100">
+                        <div className="bg-red-500 h-full"     style={{ width: `${r.pct_menos_de_3}%`   }} title={`Menos de 3: ${r.pct_menos_de_3.toFixed(1)}%`} />
+                        <div className="bg-amber-500 h-full"   style={{ width: `${r.pct_entre_3_y_10}%` }} title={`Entre 3 y 10: ${r.pct_entre_3_y_10.toFixed(1)}%`} />
+                        <div className="bg-emerald-500 h-full" style={{ width: `${r.pct_mayor_a_10}%`   }} title={`Mayor a 10: ${r.pct_mayor_a_10.toFixed(1)}%`} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-gray-400 px-6 py-2 border-t border-gray-100 bg-gray-50">
+            Réplica del reporte "CALIDAD INVENTARIO BORDEN". Los porcentajes suman 100% (composición del total de PDVs con stock del producto).
+          </p>
+        </div>
+
+        {/* Modal Detalle PDVs */}
+        {calidadDetalle && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+               onClick={() => setCalidadDetalle(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden"
+                 onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+                      calidadDetalle.bucket === 'menos_de_3'   ? 'bg-red-100 text-red-700' :
+                      calidadDetalle.bucket === 'entre_3_y_10' ? 'bg-amber-100 text-amber-700' :
+                      calidadDetalle.bucket === 'mayor_a_10'   ? 'bg-emerald-100 text-emerald-700' :
+                                                                'bg-blue-100 text-blue-700'
+                    }`}>
+                      {calidadDetalle.bucket === 'menos_de_3'   ? '🚨 Stock < 3' :
+                       calidadDetalle.bucket === 'entre_3_y_10' ? '⚠️ Stock 3–10' :
+                       calidadDetalle.bucket === 'mayor_a_10'   ? '✓ Stock > 10' :
+                                                                  '📦 Todos'}
+                    </span>
+                    <span className="text-[10px] font-mono text-gray-400">SKU {calidadDetalle.sku}</span>
+                  </div>
+                  <h3 className="text-base font-bold text-gray-800">{calidadDetalle.descripcion ?? calidadDetalle.sku}</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {calidadDetalle.loading ? 'Cargando...' : `${calidadDetalle.pdvs.length} PDVs · Snapshot ${calidad.fecha}`}
+                  </p>
+                </div>
+                <button onClick={() => setCalidadDetalle(null)}
+                        className="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-auto">
+                {calidadDetalle.loading ? (
+                  <div className="py-16 text-center text-gray-400 text-sm">Cargando PDVs...</div>
+                ) : calidadDetalle.pdvs.length === 0 ? (
+                  <div className="py-16 text-center text-gray-400 text-sm">Sin PDVs para este bucket.</div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0 z-10">
+                      <tr>
+                        <th className="px-4 py-2.5 text-left font-semibold w-8">#</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Punto de Venta</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Cadena</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Depto / Ciudad</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Unidades</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {calidadDetalle.pdvs.map((p, i) => (
+                        <tr key={`${p.gln}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                          <td className="px-4 py-2 text-gray-400 tabular-nums">{i + 1}</td>
+                          <td className="px-3 py-2 text-gray-800">
+                            {p.punto_venta}
+                            <span className="ml-2 text-[10px] text-gray-400 font-mono">GLN {p.gln}</span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {p.cadena && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                                    style={{ background: CADENA_COLORS[p.cadena] ?? '#6b7280' }}>
+                                {p.cadena}
+                              </span>
+                            )}
+                            {p.subcadena && p.subcadena !== p.cadena && (
+                              <span className="ml-1 text-[10px] text-gray-500">· {p.subcadena}</span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600 text-[11px]">
+                            {p.departamento && <span>{p.departamento}</span>}
+                            {p.ciudad && <span className="text-gray-400"> · {p.ciudad}</span>}
+                            {!p.departamento && !p.ciudad && <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className={`px-3 py-2 text-right tabular-nums font-bold ${
+                            p.inv_unidades < 3  ? 'text-red-600' :
+                            p.inv_unidades <= 10 ? 'text-amber-600' :
+                                                    'text-emerald-600'
+                          }`}>
+                            {Math.round(p.inv_unidades)}
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Total */}
+                      <tr className="bg-gray-900 text-white font-bold">
+                        <td className="px-4 py-2.5" colSpan={4}>TOTAL · {calidadDetalle.pdvs.length} PDVs</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">
+                          {Math.round(calidadDetalle.pdvs.reduce((s, p) => s + p.inv_unidades, 0))}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                <p className="text-[10px] text-gray-500">
+                  Click fuera del modal o el botón × para cerrar.
+                </p>
+                <button onClick={() => {
+                  const rows = calidadDetalle.pdvs.map(p => [
+                    p.punto_venta, p.cadena ?? '', p.subcadena ?? '', p.departamento ?? '', p.ciudad ?? '',
+                    Math.round(p.inv_unidades),
+                  ])
+                  const header = ['Punto de Venta','Cadena','Subcadena','Departamento','Ciudad','Unidades']
+                  const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')
+                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+                  const url  = URL.createObjectURL(blob)
+                  const a    = document.createElement('a')
+                  a.href = url
+                  a.download = `PDVs_${calidadDetalle.sku}_${calidadDetalle.bucket}.csv`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+                        className="text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <Download size={12}/> Exportar CSV
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const renderSection = () => {
     switch (section) {
       case 'resumen':       return Resumen()
+      case 'sellin':        return SellIn()
+      case 'calidad':       return Calidad()
       case 'evolucion':     return Evolucion()
       case 'pareto':        return Pareto()
       case 'seguimiento':   return Seguimiento()
-      case 'cobertura':     return <ProximamentePlaceholder section="cobertura" />
-      case 'inventarios':   return <ProximamentePlaceholder section="inventarios" />
-      case 'innovaciones':  return <ProximamentePlaceholder section="innovaciones" />
-      case 'precios':       return <ProximamentePlaceholder section="precios" />
+      case 'cobertura':     return Cobertura()
+      case 'inventarios':   return Inventarios()
+      case 'innovaciones':  return Innovaciones()
+      case 'precios':       return Precios()
       default:              return Resumen()
     }
   }
@@ -824,51 +2996,47 @@ export default function ExitoEjecucion() {
       {/* Filtros globales */}
       <div className="px-6 pt-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <div className="flex items-start gap-x-4 gap-y-3 flex-wrap text-xs">
+          <div className="flex items-end gap-x-4 gap-y-3 flex-wrap text-xs">
 
-            {/* División */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">División</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {DIVS.map(d => (
-                  <button key={d.key}
-                    onClick={() => { setDiv(d.key); saveFilter('div', d.key) }}
-                    className={`px-4 py-1.5 font-medium transition-colors ${div === d.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {d.label}
-                  </button>
+            {/* Cadena — desplegable */}
+            <div className="flex flex-col gap-1 min-w-[220px]">
+              <span className="text-[10px] uppercase tracking-widest text-gray-400">Cadena</span>
+              <select
+                value={cadenaFilter}
+                onChange={e => { setCadenaFilter(e.target.value); saveFilter('cadena', e.target.value) }}
+                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium">
+                <option value="">Todas las cadenas</option>
+                {Array.from(new Set(cadenas)).sort().map(name => (
+                  <option key={name} value={name}>{name}</option>
                 ))}
-              </div>
+              </select>
             </div>
 
-            {/* Cadena */}
+            {/* Moneda — toggle COP/USD */}
             <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">Cadena</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden flex-wrap">
-                <button onClick={() => { setCadenaFilter(''); saveFilter('cadena', '') }}
-                  className={`px-3 py-1.5 font-medium transition-colors ${cadenaFilter === '' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  Todas
-                </button>
-                {cadenas.map(name => (
-                  <button key={name} onClick={() => { setCadenaFilter(name); saveFilter('cadena', name) }}
-                    className={`px-3 py-1.5 font-medium transition-colors ${cadenaFilter === name ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {name}
+              <span className="text-[10px] uppercase tracking-widest text-gray-400">Moneda</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {(['cop','usd'] as const).map(m => (
+                  <button key={m}
+                    onClick={() => { setMoneda(m); saveFilter('moneda', m) }}
+                    className={`px-4 py-1.5 font-semibold transition-colors ${moneda === m ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {m.toUpperCase()}
                   </button>
                 ))}
               </div>
             </div>
 
             {/* Reset */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400 invisible">x</span>
+            {(cadenaFilter || moneda !== 'cop') && (
               <button
                 onClick={() => {
-                  setDiv('TOTAL'); setCadenaFilter('')
-                  ;['div','cadena'].forEach(k => localStorage.removeItem(`${storageKey}-${k}`))
+                  setCadenaFilter(''); setMoneda('cop')
+                  ;['cadena','moneda'].forEach(k => localStorage.removeItem(`${storageKey}-${k}`))
                 }}
                 className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
                 ↺ Reset
               </button>
-            </div>
+            )}
 
           </div>
         </div>
