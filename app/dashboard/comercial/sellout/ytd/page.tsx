@@ -10,9 +10,10 @@ const PAISES      = ['CR','GT','SV','NI','HN','CO']
 const PAISES_OPT  = PAISES.map(p => ({ value: p }))
 
 const TRIMESTRES = [
-  { label: 'Q1 · Ene – Abr', short: 'Q1', meses: [1,2,3,4],    headerCls: 'text-blue-700 bg-blue-50/80 border-blue-200',      subCls: 'text-blue-700 bg-blue-50/60'   },
-  { label: 'Q2 · May – Ago', short: 'Q2', meses: [5,6,7,8],    headerCls: 'text-green-700 bg-green-50/80 border-green-200',   subCls: 'text-green-700 bg-green-50/60'  },
-  { label: 'Q3 · Sep – Dic', short: 'Q3', meses: [9,10,11,12], headerCls: 'text-purple-700 bg-purple-50/80 border-purple-200', subCls: 'text-purple-700 bg-purple-50/60' },
+  { label: 'Q1 · Ene – Mar', short: 'Q1', meses: [1,2,3],    headerCls: 'text-blue-700 bg-blue-50/80 border-blue-200',       subCls: 'text-blue-700 bg-blue-50/60'   },
+  { label: 'Q2 · Abr – Jun', short: 'Q2', meses: [4,5,6],    headerCls: 'text-green-700 bg-green-50/80 border-green-200',    subCls: 'text-green-700 bg-green-50/60'  },
+  { label: 'Q3 · Jul – Sep', short: 'Q3', meses: [7,8,9],    headerCls: 'text-purple-700 bg-purple-50/80 border-purple-200', subCls: 'text-purple-700 bg-purple-50/60' },
+  { label: 'Q4 · Oct – Dic', short: 'Q4', meses: [10,11,12], headerCls: 'text-amber-700 bg-amber-50/80 border-amber-200',    subCls: 'text-amber-700 bg-amber-50/60'  },
 ]
 
 const fmt = (v: number) => {

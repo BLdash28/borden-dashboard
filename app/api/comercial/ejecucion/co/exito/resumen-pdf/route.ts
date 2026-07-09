@@ -325,6 +325,7 @@ export async function GET(req: NextRequest) {
       },
     })
   } catch (err) {
+    console.error('[resumen-pdf] error:', err)
     return handleApiError(err)
   }
 }
