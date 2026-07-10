@@ -2,7 +2,7 @@
 import { showError } from '@/lib/toast'
 import { useState, useMemo, useCallback } from 'react'
 import {
-  BarChart, Bar, LineChart, Line, AreaChart, Area,
+  BarChart, Bar, LineChart, Line, AreaChart, Area, ComposedChart,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, Cell, PieChart, Pie, ReferenceLine,
 } from 'recharts'
@@ -906,17 +906,25 @@ function ModDevoluciones({ data, fil, overrides, onEdit }: {
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
         <h3 className="font-bold text-slate-700 text-sm mb-4">Tendencia de Devoluciones</h3>
         <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={tendencia} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-            <YAxis yAxisId="und" tick={{ fontSize: 10, fill: '#94a3b8' }} width={40} />
-            <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10, fill: '#94a3b8' }} width={40} unit="%" />
-            <Tooltip content={<ChartTip />} />
+          <ComposedChart data={tendencia} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
+            <defs>
+              <linearGradient id="gradVCDevolBar" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%"   stopColor={C.red} stopOpacity={0.7}/>
+                <stop offset="100%" stopColor={C.red} stopOpacity={0.15}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="und" tick={{ fontSize: 10, fill: '#94a3b8' }} width={40} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10, fill: '#94a3b8' }} width={40} unit="%" axisLine={false} tickLine={false} />
+            <Tooltip content={<ChartTip />}
+              contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <ReferenceLine yAxisId="pct" y={UMBRAL} stroke={C.red} strokeDasharray="4 4" label={{ value: `Umbral ${UMBRAL}%`, fontSize: 9, fill: C.red }} />
-            <Bar yAxisId="und"  dataKey="Devol."  fill={C.redL} stroke={C.red} strokeWidth={1} radius={[3,3,0,0]} />
-            <Line yAxisId="pct" type="monotone" dataKey="% Devol" stroke={C.red} strokeWidth={2.5} dot={{ r: 3 }} />
-          </LineChart>
+            <Bar yAxisId="und"  dataKey="Devol."  fill="url(#gradVCDevolBar)" stroke={C.red} strokeWidth={1} radius={[8,8,0,0]} maxBarSize={38} />
+            <Line yAxisId="pct" type="monotone" dataKey="% Devol" stroke={C.red} strokeWidth={2.5} dot={false}
+              activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: C.red }} />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
 

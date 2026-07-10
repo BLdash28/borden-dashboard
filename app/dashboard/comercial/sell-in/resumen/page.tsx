@@ -2,7 +2,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react'
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid,
+  BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Customized,
 } from 'recharts'
 import FiltroMulti from '@/components/ui/FiltroMulti'
@@ -323,13 +323,24 @@ export default function SellInResumen() {
           : (
             <div className="h-[220px] md:h-[360px]">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={ytdData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+              <AreaChart data={ytdData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradSellinYtdCurr" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor={COLORS[2026]} stopOpacity={0.4}/>
+                    <stop offset="60%"  stopColor={COLORS[2026]} stopOpacity={0.1}/>
+                    <stop offset="100%" stopColor={COLORS[2026]} stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="gradSellinYtdPrev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor={COLORS[2025]} stopOpacity={0.25}/>
+                    <stop offset="100%" stopColor={COLORS[2025]} stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <YAxis
                   tickFormatter={v => v >= 1_000_000 ? '$' + (v / 1_000_000).toFixed(1) + 'M' : '$' + (v / 1_000).toFixed(0) + 'K'}
-                  tick={{ fontSize: 11 }}
-                  width={60}
+                  tick={{ fontSize: 11, fill: '#94a3b8' }}
+                  width={60} axisLine={false} tickLine={false}
                   domain={[0, ytdYMax ?? 'auto']}
                   ticks={ytdTicks}
                 />
@@ -355,11 +366,14 @@ export default function SellInResumen() {
                   )
                 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Line type="monotone" dataKey={prevKey}      name={prevKey}             stroke={COLORS[2025]}      strokeWidth={2} dot={false} connectNulls={false} />
+                <Area type="monotone" dataKey={prevKey}      name={prevKey}             stroke={COLORS[2025]}      strokeWidth={2}
+                      fill="url(#gradSellinYtdPrev)" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
                 <Line type="monotone" dataKey="proyeccion"   name={`Proyección ${ano}`} stroke={COLORS.proyeccion} strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="5 3" />
-                <Line type="monotone" dataKey={currKey}      name={currKey}             stroke={COLORS[2026]}      strokeWidth={2} dot={false} connectNulls={false} />
+                <Area type="monotone" dataKey={currKey}      name={currKey}             stroke={COLORS[2026]}      strokeWidth={2.5}
+                      fill="url(#gradSellinYtdCurr)" dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: COLORS[2026] }} connectNulls={false} />
                 <Customized component={LineMonthDividers} />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
             </div>
           )

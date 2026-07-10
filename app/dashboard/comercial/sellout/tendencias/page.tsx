@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import FiltroMulti from '@/components/ui/FiltroMulti'
 import {
-  BarChart, Bar, LineChart, Line,
+  BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid,
   Tooltip, Legend, ResponsiveContainer, Cell,
 } from 'recharts'
@@ -254,12 +254,23 @@ export default function TendenciasPage() {
                 <p className="text-xs text-gray-400 mb-4">Suma corrida mes a mes</p>
                 <div className="h-[220px] md:h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data.ytd} margin={{ top:4, right:12, left:0, bottom:0 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="mes_label" tick={{ fontSize:11 }} axisLine={false} tickLine={false} />
+                    <AreaChart data={data.ytd} margin={{ top:4, right:12, left:0, bottom:0 }}>
+                      <defs>
+                        <linearGradient id="gradTendYtd2026" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%"   stopColor={COLORS['2026']} stopOpacity={0.4}/>
+                          <stop offset="60%"  stopColor={COLORS['2026']} stopOpacity={0.1}/>
+                          <stop offset="100%" stopColor={COLORS['2026']} stopOpacity={0}/>
+                        </linearGradient>
+                        <linearGradient id="gradTendYtd2025" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%"   stopColor={COLORS['2025']} stopOpacity={0.25}/>
+                          <stop offset="100%" stopColor={COLORS['2025']} stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey="mes_label" tick={{ fontSize:11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                       <YAxis
                         tickFormatter={v => v>=1_000_000 ? '$'+(v/1_000_000).toFixed(1)+'M' : '$'+(v/1_000).toFixed(0)+'K'}
-                        tick={{ fontSize:11 }} width={60} axisLine={false} tickLine={false}
+                        tick={{ fontSize:11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}
                         domain={[0, ytdMax ?? 'auto']} ticks={ytdTicks}
                       />
                       <Tooltip content={({ active, payload, label }) => {
@@ -284,10 +295,13 @@ export default function TendenciasPage() {
                         )
                       }} />
                       <Legend wrapperStyle={{ fontSize:12 }} />
-                      <Line type="monotone" dataKey="2024" name="2024" stroke={COLORS['2024']} strokeWidth={2} dot={false} connectNulls={false} />
-                      <Line type="monotone" dataKey="2025" name="2025" stroke={COLORS['2025']} strokeWidth={2} dot={false} connectNulls={false} />
-                      <Line type="monotone" dataKey="2026" name="2026" stroke={COLORS['2026']} strokeWidth={2.5} dot={false} connectNulls={false} />
-                    </LineChart>
+                      <Line type="monotone" dataKey="2024" name="2024" stroke={COLORS['2024']} strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="4 3" />
+                      <Area type="monotone" dataKey="2025" name="2025" stroke={COLORS['2025']} strokeWidth={2}
+                            fill="url(#gradTendYtd2025)" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
+                      <Area type="monotone" dataKey="2026" name="2026" stroke={COLORS['2026']} strokeWidth={2.5}
+                            fill="url(#gradTendYtd2026)" dot={false}
+                            activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: COLORS['2026'] }} connectNulls={false} />
+                    </AreaChart>
                   </ResponsiveContainer>
                 </div>
               </div>

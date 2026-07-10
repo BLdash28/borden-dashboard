@@ -839,21 +839,30 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   </span>
                 </div>
                 <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={evolDiario.series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10 }}
+                  <AreaChart data={evolDiario.series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                    <defs>
+                      <linearGradient id="gradWmEvolDia" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.35}/>
+                        <stop offset="60%"  stopColor="#c8873a" stopOpacity={0.08}/>
+                        <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
                       interval={Math.max(0, Math.floor(evolDiario.series.length / 20) - 1)} />
-                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 11 }} width={55} />
+                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                     <Tooltip
                       labelFormatter={(l: string) => l}
                       formatter={(v: number) => [
                         evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'),
                         evolMedida === 'valor' ? 'Venta ($)' : 'Unidades',
                       ]}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     />
-                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'valor' : 'unidades'}
-                      stroke="#c8873a" strokeWidth={1.5} dot={false} connectNulls />
-                  </LineChart>
+                    <Area type="monotone" dataKey={evolMedida === 'valor' ? 'valor' : 'unidades'}
+                      stroke="#c8873a" strokeWidth={2.5} fill="url(#gradWmEvolDia)" dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
+                  </AreaChart>
                 </ResponsiveContainer>
               </>
             ) : (
@@ -900,38 +909,51 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               )}
 
               <ResponsiveContainer width="100%" height={280}>
-                <LineChart data={series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 11 }} width={55} />
-                  <Tooltip formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]} />
+                <AreaChart data={series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                  <defs>
+                    <linearGradient id="gradWmEvol2026" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.4}/>
+                      <stop offset="60%"  stopColor="#c8873a" stopOpacity={0.1}/>
+                      <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="gradWmEvol2025" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#60a5fa" stopOpacity={0.25}/>
+                      <stop offset="100%" stopColor="#60a5fa" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]}
+                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
                   {ts?.baseline_val > 0 && evolMedida === 'valor' && (
                     <ReferenceLine y={ts.baseline_val} stroke="#f59e0b" strokeDasharray="4 4"
                       label={{ value: 'Baseline', fontSize: 9, fill: '#f59e0b', position: 'insideTopRight' }} />
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2024') && (
                     <Line type="monotone" dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
-                      stroke="#d1d5db" strokeWidth={evolYearFilter === 'y2024' ? 2.5 : 1.5}
-                      dot={evolYearFilter === 'y2024' ? { r: 3 } : false}
+                      stroke="#d1d5db" strokeWidth={evolYearFilter === 'y2024' ? 2.5 : 1.5} dot={false}
                       strokeDasharray={evolYearFilter ? undefined : '4 4'}
                       connectNulls onClick={() => toggleYear('y2024')}
                       style={{ cursor: 'pointer' }} />
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2025') && (
-                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
+                    <Area type="monotone" dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
                       stroke="#60a5fa" strokeWidth={evolYearFilter === 'y2025' ? 2.5 : 2}
-                      dot={evolYearFilter === 'y2025' ? { r: 3 } : false}
+                      fill="url(#gradWmEvol2025)" dot={false}
+                      activeDot={{ r: 4 }}
                       connectNulls onClick={() => toggleYear('y2025')}
                       style={{ cursor: 'pointer' }} />
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2026') && (
-                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
+                    <Area type="monotone" dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
                       stroke="#c8873a" strokeWidth={evolYearFilter === 'y2026' ? 3 : 2.5}
-                      dot={{ r: evolYearFilter === 'y2026' ? 4 : 3, fill: '#c8873a' }}
+                      fill="url(#gradWmEvol2026)" dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }}
                       connectNulls onClick={() => toggleYear('y2026')}
                       style={{ cursor: 'pointer' }} />
                   )}
-                </LineChart>
+                </AreaChart>
               </ResponsiveContainer>
 
               <div className="flex items-center gap-3 mt-3 text-[10px] flex-wrap">
@@ -988,12 +1010,13 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             <ResponsiveContainer width="100%" height={evolSkuFilter ? 320 : evolTopN === 5 ? 280 : Math.max(560, dSkuNames.length * 14)}>
               <LineChart data={dSkuData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
                 onMouseLeave={() => setEvolSkuHover('')}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey={xKey} tick={{ fontSize: isDiaria ? 9 : 11 }}
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey={xKey} tick={{ fontSize: isDiaria ? 9 : 11, fill: '#64748b' }} axisLine={false} tickLine={false}
                   interval={isDiaria ? Math.max(0, Math.floor((dSkuData.length || 1) / 20) - 1) : 0} />
-                <YAxis tickFormatter={yFmt} tick={{ fontSize: 11 }} width={55} />
+                <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]}
-                  itemStyle={{ fontSize: 11 }} />
+                  itemStyle={{ fontSize: 11 }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
                 {dSkuNames.map((name: string, i: number) => {
                   const color = SKU_COLORS2[i % SKU_COLORS2.length]
                   if (evolSkuFilter && evolSkuFilter !== name) return null
@@ -1050,19 +1073,20 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             <p className="text-xs text-gray-400 mb-4">Sell-out {isDiaria ? 'diario' : 'mensual'} por formato · clic en una línea para aislar</p>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={dByCad} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey={xKey} tick={{ fontSize: isDiaria ? 9 : 11 }}
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey={xKey} tick={{ fontSize: isDiaria ? 9 : 11, fill: '#64748b' }} axisLine={false} tickLine={false}
                   interval={isDiaria ? Math.max(0, Math.floor((dByCad.length || 1) / 20) - 1) : 0} />
-                <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
-                <Tooltip formatter={(v: any) => v !== null ? fmtFull(v) : '—'} />
+                <YAxis tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(v: any) => v !== null ? fmtFull(v) : '—'}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
                 {dCadenas.map((c: string) => {
                   if (evolCadenaLine && evolCadenaLine !== c) return null
                   return (
                     <Line key={c} type="monotone" dataKey={c} name={c}
                       stroke={CADENA_COLORS[c] ?? '#6b7280'}
-                      strokeWidth={evolCadenaLine === c ? 2.5 : 1.5}
-                      dot={isDiaria ? false : { r: 3 }} connectNulls
-                      onClick={() => toggleCadenaLine(c)}
+                      strokeWidth={evolCadenaLine === c ? 2.5 : 2} dot={false}
+                      activeDot={{ r: 4 }}
+                      connectNulls onClick={() => toggleCadenaLine(c)}
                       style={{ cursor: 'pointer' }} />
                   )
                 })}
@@ -1108,26 +1132,39 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   <div key={g.label}>
                     <p className="text-xs font-semibold text-gray-600 mb-2">{g.label}</p>
                     <ResponsiveContainer width="100%" height={180}>
-                      <LineChart data={g.data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
-                        <YAxis tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
-                        <Tooltip formatter={(v: number, name: string) => [fmtFull(v), name]} />
+                      <AreaChart data={g.data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                        <defs>
+                          <linearGradient id={`gradWmCp_${g.label}_si`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.25}/>
+                            <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id={`gradWmCp_${g.label}_so`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.4}/>
+                            <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
+                        <Tooltip formatter={(v: number, name: string) => [fmtFull(v), name]}
+                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
                         {(!evolCpFilter || evolCpFilter === 'sellin') && (
-                          <Line type="monotone" dataKey="sellin" name="Sell-In"
+                          <Area type="monotone" dataKey="sellin" name="Sell-In"
                             stroke="#94a3b8" strokeWidth={evolCpFilter === 'sellin' ? 2.5 : 2}
-                            dot={{ r: 3 }} connectNulls
+                            fill={`url(#gradWmCp_${g.label}_si)`} dot={false}
+                            activeDot={{ r: 4 }} connectNulls
                             onClick={() => toggleCpFilter('sellin')}
                             style={{ cursor: 'pointer' }} />
                         )}
                         {(!evolCpFilter || evolCpFilter === 'sellout') && (
-                          <Line type="monotone" dataKey="sellout" name="Sell-Out"
+                          <Area type="monotone" dataKey="sellout" name="Sell-Out"
                             stroke="#c8873a" strokeWidth={evolCpFilter === 'sellout' ? 2.5 : 2}
-                            dot={{ r: 3 }} connectNulls
+                            fill={`url(#gradWmCp_${g.label}_so)`} dot={false}
+                            activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls
                             onClick={() => toggleCpFilter('sellout')}
                             style={{ cursor: 'pointer' }} />
                         )}
-                      </LineChart>
+                      </AreaChart>
                     </ResponsiveContainer>
                     <div className="flex gap-2 mt-2">
                       {[{ key: 'sellin', label: 'Sell-In', color: '#94a3b8' }, { key: 'sellout', label: 'Sell-Out', color: '#c8873a' }].map(({ key, label, color }) => {

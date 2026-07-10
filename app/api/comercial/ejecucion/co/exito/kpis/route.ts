@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
     const catFilter = categoria ? `AND categoria = '${categoria.replace(/'/g, "''")}'` : ''
     const cadFilter = cadena    ? `AND cadena    = '${cadena.replace(/'/g, "''")}'`    : ''
 
-    const [ytdR, cadenaR, catR, monthlyR] = await Promise.all([
+    const [ytdR, cadenaR, catR, monthlyR, devolR] = await Promise.all([
       pool.query(`
         WITH cur AS (
           SELECT
@@ -87,6 +87,19 @@ export async function GET(req: NextRequest) {
         GROUP BY ano, mes
         ORDER BY ano, mes
       `),
+      // Devoluciones mensuales — join con precios_exito para estimar valor COP
+      pool.query(`
+        SELECT d.ano, d.mes,
+          ROUND(SUM(d.unidades)::numeric, 0) AS uds,
+          ROUND(SUM(d.unidades * COALESCE(p.precio_vigente_cop, 0))::numeric, 0) AS valor_cop
+        FROM devoluciones_exito d
+        LEFT JOIN precios_exito p
+          ON (p.ean13 = d.codigo_barras OR p.sku = d.sku)
+         AND p.pais='CO' AND p.cliente='GRUPO ÉXITO'
+        WHERE d.pais='CO' AND d.ano IN (2025, 2026)
+          ${cadFilter ? cadFilter.replace(/cadena/g, 'd.cadena') : ''}
+        GROUP BY d.ano, d.mes ORDER BY d.ano, d.mes
+      `),
     ])
 
     const row = ytdR.rows[0] ?? {}
@@ -101,13 +114,17 @@ export async function GET(req: NextRequest) {
       y2025: number; y2026: number | null
       cop2025: number; cop2026: number | null
       uds2025: number; uds2026: number | null
+      devol_uds_2025: number;  devol_uds_2026: number | null
+      devol_cop_2025: number;  devol_cop_2026: number | null
     }
     const monthly: Record<number, MonthlyRow> = {}
     for (let m = 1; m <= 12; m++) {
       monthly[m] = { mes: m, mes_nombre: MN[m],
         y2025: 0, y2026: null,
         cop2025: 0, cop2026: null,
-        uds2025: 0, uds2026: null }
+        uds2025: 0, uds2026: null,
+        devol_uds_2025: 0, devol_uds_2026: null,
+        devol_cop_2025: 0, devol_cop_2026: null }
     }
     for (const r of monthlyR.rows) {
       const m = parseInt(r.mes)
@@ -123,10 +140,24 @@ export async function GET(req: NextRequest) {
         monthly[m].uds2026 = parseFloat(r.unidades ?? '0')
       }
     }
+    for (const r of devolR.rows) {
+      const m = parseInt(r.mes)
+      const a = parseInt(r.ano)
+      if (a === 2025) {
+        monthly[m].devol_uds_2025 = parseFloat(r.uds ?? '0')
+        monthly[m].devol_cop_2025 = parseFloat(r.valor_cop ?? '0')
+      }
+      if (a === 2026) {
+        monthly[m].devol_uds_2026 = parseFloat(r.uds ?? '0')
+        monthly[m].devol_cop_2026 = parseFloat(r.valor_cop ?? '0')
+      }
+    }
     for (let m = ultimoMes + 1; m <= 12; m++) {
       monthly[m].y2026 = null
       monthly[m].cop2026 = null
       monthly[m].uds2026 = null
+      monthly[m].devol_uds_2026 = null
+      monthly[m].devol_cop_2026 = null
     }
 
     return NextResponse.json({

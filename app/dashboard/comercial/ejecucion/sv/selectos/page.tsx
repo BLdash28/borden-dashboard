@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import InnovacionesSection from '@/components/ejecucion/InnovacionesSection'
 import {
-  BarChart, Bar, LineChart, Line, ComposedChart, PieChart, Pie,
+  BarChart, Bar, LineChart, Line, AreaChart, Area, ComposedChart, PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
   ResponsiveContainer, Legend, ReferenceLine, Cell,
 } from 'recharts'
@@ -1094,16 +1094,23 @@ export default function EjecucionSelectos() {
                   </span>
                 </div>
                 <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={evolDiario.series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10 }}
+                  <AreaChart data={evolDiario.series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                    <defs>
+                      <linearGradient id="gradSelEvolDia" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.35}/>
+                        <stop offset="60%"  stopColor="#c8873a" stopOpacity={0.08}/>
+                        <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
                       interval={Math.max(0, Math.floor(evolDiario.series.length / 20) - 1)} />
                     <YAxis
                       tickFormatter={v => evolMedida === 'valor'
                         ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
                         : (v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v))
                       }
-                      tick={{ fontSize: 11 }} width={55}
+                      tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}
                     />
                     <Tooltip
                       labelFormatter={(l: string) => l}
@@ -1111,10 +1118,12 @@ export default function EjecucionSelectos() {
                         evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'),
                         evolMedida === 'valor' ? 'Venta ($)' : 'Unidades',
                       ]}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     />
-                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'valor' : 'unidades'}
-                      stroke="#c8873a" strokeWidth={1.5} dot={false} connectNulls />
-                  </LineChart>
+                    <Area type="monotone" dataKey={evolMedida === 'valor' ? 'valor' : 'unidades'}
+                      stroke="#c8873a" strokeWidth={2.5} fill="url(#gradSelEvolDia)" dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
+                  </AreaChart>
                 </ResponsiveContainer>
               </>
             ) : (
@@ -1275,8 +1284,8 @@ export default function EjecucionSelectos() {
             return (
               <ResponsiveContainer width="100%" height={380}>
                 <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                   <YAxis
                     scale={evolLogScale ? 'log' : 'auto'}
                     domain={evolLogScale ? [1, 'auto'] : [0, 'auto']}
@@ -1285,7 +1294,7 @@ export default function EjecucionSelectos() {
                       ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
                       : (v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v))
                     }
-                    tick={{ fontSize: 11 }} width={55}
+                    tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}
                   />
                   <Tooltip
                     formatter={(v: number, name: string) => {
@@ -1295,6 +1304,7 @@ export default function EjecucionSelectos() {
                         s ? s.descripcion.substring(0, 22) : name,
                       ]
                     }}
+                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
                   <Legend
                     formatter={(name: string) => {
@@ -1304,8 +1314,9 @@ export default function EjecucionSelectos() {
                   />
                   {(t5.skus as any[]).map((sku: any, i: number) => (
                     <Line key={sku.sku} type="monotone" dataKey={sku.sku} name={sku.sku}
-                      stroke={SKU_COLORS[i % SKU_COLORS.length]} strokeWidth={2}
-                      dot={{ r: 2, fill: SKU_COLORS[i % SKU_COLORS.length] }} connectNulls />
+                      stroke={SKU_COLORS[i % SKU_COLORS.length]} strokeWidth={2.5} dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: SKU_COLORS[i % SKU_COLORS.length] }}
+                      connectNulls />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
@@ -1487,15 +1498,26 @@ export default function EjecucionSelectos() {
                   <div>
                     <p className="text-xs font-semibold text-gray-600 mb-2">🧀 Queso</p>
                     <ResponsiveContainer width="100%" height={210}>
-                      <LineChart data={cp.quesos} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 10 }} />
-                        <YAxis tickFormatter={v => v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v} tick={{ fontSize: 10 }} width={48} />
-                        <Tooltip formatter={(v: number, n: string) => [fmtFull(v), n === 'sellin' ? 'Sell-In' : 'Sell-Out']} />
+                      <AreaChart data={cp.quesos} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                        <defs>
+                          <linearGradient id="gradCpQ_si" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.25}/>
+                            <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="gradCpQ_so" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.4}/>
+                            <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={v => v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v} tick={{ fontSize: 10, fill: '#94a3b8' }} width={48} axisLine={false} tickLine={false} />
+                        <Tooltip formatter={(v: number, n: string) => [fmtFull(v), n === 'sellin' ? 'Sell-In' : 'Sell-Out']}
+                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
                         <Legend formatter={(n: string) => n === 'sellin' ? 'Sell-In' : 'Sell-Out'} />
-                        <Line type="monotone" dataKey="sellin"  name="sellin"  stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                        <Line type="monotone" dataKey="sellout" name="sellout" stroke="#c8873a" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                      </LineChart>
+                        <Area type="monotone" dataKey="sellin"  name="sellin"  stroke="#94a3b8" strokeWidth={2} fill="url(#gradCpQ_si)" dot={false} activeDot={{ r: 4 }} connectNulls />
+                        <Area type="monotone" dataKey="sellout" name="sellout" stroke="#c8873a" strokeWidth={2.5} fill="url(#gradCpQ_so)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 )}
@@ -1503,15 +1525,26 @@ export default function EjecucionSelectos() {
                   <div className="border-t border-gray-50 pt-5">
                     <p className="text-xs font-semibold text-gray-600 mb-2">🥛 Leche UHT</p>
                     <ResponsiveContainer width="100%" height={210}>
-                      <LineChart data={cp.leches} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 10 }} />
-                        <YAxis tickFormatter={v => v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v} tick={{ fontSize: 10 }} width={48} />
-                        <Tooltip formatter={(v: number, n: string) => [fmtFull(v), n === 'sellin' ? 'Sell-In' : 'Sell-Out']} />
+                      <AreaChart data={cp.leches} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
+                        <defs>
+                          <linearGradient id="gradCpL_si" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.25}/>
+                            <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="gradCpL_so" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="#3b82f6" stopOpacity={0.4}/>
+                            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={v => v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v} tick={{ fontSize: 10, fill: '#94a3b8' }} width={48} axisLine={false} tickLine={false} />
+                        <Tooltip formatter={(v: number, n: string) => [fmtFull(v), n === 'sellin' ? 'Sell-In' : 'Sell-Out']}
+                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
                         <Legend formatter={(n: string) => n === 'sellin' ? 'Sell-In' : 'Sell-Out'} />
-                        <Line type="monotone" dataKey="sellin"  name="sellin"  stroke="#94a3b8" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                        <Line type="monotone" dataKey="sellout" name="sellout" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                      </LineChart>
+                        <Area type="monotone" dataKey="sellin"  name="sellin"  stroke="#94a3b8" strokeWidth={2} fill="url(#gradCpL_si)" dot={false} activeDot={{ r: 4 }} connectNulls />
+                        <Area type="monotone" dataKey="sellout" name="sellout" stroke="#3b82f6" strokeWidth={2.5} fill="url(#gradCpL_so)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#3b82f6' }} connectNulls />
+                      </AreaChart>
                     </ResponsiveContainer>
                   </div>
                 )}

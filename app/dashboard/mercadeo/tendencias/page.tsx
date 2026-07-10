@@ -174,7 +174,7 @@ export default function MercadeoTendenciasPage() {
                 formatter={(v) => fmtU(Number(v)) + ' uds'}
                 yTickFmt={fmtU}
                 yWidth={52}
-                dot={true}
+                area dot={true}
                 margin={{ top: 4, right: 20, left: 0, bottom: 0 }}
                 refLine={media > 0 ? { y: media, label: 'Prom', color: '#9ca3af' } : undefined}
                 lines={comp && rowsComp.length > 0

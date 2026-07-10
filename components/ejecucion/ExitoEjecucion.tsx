@@ -138,6 +138,8 @@ type KpisData = {
     y2025: number; y2026: number | null
     cop2025: number; cop2026: number | null
     uds2025: number; uds2026: number | null
+    devol_uds_2025?: number; devol_uds_2026?: number | null
+    devol_cop_2025?: number; devol_cop_2026?: number | null
   }[]
 }
 
@@ -668,41 +670,55 @@ export default function ExitoEjecucion() {
           </div>
         )}
 
-        {/* Chart Sell-Out vs Sell-In */}
+        {/* Chart Sell-Out vs Sell-In vs Devoluciones — lineal con gradient */}
         {sellin && monthly.length > 0 && (() => {
           const compare = kpis.monthly.map(m => {
             const si = sellin.monthly.find(x => x.mes === m.mes)
+            // Devoluciones: guardadas en kpis.monthly como devol_cop_2026
+            const devolCop = (m as any).devol_cop_2026 as number | null
+            const devolUsd = devolCop !== null && kpis.ytd_2026_cop > 0
+              ? (devolCop / kpis.ytd_2026_cop) * kpis.ytd_2026
+              : null
             return {
               mes_nombre: m.mes_nombre,
               sellout: isCop ? m.cop2026 : m.y2026,
               sellin:  isCop ? (si?.cop_26 ?? null) : (si ? (si.cop_26 !== null && sellin.kpi.cop_26 > 0
                         ? ((si.cop_26 as number) / sellin.kpi.cop_26) * sellin.kpi.usd_26
                         : null) : null),
+              devoluciones: isCop ? devolCop : devolUsd,
             }
-          }).filter(m => (m.sellout && m.sellout > 0) || (m.sellin && m.sellin > 0))
+          }).filter(m => (m.sellout && m.sellout > 0) || (m.sellin && m.sellin > 0) || (m.devoluciones && m.devoluciones > 0))
           return (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-1">
                 <div>
-                  <h3 className="text-sm font-bold text-gray-800">Sell-Out vs Sell-In</h3>
+                  <h3 className="text-sm font-bold text-gray-800">Sell-Out vs Sell-In vs Devoluciones</h3>
                   <p className="text-[11px] text-gray-400">Comparativo mensual · 2026 ({moneda.toUpperCase()})</p>
                 </div>
                 <div className="flex items-center gap-3 text-[11px]">
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"/> Sell-In</span>
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> Sell-Out</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500"/> Devoluciones</span>
                 </div>
               </div>
-              <div className="h-[260px] mt-3">
+              <div className="h-[280px] mt-3">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={compare} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                  <AreaChart data={compare} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="gradSellin" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
-                        <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
+                      <linearGradient id="gradSellinLine" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor="#3b82f6" stopOpacity={0.35}/>
+                        <stop offset="60%"  stopColor="#3b82f6" stopOpacity={0.08}/>
+                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/>
                       </linearGradient>
-                      <linearGradient id="gradSellout" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
-                        <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                      <linearGradient id="gradSelloutLine" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor="#f59e0b" stopOpacity={0.4}/>
+                        <stop offset="60%"  stopColor="#f59e0b" stopOpacity={0.1}/>
+                        <stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/>
+                      </linearGradient>
+                      <linearGradient id="gradDevol" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor="#ef4444" stopOpacity={0.3}/>
+                        <stop offset="60%"  stopColor="#ef4444" stopOpacity={0.08}/>
+                        <stop offset="100%" stopColor="#ef4444" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -710,12 +726,18 @@ export default function ExitoEjecucion() {
                     <YAxis tickFormatter={yTick} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
                     <Tooltip
                       formatter={(v: any, name: string) => [fmtVal(Number(v)), name]}
-                      cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     />
-                    <Bar dataKey="sellin"  name="Sell-In"  fill="url(#gradSellin)"  radius={[8,8,0,0]} maxBarSize={38} />
-                    <Bar dataKey="sellout" name="Sell-Out" fill="url(#gradSellout)" radius={[8,8,0,0]} maxBarSize={38} />
-                  </BarChart>
+                    <Area type="monotone" dataKey="sellin" name="Sell-In" stroke="#3b82f6" strokeWidth={2.5}
+                          fill="url(#gradSellinLine)" dot={false}
+                          activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#3b82f6' }} connectNulls />
+                    <Area type="monotone" dataKey="sellout" name="Sell-Out" stroke="#f59e0b" strokeWidth={2.5}
+                          fill="url(#gradSelloutLine)" dot={false}
+                          activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }} connectNulls />
+                    <Area type="monotone" dataKey="devoluciones" name="Devoluciones" stroke="#ef4444" strokeWidth={2.5}
+                          fill="url(#gradDevol)" dot={false}
+                          activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#ef4444' }} connectNulls />
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>

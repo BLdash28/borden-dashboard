@@ -592,7 +592,7 @@ export default function VentasPaisPage() {
                 xTickFmt={(v: any) => (!isDiaria || modo !== 'mes') ? String(v) : 'D' + v}
                 xInterval={xInterval}
                 xAngle={isDiaria ? -40 : 0}
-                dot={!isDiaria || chartData.length <= 31}
+                area dot={!isDiaria || chartData.length <= 31}
                 margin={{ top: 4, right: 16, left: 4, bottom: isDiaria ? 56 : 4 }}
               />
         }
