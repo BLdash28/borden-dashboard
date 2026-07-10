@@ -197,7 +197,7 @@ type InvKpi = {
 type InvCadena = { cadena: string | null; combinaciones: number; con_stock: number; quiebres: number; pdvs: number; uds: number; cop: number; usd: number }
 type InvTopSku = { ean13: string | null; plu: string | null; sku: string | null; descripcion: string | null; categoria: string | null; subcategoria: string | null; pdvs: number; quiebres: number; uds: number; cop: number }
 type InvDetalle = { punto_venta: string; cadena: string | null; ean13: string | null; plu: string | null; sku: string | null; descripcion: string | null; inv_unidades: number; inv_valor_cop: number }
-type InvData = { fecha: string | null; kpi: InvKpi | null; por_cadena: InvCadena[]; top_skus: InvTopSku[]; detalle: InvDetalle[] }
+type InvData = { fecha: string | null; kpi: InvKpi | null; por_cadena: InvCadena[]; top_skus: InvTopSku[]; detalle: InvDetalle[]; inv_bajo?: InvDetalle[] }
 
 type InnovMonthly = { ano: number; mes: number; uds: number; cop: number; usd: number; pdvs: number; cadenas: number }
 type InnovDaily   = { fecha: string; uds: number; cop: number; usd: number; pdvs: number }
@@ -336,6 +336,19 @@ export default function ExitoEjecucion() {
   const setL = (k: string, v: boolean) => setLoading(p => ({ ...p, [k]: v }))
   const isL  = (k: string) => !!loading[k]
   const saveFilter = (key: string, val: string) => localStorage.setItem(`${storageKey}-${key}`, val)
+
+  // Drill-down PDVs — se usa en Calidad Inventario e Inventarios (Top 20 SKUs).
+  const openDetallePDVs = (sku: string, descripcion: string | null, bucket: 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10' | 'todos' = 'todos') => {
+    setCalidadDetalle({ sku, descripcion, bucket, loading: true, pdvs: [] })
+    const q = new URLSearchParams()
+    q.set('sku', sku)
+    q.set('bucket', bucket)
+    if (cadenaFilter) q.set('cadena', cadenaFilter)
+    fetch(`/api/comercial/ejecucion/co/exito/calidad-inventario/pdvs?${q}`)
+      .then(r => r.json())
+      .then(d => setCalidadDetalle(prev => prev ? { ...prev, loading: false, pdvs: d.pdvs ?? [] } : null))
+      .catch(() => setCalidadDetalle(prev => prev ? { ...prev, loading: false } : null))
+  }
 
   const currentCat = DIVS.find(d => d.key === div)?.cat ?? ''
   const cadenas    = useMemo(() => (kpis?.por_cadena ?? []).map(c => c.cadena), [kpis])
@@ -1739,6 +1752,7 @@ export default function ExitoEjecucion() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-50">
             <h3 className="text-sm font-semibold text-gray-700">Top 20 SKUs · por inventario</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Click en cualquier fila para ver el detalle por PDV.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -1755,7 +1769,9 @@ export default function ExitoEjecucion() {
               </thead>
               <tbody>
                 {inv.top_skus.map((s, i) => (
-                  <tr key={s.ean13 ?? i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                  <tr key={s.sku ?? s.ean13 ?? i}
+                      onClick={() => openDetallePDVs(s.sku ?? s.plu ?? '', s.descripcion, 'todos')}
+                      className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} cursor-pointer hover:bg-amber-50/60 transition-colors`}>
                     <td className="px-3 py-2 text-gray-400">{i + 1}</td>
                     <td className="px-3 py-2 font-mono text-[11px] text-amber-700">{s.sku ?? '—'}</td>
                     <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate">{s.descripcion}</td>
@@ -1790,9 +1806,9 @@ export default function ExitoEjecucion() {
     const kpi = inv.kpi
     const usdRate = kpi.total_cop > 0 && kpi.total_usd > 0 ? kpi.total_usd / kpi.total_cop : 0
 
-    // Filtramos del detalle: quiebres (uds=0) e inv bajo (1..3)
-    const quiebres = inv.detalle.filter(d => d.inv_unidades === 0)
-    const bajos    = inv.detalle.filter(d => d.inv_unidades > 0 && d.inv_unidades <= 3)
+    // Quiebres = SKUs faltantes en PDVs; inv bajo viene en su propio campo del endpoint
+    const quiebres = inv.detalle // ahora el endpoint ya devuelve solo quiebres
+    const bajos    = inv.inv_bajo ?? inv.detalle.filter(d => d.inv_unidades > 0 && d.inv_unidades <= 3)
 
     const pctCoberturaSkus = kpi.combinaciones > 0 ? (kpi.con_stock / kpi.combinaciones) * 100 : 0
     const pctQuiebres      = kpi.combinaciones > 0 ? (kpi.quiebres  / kpi.combinaciones) * 100 : 0
@@ -1980,12 +1996,8 @@ export default function ExitoEjecucion() {
                   )}
                 </div>
 
-                {/* Precios */}
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div className="rounded-lg bg-white/60 border border-gray-100 px-3 py-2">
-                    <p className="text-[9px] uppercase tracking-widest text-gray-400">Precio anterior</p>
-                    <p className="text-sm font-semibold text-gray-600">{fmtCop(it.precio_anterior_cop ?? 0)}</p>
-                  </div>
+                {/* Precio vigente */}
+                <div className="mb-3">
                   <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
                     <p className="text-[9px] uppercase tracking-widest text-amber-700">Precio vigente</p>
                     <p className="text-sm font-bold text-amber-800">{fmtCop(it.precio_vigente_cop ?? 0)}</p>
@@ -2591,17 +2603,7 @@ export default function ExitoEjecucion() {
     const t = calidad.total
     const universo = calidad.universo_pdvs
 
-    const openDetalle = (sku: string, descripcion: string | null, bucket: 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10' | 'todos') => {
-      setCalidadDetalle({ sku, descripcion, bucket, loading: true, pdvs: [] })
-      const q = new URLSearchParams()
-      q.set('sku', sku)
-      q.set('bucket', bucket)
-      if (cadenaFilter) q.set('cadena', cadenaFilter)
-      fetch(`/api/comercial/ejecucion/co/exito/calidad-inventario/pdvs?${q}`)
-        .then(r => r.json())
-        .then(d => setCalidadDetalle(prev => prev ? { ...prev, loading: false, pdvs: d.pdvs ?? [] } : null))
-        .catch(() => setCalidadDetalle(prev => prev ? { ...prev, loading: false } : null))
-    }
+    const openDetalle = openDetallePDVs // alias local para compatibilidad
 
     // Chart de barras apiladas por SKU (top 15 por total de PDVs)
     const chartData = calidad.rows.slice(0, 15).map(r => ({
@@ -2834,128 +2836,8 @@ export default function ExitoEjecucion() {
             Réplica del reporte "CALIDAD INVENTARIO BORDEN". Los porcentajes suman 100% (composición del total de PDVs con stock del producto).
           </p>
         </div>
-
-        {/* Modal Detalle PDVs */}
-        {calidadDetalle && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-               onClick={() => setCalidadDetalle(null)}>
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden"
-                 onClick={e => e.stopPropagation()}>
-              {/* Header */}
-              <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${
-                      calidadDetalle.bucket === 'menos_de_3'   ? 'bg-red-100 text-red-700' :
-                      calidadDetalle.bucket === 'entre_3_y_10' ? 'bg-amber-100 text-amber-700' :
-                      calidadDetalle.bucket === 'mayor_a_10'   ? 'bg-emerald-100 text-emerald-700' :
-                                                                'bg-blue-100 text-blue-700'
-                    }`}>
-                      {calidadDetalle.bucket === 'menos_de_3'   ? '🚨 Stock < 3' :
-                       calidadDetalle.bucket === 'entre_3_y_10' ? '⚠️ Stock 3–10' :
-                       calidadDetalle.bucket === 'mayor_a_10'   ? '✓ Stock > 10' :
-                                                                  '📦 Todos'}
-                    </span>
-                    <span className="text-[10px] font-mono text-gray-400">SKU {calidadDetalle.sku}</span>
-                  </div>
-                  <h3 className="text-base font-bold text-gray-800">{calidadDetalle.descripcion ?? calidadDetalle.sku}</h3>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    {calidadDetalle.loading ? 'Cargando...' : `${calidadDetalle.pdvs.length} PDVs · Snapshot ${calidad.fecha}`}
-                  </p>
-                </div>
-                <button onClick={() => setCalidadDetalle(null)}
-                        className="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
-              </div>
-
-              {/* Content */}
-              <div className="flex-1 overflow-auto">
-                {calidadDetalle.loading ? (
-                  <div className="py-16 text-center text-gray-400 text-sm">Cargando PDVs...</div>
-                ) : calidadDetalle.pdvs.length === 0 ? (
-                  <div className="py-16 text-center text-gray-400 text-sm">Sin PDVs para este bucket.</div>
-                ) : (
-                  <table className="w-full text-xs">
-                    <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0 z-10">
-                      <tr>
-                        <th className="px-4 py-2.5 text-left font-semibold w-8">#</th>
-                        <th className="px-3 py-2.5 text-left font-semibold">Punto de Venta</th>
-                        <th className="px-3 py-2.5 text-left font-semibold">Cadena</th>
-                        <th className="px-3 py-2.5 text-left font-semibold">Depto / Ciudad</th>
-                        <th className="px-3 py-2.5 text-right font-semibold">Unidades</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {calidadDetalle.pdvs.map((p, i) => (
-                        <tr key={`${p.gln}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
-                          <td className="px-4 py-2 text-gray-400 tabular-nums">{i + 1}</td>
-                          <td className="px-3 py-2 text-gray-800">
-                            {p.punto_venta}
-                            <span className="ml-2 text-[10px] text-gray-400 font-mono">GLN {p.gln}</span>
-                          </td>
-                          <td className="px-3 py-2">
-                            {p.cadena && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
-                                    style={{ background: CADENA_COLORS[p.cadena] ?? '#6b7280' }}>
-                                {p.cadena}
-                              </span>
-                            )}
-                            {p.subcadena && p.subcadena !== p.cadena && (
-                              <span className="ml-1 text-[10px] text-gray-500">· {p.subcadena}</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-gray-600 text-[11px]">
-                            {p.departamento && <span>{p.departamento}</span>}
-                            {p.ciudad && <span className="text-gray-400"> · {p.ciudad}</span>}
-                            {!p.departamento && !p.ciudad && <span className="text-gray-300">—</span>}
-                          </td>
-                          <td className={`px-3 py-2 text-right tabular-nums font-bold ${
-                            p.inv_unidades < 3  ? 'text-red-600' :
-                            p.inv_unidades <= 10 ? 'text-amber-600' :
-                                                    'text-emerald-600'
-                          }`}>
-                            {Math.round(p.inv_unidades)}
-                          </td>
-                        </tr>
-                      ))}
-                      {/* Total */}
-                      <tr className="bg-gray-900 text-white font-bold">
-                        <td className="px-4 py-2.5" colSpan={4}>TOTAL · {calidadDetalle.pdvs.length} PDVs</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums">
-                          {Math.round(calidadDetalle.pdvs.reduce((s, p) => s + p.inv_unidades, 0))}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                )}
-              </div>
-
-              {/* Footer */}
-              <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
-                <p className="text-[10px] text-gray-500">
-                  Click fuera del modal o el botón × para cerrar.
-                </p>
-                <button onClick={() => {
-                  const rows = calidadDetalle.pdvs.map(p => [
-                    p.punto_venta, p.cadena ?? '', p.subcadena ?? '', p.departamento ?? '', p.ciudad ?? '',
-                    Math.round(p.inv_unidades),
-                  ])
-                  const header = ['Punto de Venta','Cadena','Subcadena','Departamento','Ciudad','Unidades']
-                  const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')
-                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
-                  const url  = URL.createObjectURL(blob)
-                  const a    = document.createElement('a')
-                  a.href = url
-                  a.download = `PDVs_${calidadDetalle.sku}_${calidadDetalle.bucket}.csv`
-                  a.click()
-                  URL.revokeObjectURL(url)
-                }}
-                        className="text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-                  <Download size={12}/> Exportar CSV
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* El modal de detalle de PDVs se renderiza a nivel del componente principal
+            para que también sea accesible desde Inventarios (Top 20 SKUs). */}
       </div>
     )
   }
@@ -3063,6 +2945,128 @@ export default function ExitoEjecucion() {
       <div className="px-6 py-6 flex-1">
         {renderSection()}
       </div>
+
+      {/* Modal Detalle PDVs — accesible desde Calidad Inventario e Inventarios (Top 20 SKUs) */}
+      {calidadDetalle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+             onClick={() => setCalidadDetalle(null)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden"
+               onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+                    calidadDetalle.bucket === 'menos_de_3'   ? 'bg-red-100 text-red-700' :
+                    calidadDetalle.bucket === 'entre_3_y_10' ? 'bg-amber-100 text-amber-700' :
+                    calidadDetalle.bucket === 'mayor_a_10'   ? 'bg-emerald-100 text-emerald-700' :
+                                                              'bg-blue-100 text-blue-700'
+                  }`}>
+                    {calidadDetalle.bucket === 'menos_de_3'   ? '🚨 Stock < 3' :
+                     calidadDetalle.bucket === 'entre_3_y_10' ? '⚠️ Stock 3–10' :
+                     calidadDetalle.bucket === 'mayor_a_10'   ? '✓ Stock > 10' :
+                                                                '📦 Todos'}
+                  </span>
+                  <span className="text-[10px] font-mono text-gray-400">SKU {calidadDetalle.sku}</span>
+                </div>
+                <h3 className="text-base font-bold text-gray-800">{calidadDetalle.descripcion ?? calidadDetalle.sku}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {calidadDetalle.loading ? 'Cargando...' : `${calidadDetalle.pdvs.length} PDVs · Snapshot ${calidad?.fecha ?? inv?.fecha ?? ''}`}
+                </p>
+              </div>
+              <button onClick={() => setCalidadDetalle(null)}
+                      className="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto">
+              {calidadDetalle.loading ? (
+                <div className="py-16 text-center text-gray-400 text-sm">Cargando PDVs...</div>
+              ) : calidadDetalle.pdvs.length === 0 ? (
+                <div className="py-16 text-center text-gray-400 text-sm">Sin PDVs para este SKU.</div>
+              ) : (
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0 z-10">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left font-semibold w-8">#</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Punto de Venta</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Cadena</th>
+                      <th className="px-3 py-2.5 text-left font-semibold">Depto / Ciudad</th>
+                      <th className="px-3 py-2.5 text-right font-semibold">Unidades</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {calidadDetalle.pdvs.map((p, i) => (
+                      <tr key={`${p.gln}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                        <td className="px-4 py-2 text-gray-400 tabular-nums">{i + 1}</td>
+                        <td className="px-3 py-2 text-gray-800">
+                          {p.punto_venta}
+                          <span className="ml-2 text-[10px] text-gray-400 font-mono">GLN {p.gln}</span>
+                        </td>
+                        <td className="px-3 py-2">
+                          {p.cadena && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                                  style={{ background: CADENA_COLORS[p.cadena] ?? '#6b7280' }}>
+                              {p.cadena}
+                            </span>
+                          )}
+                          {p.subcadena && p.subcadena !== p.cadena && (
+                            <span className="ml-1 text-[10px] text-gray-500">· {p.subcadena}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-gray-600 text-[11px]">
+                          {p.departamento && <span>{p.departamento}</span>}
+                          {p.ciudad && <span className="text-gray-400"> · {p.ciudad}</span>}
+                          {!p.departamento && !p.ciudad && <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className={`px-3 py-2 text-right tabular-nums font-bold ${
+                          p.inv_unidades < 3  ? 'text-red-600' :
+                          p.inv_unidades <= 10 ? 'text-amber-600' :
+                                                  'text-emerald-600'
+                        }`}>
+                          {Math.round(p.inv_unidades)}
+                        </td>
+                      </tr>
+                    ))}
+                    {/* Total */}
+                    <tr className="bg-gray-900 text-white font-bold">
+                      <td className="px-4 py-2.5" colSpan={4}>TOTAL · {calidadDetalle.pdvs.length} PDVs</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">
+                        {Math.round(calidadDetalle.pdvs.reduce((s, p) => s + p.inv_unidades, 0))}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+              <p className="text-[10px] text-gray-500">
+                Click fuera del modal o el botón × para cerrar.
+              </p>
+              <button onClick={() => {
+                const rows = calidadDetalle.pdvs.map(p => [
+                  p.punto_venta, p.cadena ?? '', p.subcadena ?? '', p.departamento ?? '', p.ciudad ?? '',
+                  Math.round(p.inv_unidades),
+                ])
+                const header = ['Punto de Venta','Cadena','Subcadena','Departamento','Ciudad','Unidades']
+                const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+                const url  = URL.createObjectURL(blob)
+                const a    = document.createElement('a')
+                a.href = url
+                a.download = `PDVs_${calidadDetalle.sku}_${calidadDetalle.bucket}.csv`
+                a.click()
+                URL.revokeObjectURL(url)
+              }}
+                      className="text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                <Download size={12}/> Exportar CSV
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

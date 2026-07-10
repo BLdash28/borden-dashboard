@@ -41,7 +41,7 @@ type SellInData = {
     delta_utilidad: number | null
   }
   monthly: { mes: number; mes_nombre: string; cop_25: number; cop_26: number | null; uds_25: number; uds_26: number | null; ut_25: number; ut_26: number | null }[]
-  top_skus: { sku: string; descripcion: string | null; categoria: string | null; uds: number; cop: number; usd: number; ut: number; margen_pct: number | null }[]
+  top_skus: { sku: string; descripcion: string | null; categoria: string | null; subcategoria: string | null; uds: number; cop: number; usd: number; ut: number; margen_pct: number | null }[]
   ocs: { orden_compra: string; ano: number; mes: number; n_lineas: number; uds: number; cop: number; ut: number }[]
 }
 
@@ -50,6 +50,20 @@ export default function SellInLicenciamiento() {
   const [moneda, setMoneda] = useState<'cop'|'usd'>('cop')
   const [data, setData] = useState<SellInData | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // Sort para la tabla Top SKUs
+  type SortCol = 'uds' | 'cop' | 'ut' | 'margen_pct'
+  const [sortCol, setSortCol] = useState<SortCol>('cop')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const toggleSort = (col: SortCol) => {
+    if (col === sortCol) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortCol(col); setSortDir('desc') }
+  }
+  const SortArrow = ({ col }: { col: SortCol }) => (
+    <span className={`ml-1 inline-block ${sortCol === col ? 'text-amber-600' : 'text-gray-300'}`}>
+      {sortCol === col ? (sortDir === 'desc' ? '▼' : '▲') : '↕'}
+    </span>
+  )
 
   useEffect(() => {
     if (tipo !== 'colombia') return
@@ -121,7 +135,13 @@ export default function SellInLicenciamiento() {
           margen_26_pct: (m.cop_26 && m.cop_26 > 0 && m.ut_26 !== null) ? (m.ut_26 / m.cop_26) * 100 : null,
           margen_25_pct: (m.cop_25 > 0)                                 ? (m.ut_25 / m.cop_25) * 100 : null,
         }))
-        const topSkus = top_skus.slice(0, 15)
+        const topSkus = [...top_skus]
+          .sort((a, b) => {
+            const va = (a[sortCol] ?? -Infinity) as number
+            const vb = (b[sortCol] ?? -Infinity) as number
+            return sortDir === 'desc' ? vb - va : va - vb
+          })
+          .slice(0, 15)
 
         return (
           <div className="space-y-5">
@@ -281,18 +301,30 @@ export default function SellInLicenciamiento() {
 
             {/* Top SKUs */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Top SKUs por Venta — FY 2026</h3>
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Top SKUs FY 2026</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 text-gray-600">
                     <tr>
                       <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">#</th>
                       <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Descripción</th>
-                      <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Categoría</th>
-                      <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Unidades</th>
-                      <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Venta {useUsd?'USD':'COP'}</th>
-                      <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Utilidad COP</th>
-                      <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Margen %</th>
+                      <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Subcategoría</th>
+                      <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider select-none cursor-pointer hover:text-amber-700"
+                          onClick={() => toggleSort('uds')} title="Ordenar por unidades">
+                        Unidades<SortArrow col="uds" />
+                      </th>
+                      <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider select-none cursor-pointer hover:text-amber-700"
+                          onClick={() => toggleSort('cop')} title="Ordenar por venta">
+                        Venta {useUsd?'USD':'COP'}<SortArrow col="cop" />
+                      </th>
+                      <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider select-none cursor-pointer hover:text-amber-700"
+                          onClick={() => toggleSort('ut')} title="Ordenar por utilidad">
+                        Utilidad COP<SortArrow col="ut" />
+                      </th>
+                      <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider select-none cursor-pointer hover:text-amber-700"
+                          onClick={() => toggleSort('margen_pct')} title="Ordenar por margen">
+                        Margen %<SortArrow col="margen_pct" />
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -300,7 +332,7 @@ export default function SellInLicenciamiento() {
                       <tr key={s.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                         <td className="px-3 py-2 text-gray-400 tabular-nums">{i + 1}</td>
                         <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate" title={s.descripcion ?? ''}>{s.descripcion ?? s.sku}</td>
-                        <td className="px-3 py-2 text-gray-500">{s.categoria ?? '—'}</td>
+                        <td className="px-3 py-2 text-gray-500">{s.subcategoria ?? '—'}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtNum(s.uds)}</td>
                         <td className="px-3 py-2 text-right tabular-nums font-semibold">{useUsd ? fmtFull(s.usd) : fmtCOP(s.cop)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmtCOP(s.ut)}</td>

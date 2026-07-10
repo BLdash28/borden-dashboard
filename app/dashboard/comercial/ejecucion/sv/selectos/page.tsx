@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import InnovacionesSection from '@/components/ejecucion/InnovacionesSection'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
@@ -3762,7 +3763,14 @@ export default function EjecucionSelectos() {
       case 'inventarios':     return Inventarios()
       case 'pedidos':         return Pedidos()
       case 'ofertas':         return Ofertas()
-      case 'innovaciones':    return Innovaciones()
+      case 'innovaciones':    return (
+        <InnovacionesSection
+          apiUrl="/api/comercial/ejecucion/sv/selectos/innovaciones"
+          titulo="Selectos · El Salvador"
+          subtitulo="🇸🇻 Detección automática: SKUs con primera venta en los últimos 180 días."
+          monedaLabel="USD"
+        />
+      )
       case 'pareto':          return Pareto()
       case 'perdida':         return PerdidaVenta()
       case 'precios':         return ListaPrecios()

@@ -121,16 +121,25 @@ export async function GET(req: NextRequest) {
       const mensual = Object.values(byMes)
 
       // ── YTD acumulado ──────────────────────────────────────────
+      // Para cada año calculamos el último mes con datos reales; después de ese
+      // mes devolvemos null → la línea se corta en lugar de quedar plana.
+      const ultMesPorAno: Record<string, number> = { '2024': 0, '2025': 0, '2026': 0 }
+      for (const ano of ['2024', '2025', '2026']) {
+        for (let j = 1; j <= 12; j++) {
+          if (byMes[j][ano] !== null) ultMesPorAno[ano] = j
+        }
+      }
       const ytdRows = Array.from({ length: 12 }, (_, i) => {
         const m = i + 1
         const row: any = { mes: m, mes_label: MESES[m] }
         for (const ano of ['2024', '2025', '2026']) {
-          let acc = 0; let hasData = false
+          if (m > ultMesPorAno[ano]) { row[ano] = null; continue }
+          let acc = 0
           for (let j = 1; j <= m; j++) {
             const v = byMes[j][ano]
-            if (v !== null) { acc += v; hasData = true }
+            if (v !== null) acc += v
           }
-          row[ano] = hasData ? acc : null
+          row[ano] = acc
         }
         return row
       })

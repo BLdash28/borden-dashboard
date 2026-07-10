@@ -7,6 +7,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, Cell, ReferenceLine,
 } from 'recharts'
+import InnovacionesSection from './InnovacionesSection'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -1942,7 +1943,14 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       case 'pareto':          return Pareto()
       case 'pedidos':         return <ProximamentePlaceholder section="pedidos" />
       case 'ofertas':         return inv?.disponible ? Inventarios() : <ProximamentePlaceholder section="ofertas" />
-      case 'innovaciones':    return Innovaciones()
+      case 'innovaciones':    return (
+        <InnovacionesSection
+          apiUrl={`/api/comercial/ejecucion/wm/innovaciones?pais=${pais}`}
+          titulo={`Walmart ${paisNombre}`}
+          subtitulo={`${bandera} Detección automática: SKUs con primera venta en los últimos 180 días.`}
+          monedaLabel="USD"
+        />
+      )
       case 'perdida':         return inv?.disponible ? Inventarios() : <ProximamentePlaceholder section="perdida" />
       case 'precios':         return <ProximamentePlaceholder section="precios" />
       case 'recomendaciones': return <ProximamentePlaceholder section="recomendaciones" />

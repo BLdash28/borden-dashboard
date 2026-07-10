@@ -283,7 +283,13 @@ export default function SellInResumen() {
           : (
             <div className="h-[160px] md:h-[220px]">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mensual} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barCategoryGap="30%">
+              {/*
+                Proyección y 2026 comparten espacio (barGap negativo del ancho de la barra
+                los sobrepone). Se renderiza Proyección primero (semi-transparente con
+                outline dasheado) y 2026 encima (sólido), para que la diferencia real vs
+                proyección se lea a golpe de vista.
+              */}
+              <BarChart data={mensual} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={-22}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="mes" tickFormatter={m => MESES[m]} tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize: 11 }} width={52} />
@@ -295,7 +301,10 @@ export default function SellInResumen() {
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey={prevKey}       name={prevKey}              fill={COLORS[2025]}      radius={[3,3,0,0]} maxBarSize={22} />
-                <Bar dataKey="proyeccion"    name={`Proyección ${ano}`}  fill={COLORS.proyeccion} radius={[3,3,0,0]} maxBarSize={22} />
+                <Bar dataKey="proyeccion"    name={`Proyección ${ano}`}
+                     fill={COLORS.proyeccion} fillOpacity={0.35}
+                     stroke={COLORS.proyeccion} strokeWidth={1.5} strokeDasharray="4 3"
+                     radius={[3,3,0,0]} maxBarSize={22} />
                 <Bar dataKey={currKey}       name={currKey}              fill={COLORS[2026]}      radius={[3,3,0,0]} maxBarSize={22} />
                 <Customized component={MonthDividers} />
               </BarChart>
