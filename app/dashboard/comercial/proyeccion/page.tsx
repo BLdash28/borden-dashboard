@@ -444,8 +444,8 @@ function ProyeccionInner() {
               <p className="text-[10px] text-gray-400 mt-0.5">USD · Cuota (Revision) 2026 vs Ventas reales</p>
             </div>
             <div className="flex items-center gap-3 text-[11px]">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> Proyectado</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Real</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#3a6fa8' }}/> Proyectado</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: '#2a7a58' }}/> Real</span>
             </div>
           </div>
           <div className="h-[240px] md:h-[340px]">
@@ -453,12 +453,12 @@ function ProyeccionInner() {
             <BarChart data={chartData} margin={{ top: 24, right: 16, left: 8, bottom: 0 }} barCategoryGap="25%">
               <defs>
                 <linearGradient id="gradProyProy" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.95}/>
-                  <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.75}/>
+                  <stop offset="0%" stopColor="#3a6fa8" stopOpacity={1}/>
+                  <stop offset="100%" stopColor="#5b8ec7" stopOpacity={0.85}/>
                 </linearGradient>
                 <linearGradient id="gradProyReal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
-                  <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                  <stop offset="0%" stopColor="#2a7a58" stopOpacity={1}/>
+                  <stop offset="100%" stopColor="#4a9b78" stopOpacity={0.85}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
@@ -474,7 +474,7 @@ function ProyeccionInner() {
                   position="top"
                   offset={6}
                   formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
-                  style={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }}
+                  style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700 }}
                 />
               </Bar>
               <Bar dataKey="real" name="Real" fill="url(#gradProyReal)" radius={[8,8,0,0]} maxBarSize={38}>
@@ -483,7 +483,7 @@ function ProyeccionInner() {
                   position="top"
                   offset={6}
                   formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
-                  style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700 }}
+                  style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700 }}
                 />
               </Bar>
             </BarChart>
