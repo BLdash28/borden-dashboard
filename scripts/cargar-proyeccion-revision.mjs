@@ -21,6 +21,14 @@ const PAIS_MAP = {
   'CO': 'CO', 'PU': 'PU', 'EC': 'EC',
 }
 
+// Mapeo División Excel (mayúsculas singular) → Categoría normalizada (que usa ORIGINAL, plural)
+// Esto asegura que los filtros de la UI comparten valores entre ORIGINAL y REVISION.
+const DIVISION_A_CATEGORIA = {
+  'QUESO':  'Quesos',
+  'LECHE':  'Leches',
+  'HELADO': 'Helados',
+}
+
 const MESES = [
   { col: 'Jan-26', mes: 1 }, { col: 'Feb-26', mes: 2 }, { col: 'Mar-26', mes: 3 },
   { col: 'Apr-26', mes: 4 }, { col: 'May-26', mes: 5 }, { col: 'Jun-26', mes: 6 },
@@ -58,9 +66,13 @@ const problemas = []
 for (const r of rows) {
   const paisXlsx  = (r['PAIS'] ?? '').toString().trim().toUpperCase()
   const pais      = PAIS_MAP[paisXlsx] ?? null
-  const cliente   = (r['CLIENTE']   ?? '').toString().trim()
-  const categoria = (r['CATEGORIA'] ?? '').toString().trim()
-  const empresa   = (r['LICENCIAMIENTO'] ?? '').toString().trim() || 'BL FOODS'
+  const cliente   = (r['CLIENTE']    ?? '').toString().trim()
+  const division  = (r['DIVISION']   ?? '').toString().trim().toUpperCase()
+  // Guardamos la categoría de nivel División (Quesos/Leches/Helados) para que
+  // los filtros de la UI compartan valores entre ORIGINAL y REVISION.
+  const categoria    = DIVISION_A_CATEGORIA[division] ?? division
+  const subcategoria = (r['CATEGORIA'] ?? '').toString().trim() || null
+  const empresa      = (r['LICENCIAMIENTO'] ?? '').toString().trim() || 'BL FOODS'
 
   if (!pais || !cliente || !categoria) {
     saltadas++
@@ -75,9 +87,9 @@ for (const r of rows) {
     if (!isFinite(valor) || valor === 0) continue
 
     await client.query(
-      `INSERT INTO proyecciones (ano, mes, empresa, categoria, pais, cliente, valor_usd, tipo)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [ANO, mes, empresa, categoria, pais, cliente, valor, TIPO],
+      `INSERT INTO proyecciones (ano, mes, empresa, categoria, subcategoria, pais, cliente, valor_usd, tipo)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [ANO, mes, empresa, categoria, subcategoria, pais, cliente, valor, TIPO],
     )
     insertadas++
   }
