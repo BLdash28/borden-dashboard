@@ -220,9 +220,10 @@ export async function GET(req: NextRequest) {
     })
 
     // ── Otras proyecciones (tipo != fuente) — totales por tipo ─────────────────
-    // Aplica los mismos filtros de contexto (empresas/ano/mes/categoria/pais/cliente)
-    // para que el card sea comparable con la selección actual.
-    const oWhere: string[] = [`tipo <> '${fuente}'`]
+    // Aplica los mismos filtros de contexto (empresas/ano/mes/categoria/pais/cliente).
+    // Restringimos a cat-level para evitar doble conteo (las filas empresa-level
+    // suman lo mismo que la agregación de cat-level en la tabla `proyecciones`).
+    const oWhere: string[] = [`tipo <> '${fuente}'`, 'categoria IS NOT NULL']
     const oParams: unknown[] = []
     let oi = 1
     if (empresas.length) {
