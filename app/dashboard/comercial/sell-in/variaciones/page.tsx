@@ -284,20 +284,20 @@ export default function SellInVariaciones() {
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-4 mt-3">
+            <div className="grid grid-cols-3 gap-4 mt-3 text-center">
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">YTD 2025</p>
-                <p className="text-lg md:text-2xl font-bold text-gray-700 break-all">{fmt(ytdTotal2025)}</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">YTD 2025</p>
+                <p className="text-lg md:text-2xl font-bold text-gray-700 tabular-nums">{fmt(ytdTotal2025)}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">YTD 2026</p>
-                <p className="text-lg md:text-2xl font-bold text-gray-900 break-all">{fmt(ytdTotal2026)}</p>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">YTD 2026</p>
+                <p className="text-lg md:text-2xl font-bold text-gray-900 tabular-nums">{fmt(ytdTotal2026)}</p>
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Variación</p>
-                <p className={`text-lg md:text-2xl font-bold ${varColor(ytdVar)}`}>{fmtVar(ytdVar)}</p>
-                <p className="text-[10px] text-gray-400">
-                  Δ {ytdTotal2026 - ytdTotal2025 >= 0 ? '+' : '−'}{fmt(Math.abs(ytdTotal2026 - ytdTotal2025)).replace('$','$')}
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Variación</p>
+                <p className={`text-lg md:text-2xl font-bold tabular-nums ${varColor(ytdVar)}`}>{fmtVar(ytdVar)}</p>
+                <p className="text-[10px] text-gray-400 tabular-nums mt-0.5">
+                  Δ {ytdTotal2026 - ytdTotal2025 >= 0 ? '+' : '−'}{fmt(Math.abs(ytdTotal2026 - ytdTotal2025))}
                 </p>
               </div>
             </div>
