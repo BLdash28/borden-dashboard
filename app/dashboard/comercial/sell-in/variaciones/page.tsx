@@ -182,29 +182,23 @@ export default function SellInVariaciones() {
     const header = [dim === 'cliente' ? 'Cliente' : 'Categoría']
     meses.forEach(m => {
       const ml = MESES_LABEL[m]
-      header.push(`${ml} 2025`, `${ml} 2026`, `Var% ${ml}`)
+      header.push(`${ml} 2025`, `${ml} 2026`)
     })
-    header.push('Total 2025', 'Total 2026', 'Var% Total')
     const csv = [header.join(','),
       ...rows.map(r => {
         const line: string[] = [`"${r.dim}"`]
         meses.forEach(m => {
           const d = r.meses[m] ?? { y2025: 0, y2026: 0, var: null }
-          line.push(d.y2025.toFixed(2), d.y2026.toFixed(2), fmtVar(d.var))
+          line.push(d.y2025.toFixed(2), d.y2026.toFixed(2))
         })
-        line.push(r.total2025.toFixed(2), r.total2026.toFixed(2), fmtVar(r.varTotal))
         return line.join(',')
       })
     ].join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
-    a.download = `variaciones_sellin_${dim}_${new Date().toISOString().slice(0,10)}.csv`
+    a.download = `ytd_sellin_${dim}_${new Date().toISOString().slice(0,10)}.csv`
     a.click()
   }
-
-  const totalVar = totals.total2025 > 0
-    ? ((totals.total2026 - totals.total2025) / totals.total2025) * 100
-    : null
 
   // Only show trimestres that have at least one active month
   const visibleTrimestres = TRIMESTRES.filter(t => t.meses.some(m => meses.includes(m)))
@@ -217,8 +211,8 @@ export default function SellInVariaciones() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Sell In</p>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-800">YTD y Variaciones</h1>
-          <p className="text-xs md:text-sm text-gray-400 mt-0.5">{mesLabel}</p>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800">YTD Sell-In</h1>
+          <p className="text-xs md:text-sm text-gray-400 mt-0.5">{mesLabel} · Hasta el último mes de cierre</p>
         </div>
         <div className="flex gap-2">
           <button onClick={cargar}
@@ -257,12 +251,6 @@ export default function SellInVariaciones() {
             onChange={cs => { setCategorias(cs); saveStorage({ categorias: cs }) }}
             placeholder="Todas las categorías" />
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px]">
-          <span className="text-gray-400">Variación:</span>
-          <span className="text-green-600 font-semibold">● &gt;+5% Bueno</span>
-          <span className="text-amber-600 font-semibold">● −5% a +5% Neutral</span>
-          <span className="text-red-500 font-semibold">● &lt;−5% Alerta</span>
-        </div>
       </div>
 
       {loading ? (
@@ -280,21 +268,17 @@ export default function SellInVariaciones() {
             const isLast = ti === visibleTrimestres.length - 1
             // Only include months that are actually in the YTD range
             const trimMeses = trim.meses.filter(m => meses.includes(m))
-            const colSpanSection = 1 + trimMeses.length * 3 + 3
+            const colSpanSection = 1 + trimMeses.length * 2
 
             return (
               <div key={trim.label} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
-                <table className="w-full text-xs border-collapse" style={{ minWidth: `${180 + trimMeses.length * 165 + 180}px`, tableLayout: 'fixed' }}>
+                <table className="w-full text-xs border-collapse" style={{ minWidth: `${180 + trimMeses.length * 130}px`, tableLayout: 'fixed' }}>
                   <colgroup>
                     <col style={{ width: '180px' }} />
                     {trimMeses.flatMap(m => [
-                      <col key={`${m}-25`} style={{ width: '95px' }} />,
-                      <col key={`${m}-26`} style={{ width: '95px' }} />,
-                      <col key={`${m}-v`}  style={{ width: '70px' }} />,
+                      <col key={`${m}-25`} style={{ width: '110px' }} />,
+                      <col key={`${m}-26`} style={{ width: '110px' }} />,
                     ])}
-                    <col style={{ width: '95px' }} />
-                    <col style={{ width: '95px' }} />
-                    <col style={{ width: '70px' }} />
                   </colgroup>
                   <thead>
                     {/* Fila 1: Etiqueta trimestre */}
@@ -310,19 +294,10 @@ export default function SellInVariaciones() {
                         {dim === 'cliente' ? 'Cliente' : 'Categoría'}
                       </th>
                       {trimMeses.map(m => (
-                        <th key={m} colSpan={3} className="py-1.5 text-center border-l border-gray-200">
+                        <th key={m} colSpan={2} className="py-1.5 text-center border-l border-gray-200">
                           {MESES_LABEL[m]}
                         </th>
                       ))}
-                      {isLast ? (
-                        <th colSpan={3} className="py-1.5 text-center border-l border-gray-300 text-amber-600 bg-amber-50/40 font-semibold">
-                          Total Anual
-                        </th>
-                      ) : (
-                        <th colSpan={3} className={`py-1.5 text-center border-l border-gray-300 font-semibold ${trim.subCls}`}>
-                          Sub {trim.short}
-                        </th>
-                      )}
                     </tr>
                     {/* Fila 3: Años */}
                     <tr className="bg-gray-50 border-b border-gray-200 text-[10px] uppercase tracking-widest text-gray-400">
@@ -330,11 +305,7 @@ export default function SellInVariaciones() {
                       {trimMeses.flatMap(m => [
                         <th key={`${m}-25`} className="text-right py-1.5 px-2 font-normal border-l border-gray-200">2025</th>,
                         <th key={`${m}-26`} className="text-right py-1.5 px-1 font-normal">2026</th>,
-                        <th key={`${m}-v`}  className="text-right py-1.5 px-2 font-normal">Var%</th>,
                       ])}
-                      <th className="text-right py-1.5 px-2 font-normal border-l border-gray-300">2025</th>
-                      <th className="text-right py-1.5 px-1 font-normal">2026</th>
-                      <th className="text-right py-1.5 px-2 font-normal">Var%</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -363,12 +334,8 @@ export default function SellInVariaciones() {
                             return [
                               <td key={`${m}-25`} className="py-2 px-2 text-right text-gray-500 border-l border-gray-100">{fmt(d.y2025)}</td>,
                               <td key={`${m}-26`} className="py-2 px-1 text-right text-gray-700">{fmt(d.y2026)}</td>,
-                              <td key={`${m}-v`}  className={`py-2 px-2 text-right ${varColor(d.var)}`}>{fmtVar(d.var)}</td>,
                             ]
                           })}
-                          <td className="py-2 px-2 text-right text-gray-500 border-l border-gray-300 bg-gray-50/60">{fmt(q.s25)}</td>
-                          <td className="py-2 px-1 text-right font-semibold text-gray-800 bg-gray-50/60">{fmt(q.s26)}</td>
-                          <td className={`py-2 px-2 text-right bg-gray-50/60 ${varColor(q.v)}`}>{fmtVar(q.v)}</td>
                         </tr>,
 
                         ...(canExpand && isExp
@@ -388,12 +355,8 @@ export default function SellInVariaciones() {
                                       return [
                                         <td key={`${m}-25`} className="py-1.5 px-2 text-right text-gray-400 text-[11px] border-l border-gray-100">{fmt(d.y2025)}</td>,
                                         <td key={`${m}-26`} className="py-1.5 px-1 text-right text-gray-600 text-[11px]">{fmt(d.y2026)}</td>,
-                                        <td key={`${m}-v`}  className={`py-1.5 px-2 text-right text-[11px] ${varColor(d.var)}`}>{fmtVar(d.var)}</td>,
                                       ]
                                     })}
-                                    <td className="py-1.5 px-2 text-right text-gray-400 border-l border-gray-300 bg-gray-50/60 text-[11px]">{fmt(sq.s25)}</td>
-                                    <td className="py-1.5 px-1 text-right font-semibold text-gray-700 bg-gray-50/60 text-[11px]">{fmt(sq.s26)}</td>
-                                    <td className={`py-1.5 px-2 text-right bg-gray-50/60 text-[11px] ${varColor(sq.v)}`}>{fmtVar(sq.v)}</td>
                                   </tr>
                                 )
                               })
@@ -406,29 +369,11 @@ export default function SellInVariaciones() {
                       <td className="py-2.5 px-4 text-xs uppercase tracking-widest text-gray-500 border-r border-gray-100">TOTAL</td>
                       {trimMeses.flatMap(m => {
                         const d = totals.meses[m] ?? { y2025: 0, y2026: 0 }
-                        const v = d.y2025 > 0 ? ((d.y2026 - d.y2025) / d.y2025) * 100 : null
                         return [
                           <td key={`${m}-25`} className="py-2.5 px-2 text-right border-l border-gray-100">{fmt(d.y2025)}</td>,
                           <td key={`${m}-26`} className="py-2.5 px-1 text-right">{fmt(d.y2026)}</td>,
-                          <td key={`${m}-v`}  className={`py-2.5 px-2 text-right ${varColor(v)}`}>{fmtVar(v)}</td>,
                         ]
                       })}
-                      {isLast ? (() => (
-                        <>
-                          <td className="py-2.5 px-2 text-right border-l border-gray-300 bg-gray-100/60">{fmt(totals.total2025)}</td>
-                          <td className="py-2.5 px-1 text-right bg-gray-100/60">{fmt(totals.total2026)}</td>
-                          <td className={`py-2.5 px-2 text-right bg-gray-100/60 ${varColor(totalVar)}`}>{fmtVar(totalVar)}</td>
-                        </>
-                      ))() : (() => {
-                        const qt = qSubTotals(trim.meses, totals, meses)
-                        return (
-                          <>
-                            <td className="py-2.5 px-2 text-right border-l border-gray-300 bg-gray-100/60">{fmt(qt.s25)}</td>
-                            <td className="py-2.5 px-1 text-right bg-gray-100/60">{fmt(qt.s26)}</td>
-                            <td className={`py-2.5 px-2 text-right bg-gray-100/60 ${varColor(qt.v)}`}>{fmtVar(qt.v)}</td>
-                          </>
-                        )
-                      })()}
                     </tr>
                   </tfoot>
                 </table>
