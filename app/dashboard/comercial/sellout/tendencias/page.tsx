@@ -5,8 +5,17 @@ import FiltroMulti from '@/components/ui/FiltroMulti'
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, Cell,
+  Tooltip, Legend, ResponsiveContainer, Cell, LabelList,
 } from 'recharts'
+
+// ── Helpers de formato de charts (estándar del dashboard) ────────────────────
+const fmtK = (v: number) => {
+  const n = Number(v); if (!isFinite(n) || n === 0) return ''
+  if (Math.abs(n) >= 1e9) return '$' + (n/1e9).toFixed(1) + 'MM'
+  if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(0) + 'M'
+  if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
+  return '$' + Math.round(n)
+}
 
 // ── Constantes ──────────────────────────────────────────────────────────────
 const MESES_FULL = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -230,19 +239,53 @@ export default function TendenciasPage() {
             <div className="space-y-5">
               {/* Mensual */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
-                <h3 className="text-sm font-semibold text-gray-700 mb-1">Venta Neta Mensual</h3>
-                <p className="text-xs text-gray-400 mb-4">Comparativo 2024 · 2025 · 2026</p>
-                <div className="h-[200px] md:h-[260px]">
+                <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700">Venta Neta Mensual</h3>
+                    <p className="text-xs text-gray-400 mt-0.5">Comparativo 2024 · 2025 · 2026</p>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px]">
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS['2024'] }}/> 2024</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS['2025'] }}/> 2025</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS['2026'] }}/> 2026</span>
+                  </div>
+                </div>
+                <div className="h-[240px] md:h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.mensual} margin={{ top:4, right:8, left:0, bottom:0 }} barCategoryGap="28%">
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                      <XAxis dataKey="mes_label" tick={{ fontSize:11 }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize:11 }} width={52} axisLine={false} tickLine={false} />
-                      <Tooltip content={<TooltipUsd />} />
-                      <Legend wrapperStyle={{ fontSize:12 }} />
-                      <Bar dataKey="2024" name="2024" fill={COLORS['2024']} radius={[3,3,0,0]} maxBarSize={20} />
-                      <Bar dataKey="2025" name="2025" fill={COLORS['2025']} radius={[3,3,0,0]} maxBarSize={20} />
-                      <Bar dataKey="2026" name="2026" fill={COLORS['2026']} radius={[3,3,0,0]} maxBarSize={20} />
+                    <BarChart data={data.mensual} margin={{ top:40, right:8, left:0, bottom:0 }} barCategoryGap="35%" barGap={4}>
+                      <defs>
+                        <linearGradient id="gradTend2024" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#d1d5db" stopOpacity={0.95}/>
+                          <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.75}/>
+                        </linearGradient>
+                        <linearGradient id="gradTend2025" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                          <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
+                        </linearGradient>
+                        <linearGradient id="gradTend2026" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                          <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="mes_label" tick={{ fontSize:12, fill:'#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={fmtK} tick={{ fontSize:11, fill:'#94a3b8' }} width={62} axisLine={false} tickLine={false} />
+                      <Tooltip content={<TooltipUsd />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+                      <Bar dataKey="2024" name="2024" fill="url(#gradTend2024)" radius={[6,6,0,0]} maxBarSize={22}>
+                        <LabelList dataKey="2024" position="top" offset={12} angle={-45}
+                          formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
+                          style={{ fontSize: 9, fill: '#6b7280', fontWeight: 700, textAnchor: 'start' }} />
+                      </Bar>
+                      <Bar dataKey="2025" name="2025" fill="url(#gradTend2025)" radius={[6,6,0,0]} maxBarSize={22}>
+                        <LabelList dataKey="2025" position="top" offset={12} angle={-45}
+                          formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
+                          style={{ fontSize: 9, fill: '#3b82f6', fontWeight: 700, textAnchor: 'start' }} />
+                      </Bar>
+                      <Bar dataKey="2026" name="2026" fill="url(#gradTend2026)" radius={[6,6,0,0]} maxBarSize={22}>
+                        <LabelList dataKey="2026" position="top" offset={12} angle={-45}
+                          formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
+                          style={{ fontSize: 9, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
