@@ -224,10 +224,26 @@ export async function GET(req: NextRequest) {
       ORDER BY tipo
     `, oParams)
 
+    // Breakdown mensual por tipo — permite calcular YTD del lado del cliente
+    const { rows: otrasMensualRows } = await pool.query<{ tipo: string; mes: string; total: string }>(`
+      SELECT tipo, mes, SUM(valor_usd)::numeric AS total
+      FROM proyecciones
+      WHERE ${oWhere.join(' AND ')}
+      GROUP BY tipo, mes
+      ORDER BY tipo, mes
+    `, oParams)
+
+    const mensualPorTipo: Record<string, Record<number, number>> = {}
+    for (const r of otrasMensualRows) {
+      if (!mensualPorTipo[r.tipo]) mensualPorTipo[r.tipo] = {}
+      mensualPorTipo[r.tipo][Number(r.mes)] = Number(r.total ?? 0)
+    }
+
     const otras_proyecciones = otrasRows.map(r => ({
-      tipo:  r.tipo,
-      total: Number(r.total ?? 0),
-      meses: Number(r.meses ?? 0),
+      tipo:    r.tipo,
+      total:   Number(r.total ?? 0),
+      meses:   Number(r.meses ?? 0),
+      mensual: mensualPorTipo[r.tipo] ?? {},
     }))
 
     return NextResponse.json({ anos, rows, catRows: allCatRows, otras_proyecciones })

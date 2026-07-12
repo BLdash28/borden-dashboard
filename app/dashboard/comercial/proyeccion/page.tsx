@@ -119,7 +119,7 @@ function ProyeccionInner() {
   const [rows,        setRows]        = useState<Row[]>([])
   const [catRows,     setCatRows]     = useState<CatRow[]>([])  // filtrados por todos los filtros
   const [catRowsAll,  setCatRowsAll]  = useState<CatRow[]>([])  // sin sub-filtros, para opciones dropdown
-  const [otrasProy,   setOtrasProy]   = useState<{ tipo: string; total: number; meses: number }[]>([])
+  const [otrasProy,   setOtrasProy]   = useState<{ tipo: string; total: number; meses: number; mensual?: Record<string, number> }[]>([])
   const [expanded,    setExpanded]    = useState<Set<string>>(new Set())
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
@@ -354,33 +354,40 @@ function ProyeccionInner() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
-          <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">Total Proyectado 2026</p>
-          <p className="text-[10px] text-gray-400 mb-1">Original</p>
-          <p className="text-lg md:text-2xl font-bold text-gray-900 break-all">{fmt(kpis.proy)}</p>
-        </div>
-        {/* Card por cada tipo adicional (Revisión, Forecast, etc.) */}
+        {/* 1. Cuota 2026 — card por cada tipo adicional (Revision / Forecast / etc.) */}
         {otrasProy.map(o => {
-          const label = o.tipo.charAt(0) + o.tipo.slice(1).toLowerCase()
           const dif   = o.total - kpis.proy
+          // Sumar el mensual del tipo hasta el último mes con real
+          const mensual = o.mensual ?? {}
+          let cuotaYTD = 0
+          for (let m = 1; m <= (kpis.ultimoMes || 0); m++) {
+            cuotaYTD += Number(mensual[String(m)] ?? mensual[m as any] ?? 0)
+          }
           return (
-            <div key={o.tipo} className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50">
-              <p className="text-xs font-semibold text-blue-700 mb-1 md:mb-2 leading-tight">Proyectado — {label}</p>
-              <p className="text-[10px] text-gray-400 mb-1">vs original: {dif >= 0 ? '+' : '−'}{fmtK(Math.abs(dif))}</p>
-              <p className="text-lg md:text-2xl font-bold text-blue-700 break-all">{fmt(o.total)}</p>
-            </div>
+            <React.Fragment key={o.tipo}>
+              <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50">
+                <p className="text-xs font-semibold text-blue-700 mb-1 md:mb-2 leading-tight">Cuota 2026</p>
+                <p className="text-[10px] text-gray-400 mb-1">vs original: {dif >= 0 ? '+' : '−'}{fmtK(Math.abs(dif))}</p>
+                <p className="text-lg md:text-2xl font-bold text-blue-700 break-all">{fmt(o.total)}</p>
+              </div>
+              <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50">
+                <p className="text-xs font-semibold text-blue-700 mb-0.5 md:mb-1 leading-tight">Cuota YTD</p>
+                <p className="text-[10px] text-gray-400 mb-1 md:mb-2">
+                  Cuota 2026 hasta {kpis.ultimoMes > 0 ? MES_LABELS[kpis.ultimoMes] : '—'}
+                </p>
+                <p className="text-lg md:text-2xl font-bold text-blue-700 break-all">{fmt(cuotaYTD)}</p>
+              </div>
+            </React.Fragment>
           )
         })}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
-          <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">Total Real YTD</p>
-          <p className="text-lg md:text-2xl font-bold text-gray-900 break-all">{fmt(kpis.real)}</p>
-        </div>
+        {/* 2. Diferencia USD YTG */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
           <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">Diferencia USD YTG</p>
           <p className={`text-lg md:text-2xl font-bold break-all ${kpis.dif >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {fmtDiff(kpis.dif)}
           </p>
         </div>
+        {/* 3. % Cumplimiento */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
           <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">% Cumplimiento</p>
           <div className="text-lg md:text-2xl font-bold">
@@ -392,7 +399,8 @@ function ProyeccionInner() {
             }
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 col-span-2 sm:col-span-1">
+        {/* 4. Facing */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
           <p className="text-xs font-semibold text-gray-500 mb-0.5 md:mb-1 leading-tight">Facing</p>
           <p className="text-[10px] text-gray-400 mb-1 md:mb-2">
             Proy. hasta {kpis.ultimoMes > 0 ? MES_LABELS[kpis.ultimoMes] : '—'} / total anual
@@ -403,6 +411,12 @@ function ProyeccionInner() {
               : <span className="text-gray-400 text-xs">—</span>
             }
           </div>
+        </div>
+        {/* 5. Proyección Inicial (antes "Total Proyectado 2026") — al final */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 col-span-2 sm:col-span-1">
+          <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">Proyección Inicial</p>
+          <p className="text-[10px] text-gray-400 mb-1">Original 2026</p>
+          <p className="text-lg md:text-2xl font-bold text-gray-900 break-all">{fmt(kpis.proy)}</p>
         </div>
       </div>
 
