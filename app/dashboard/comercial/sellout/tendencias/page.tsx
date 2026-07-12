@@ -252,7 +252,7 @@ export default function TendenciasPage() {
                 </div>
                 <div className="h-[240px] md:h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.mensual} margin={{ top:40, right:8, left:0, bottom:0 }} barCategoryGap="35%" barGap={4}>
+                    <BarChart data={data.mensual} margin={{ top:40, right:12, left:0, bottom:0 }} barCategoryGap="22%" barGap={10}>
                       <defs>
                         <linearGradient id="gradTend2024" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#d1d5db" stopOpacity={0.95}/>
@@ -271,17 +271,17 @@ export default function TendenciasPage() {
                       <XAxis dataKey="mes_label" tick={{ fontSize:12, fill:'#64748b' }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={fmtK} tick={{ fontSize:11, fill:'#94a3b8' }} width={62} axisLine={false} tickLine={false} />
                       <Tooltip content={<TooltipUsd />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
-                      <Bar dataKey="2024" name="2024" fill="url(#gradTend2024)" radius={[6,6,0,0]} maxBarSize={22}>
+                      <Bar dataKey="2024" name="2024" fill="url(#gradTend2024)" radius={[6,6,0,0]} maxBarSize={32}>
                         <LabelList dataKey="2024" position="top" offset={12} angle={-45}
                           formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
                           style={{ fontSize: 9, fill: '#6b7280', fontWeight: 700, textAnchor: 'start' }} />
                       </Bar>
-                      <Bar dataKey="2025" name="2025" fill="url(#gradTend2025)" radius={[6,6,0,0]} maxBarSize={22}>
+                      <Bar dataKey="2025" name="2025" fill="url(#gradTend2025)" radius={[6,6,0,0]} maxBarSize={32}>
                         <LabelList dataKey="2025" position="top" offset={12} angle={-45}
                           formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
                           style={{ fontSize: 9, fill: '#3b82f6', fontWeight: 700, textAnchor: 'start' }} />
                       </Bar>
-                      <Bar dataKey="2026" name="2026" fill="url(#gradTend2026)" radius={[6,6,0,0]} maxBarSize={22}>
+                      <Bar dataKey="2026" name="2026" fill="url(#gradTend2026)" radius={[6,6,0,0]} maxBarSize={32}>
                         <LabelList dataKey="2026" position="top" offset={12} angle={-45}
                           formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
                           style={{ fontSize: 9, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
