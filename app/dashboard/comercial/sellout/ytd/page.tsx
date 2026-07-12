@@ -10,10 +10,10 @@ const PAISES      = ['CR','GT','SV','NI','HN','CO']
 const PAISES_OPT  = PAISES.map(p => ({ value: p }))
 
 const TRIMESTRES = [
-  { label: 'Q1 · Ene – Mar', short: 'Q1', meses: [1,2,3],    headerCls: 'text-blue-700 bg-blue-50/80 border-blue-200',       subCls: 'text-blue-700 bg-blue-50/60'   },
-  { label: 'Q2 · Abr – Jun', short: 'Q2', meses: [4,5,6],    headerCls: 'text-green-700 bg-green-50/80 border-green-200',    subCls: 'text-green-700 bg-green-50/60'  },
-  { label: 'Q3 · Jul – Sep', short: 'Q3', meses: [7,8,9],    headerCls: 'text-purple-700 bg-purple-50/80 border-purple-200', subCls: 'text-purple-700 bg-purple-50/60' },
-  { label: 'Q4 · Oct – Dic', short: 'Q4', meses: [10,11,12], headerCls: 'text-amber-700 bg-amber-50/80 border-amber-200',    subCls: 'text-amber-700 bg-amber-50/60'  },
+  { label: 'Q1 · Ene – Mar', short: 'Q1', meses: [1,2,3],    headerCls: 'text-blue-700 bg-blue-50/80 border-blue-200'    },
+  { label: 'Q2 · Abr – Jun', short: 'Q2', meses: [4,5,6],    headerCls: 'text-green-700 bg-green-50/80 border-green-200' },
+  { label: 'Q3 · Jul – Sep', short: 'Q3', meses: [7,8,9],    headerCls: 'text-purple-700 bg-purple-50/80 border-purple-200' },
+  { label: 'Q4 · Oct – Dic', short: 'Q4', meses: [10,11,12], headerCls: 'text-amber-700 bg-amber-50/80 border-amber-200' },
 ]
 
 const fmt = (v: number) => {
@@ -47,18 +47,6 @@ interface Totals {
   total2025: number
   total2026: number
   meses: Record<number, { y2025: number; y2026: number }>
-}
-
-function qSub(meses: number[], data: Record<number, MesData>) {
-  const s25 = meses.reduce((s, m) => s + (data[m]?.y2025 ?? 0), 0)
-  const s26 = meses.reduce((s, m) => s + (data[m]?.y2026 ?? 0), 0)
-  return { s25, s26, v: s25 > 0 ? ((s26 - s25) / s25) * 100 : null }
-}
-
-function qSubTotals(meses: number[], totals: Totals) {
-  const s25 = meses.reduce((s, m) => s + (totals.meses[m]?.y2025 ?? 0), 0)
-  const s26 = meses.reduce((s, m) => s + (totals.meses[m]?.y2026 ?? 0), 0)
-  return { s25, s26, v: s25 > 0 ? ((s26 - s25) / s25) * 100 : null }
 }
 
 export default function SellOutYTD() {
@@ -130,30 +118,41 @@ export default function SellOutYTD() {
     }
   }, [expanded, subRows, buildQs])
 
-  const totalVar = totals.total2025 > 0 ? ((totals.total2026 - totals.total2025) / totals.total2025) * 100 : null
+  // Meses activos = donde existe algún dato 2026
+  const allMeses = [1,2,3,4,5,6,7,8,9,10,11,12]
+  const ultimoMes2026 = Math.max(0, ...allMeses.filter(m => (totals.meses[m]?.y2026 ?? 0) > 0))
+  const mesesVisibles = ultimoMes2026 > 0 ? allMeses.filter(m => m <= ultimoMes2026) : allMeses
+
+  const visibleTrimestres = TRIMESTRES.filter(t => t.meses.some(m => mesesVisibles.includes(m)))
+
+  // Resumen YTD del período visible (mismos meses en ambos años)
+  const ytdTotal2025 = mesesVisibles.reduce((s, m) => s + (totals.meses[m]?.y2025 ?? 0), 0)
+  const ytdTotal2026 = mesesVisibles.reduce((s, m) => s + (totals.meses[m]?.y2026 ?? 0), 0)
+  const ytdVar       = ytdTotal2025 > 0 ? ((ytdTotal2026 - ytdTotal2025) / ytdTotal2025) * 100 : null
+
+  const mesLabel = ultimoMes2026 > 0
+    ? `2025 vs 2026 · Hasta ${MESES_LABEL[ultimoMes2026]}`
+    : '2025 vs 2026'
 
   const descargarCSV = () => {
-    const allMeses = [1,2,3,4,5,6,7,8,9,10,11,12]
     const header = [dim === 'cliente' ? 'Cliente' : 'Categoría']
-    allMeses.forEach(m => {
+    mesesVisibles.forEach(m => {
       const ml = MESES_LABEL[m]
-      header.push(`${ml} 2025`, `${ml} 2026`, `Var% ${ml}`)
+      header.push(`${ml} 2025`, `${ml} 2026`)
     })
-    header.push('Total 2025', 'Total 2026', 'Var% Total')
     const csv = [header.join(','),
       ...rows.map(r => {
         const line: string[] = [`"${r.dim}"`]
-        allMeses.forEach(m => {
+        mesesVisibles.forEach(m => {
           const d = r.meses[m] ?? { y2025: 0, y2026: 0, var: null }
-          line.push(d.y2025.toFixed(2), d.y2026.toFixed(2), fmtVar(d.var))
+          line.push(d.y2025.toFixed(2), d.y2026.toFixed(2))
         })
-        line.push(r.total2025.toFixed(2), r.total2026.toFixed(2), fmtVar(r.varTotal))
         return line.join(',')
       })
     ].join('\n')
     const a = document.createElement('a')
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
-    a.download = `variaciones_sellout_${dim}_${new Date().toISOString().slice(0,10)}.csv`
+    a.download = `ytd_sellout_${dim}_${new Date().toISOString().slice(0,10)}.csv`
     a.click()
   }
 
@@ -162,8 +161,8 @@ export default function SellOutYTD() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Sell Out</p>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-800">YTD y Variaciones</h1>
-          <p className="text-xs md:text-sm text-gray-400 mt-0.5">2025 vs 2026 · Año completo</p>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800">YTD Sell-Out</h1>
+          <p className="text-xs md:text-sm text-gray-400 mt-0.5">{mesLabel} · Hasta el último mes de cierre</p>
         </div>
         <div className="flex gap-2">
           <button onClick={cargar}
@@ -198,12 +197,6 @@ export default function SellOutYTD() {
             try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ dim, paises: ps })) } catch {}
           }} placeholder="Todos los países" />
         </div>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-[11px]">
-          <span className="text-gray-400">Variación:</span>
-          <span className="text-green-600 font-semibold">● &gt;+5% Bueno</span>
-          <span className="text-amber-600 font-semibold">● −5% a +5% Neutral</span>
-          <span className="text-red-500 font-semibold">● &lt;−5% Alerta</span>
-        </div>
       </div>
 
       {loading ? (
@@ -217,64 +210,73 @@ export default function SellOutYTD() {
         </div>
       ) : (
         <div className="space-y-4">
-          {TRIMESTRES.map((trim, ti) => {
-            const isLast = ti === TRIMESTRES.length - 1
-            // 1 col cliente + 4 meses × 3 cols + 3 cols totalizadora
-            const colSpanSection = 1 + trim.meses.length * 3 + 3
+          {/* Resumen YTD del período visible */}
+          <div className="bg-white rounded-xl border border-amber-100 shadow-sm p-4 md:p-5 ring-1 ring-amber-50">
+            <div className="flex items-baseline justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-widest">Resumen YTD</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {ultimoMes2026 > 0 ? `Ene → ${MESES_LABEL[ultimoMes2026]} · Mismo período en ambos años` : '—'}
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4 mt-3 text-center">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">YTD 2025</p>
+                <p className="text-lg md:text-2xl font-bold text-gray-700 tabular-nums">{fmt(ytdTotal2025)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">YTD 2026</p>
+                <p className="text-lg md:text-2xl font-bold text-gray-900 tabular-nums">{fmt(ytdTotal2026)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Variación</p>
+                <p className={`text-lg md:text-2xl font-bold tabular-nums ${varColor(ytdVar)}`}>{fmtVar(ytdVar)}</p>
+                <p className="text-[10px] text-gray-400 tabular-nums mt-0.5">
+                  Δ {ytdTotal2026 - ytdTotal2025 >= 0 ? '+' : '−'}{fmt(Math.abs(ytdTotal2026 - ytdTotal2025))}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {visibleTrimestres.map((trim, ti) => {
+            // Only include months with 2026 data
+            const trimMeses = trim.meses.filter(m => mesesVisibles.includes(m))
+            const colSpanSection = 1 + trimMeses.length * 2
 
             return (
               <div key={trim.label} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-x-auto">
-                <table className="w-full text-xs border-collapse" style={{ minWidth: `${180 + trim.meses.length * 165 + 180}px`, tableLayout: 'fixed' }}>
+                <table className="w-full text-xs border-collapse" style={{ minWidth: `${180 + trimMeses.length * 130}px`, tableLayout: 'fixed' }}>
                   <colgroup>
                     <col style={{ width: '180px' }} />
-                    {trim.meses.flatMap(m => [
-                      <col key={`${m}-25`} style={{ width: '95px' }} />,
-                      <col key={`${m}-26`} style={{ width: '95px' }} />,
-                      <col key={`${m}-v`}  style={{ width: '70px' }} />,
+                    {trimMeses.flatMap(m => [
+                      <col key={`${m}-25`} style={{ width: '110px' }} />,
+                      <col key={`${m}-26`} style={{ width: '110px' }} />,
                     ])}
-                    <col style={{ width: '95px' }} />
-                    <col style={{ width: '95px' }} />
-                    <col style={{ width: '70px' }} />
                   </colgroup>
                   <thead>
-                    {/* Fila 1: Etiqueta trimestre */}
                     <tr>
                       <th colSpan={colSpanSection}
                         className={`py-2 px-4 text-left text-[11px] font-semibold tracking-wide border-b ${trim.headerCls}`}>
                         {trim.label}
                       </th>
                     </tr>
-                    {/* Fila 2: Meses + columna totalizadora */}
                     <tr className="bg-gray-50 border-b border-gray-100 text-[10px] uppercase tracking-widest text-gray-400">
                       <th className="text-left py-2 px-4 border-r border-gray-200">
                         {dim === 'cliente' ? 'Cliente' : 'Categoría'}
                       </th>
-                      {trim.meses.map(m => (
-                        <th key={m} colSpan={3} className="py-1.5 text-center border-l border-gray-200">
+                      {trimMeses.map(m => (
+                        <th key={m} colSpan={2} className="py-1.5 text-center border-l border-gray-200">
                           {MESES_LABEL[m]}
                         </th>
                       ))}
-                      {isLast ? (
-                        <th colSpan={3} className="py-1.5 text-center border-l border-gray-300 text-amber-600 bg-amber-50/40 font-semibold">
-                          Total Anual
-                        </th>
-                      ) : (
-                        <th colSpan={3} className={`py-1.5 text-center border-l border-gray-300 font-semibold ${trim.subCls}`}>
-                          Sub {trim.short}
-                        </th>
-                      )}
                     </tr>
-                    {/* Fila 3: Años — flatMap para evitar problemas con fragments */}
                     <tr className="bg-gray-50 border-b border-gray-200 text-[10px] uppercase tracking-widest text-gray-400">
                       <th className="py-1.5 px-4 border-r border-gray-200" />
-                      {trim.meses.flatMap(m => [
+                      {trimMeses.flatMap(m => [
                         <th key={`${m}-25`} className="text-right py-1.5 px-2 font-normal border-l border-gray-200">2025</th>,
                         <th key={`${m}-26`} className="text-right py-1.5 px-1 font-normal">2026</th>,
-                        <th key={`${m}-v`}  className="text-right py-1.5 px-2 font-normal">Var%</th>,
                       ])}
-                      <th className="text-right py-1.5 px-2 font-normal border-l border-gray-300">2025</th>
-                      <th className="text-right py-1.5 px-1 font-normal">2026</th>
-                      <th className="text-right py-1.5 px-2 font-normal">Var%</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -282,9 +284,6 @@ export default function SellOutYTD() {
                       const isExp     = expanded.has(r.dim)
                       const isLoading = loadingClients.has(r.dim)
                       const canExpand = dim === 'cliente'
-                      const q = isLast
-                        ? { s25: r.total2025, s26: r.total2026, v: r.varTotal }
-                        : qSub(trim.meses, r.meses)
 
                       return [
                         <tr key={`row-${ti}-${i}`}
@@ -298,17 +297,13 @@ export default function SellOutYTD() {
                               <span className="truncate">{r.dim || '—'}</span>
                             </div>
                           </td>
-                          {trim.meses.flatMap(m => {
+                          {trimMeses.flatMap(m => {
                             const d = r.meses[m] ?? { y2025: 0, y2026: 0, var: null }
                             return [
                               <td key={`${m}-25`} className="py-2 px-2 text-right text-gray-500 border-l border-gray-100">{fmt(d.y2025)}</td>,
                               <td key={`${m}-26`} className="py-2 px-1 text-right text-gray-700">{fmt(d.y2026)}</td>,
-                              <td key={`${m}-v`}  className={`py-2 px-2 text-right ${varColor(d.var)}`}>{fmtVar(d.var)}</td>,
                             ]
                           })}
-                          <td className="py-2 px-2 text-right text-gray-500 border-l border-gray-300 bg-gray-50/60">{fmt(q.s25)}</td>
-                          <td className="py-2 px-1 text-right font-semibold text-gray-800 bg-gray-50/60">{fmt(q.s26)}</td>
-                          <td className={`py-2 px-2 text-right bg-gray-50/60 ${varColor(q.v)}`}>{fmtVar(q.v)}</td>
                         </tr>,
 
                         ...(canExpand && isExp
@@ -316,27 +311,18 @@ export default function SellOutYTD() {
                             ? [<tr key={`sub-loading-${ti}-${i}`} className="bg-amber-50/20">
                                 <td colSpan={colSpanSection} className="py-2 px-8 text-xs text-gray-400">Cargando categorías…</td>
                               </tr>]
-                            : (subRows[r.dim] ?? []).map((sub, si) => {
-                                const sq = isLast
-                                  ? { s25: sub.total2025, s26: sub.total2026, v: sub.varTotal }
-                                  : qSub(trim.meses, sub.meses)
-                                return (
-                                  <tr key={`sub-${ti}-${i}-${si}`} className="bg-amber-50/20 border-b border-amber-100/50">
-                                    <td className="py-1.5 pl-10 pr-4 text-gray-500 italic truncate border-r border-gray-100">{sub.dim}</td>
-                                    {trim.meses.flatMap(m => {
-                                      const d = sub.meses[m] ?? { y2025: 0, y2026: 0, var: null }
-                                      return [
-                                        <td key={`${m}-25`} className="py-1.5 px-2 text-right text-gray-400 text-[11px] border-l border-gray-100">{fmt(d.y2025)}</td>,
-                                        <td key={`${m}-26`} className="py-1.5 px-1 text-right text-gray-600 text-[11px]">{fmt(d.y2026)}</td>,
-                                        <td key={`${m}-v`}  className={`py-1.5 px-2 text-right text-[11px] ${varColor(d.var)}`}>{fmtVar(d.var)}</td>,
-                                      ]
-                                    })}
-                                    <td className="py-1.5 px-2 text-right text-gray-400 border-l border-gray-300 bg-gray-50/60 text-[11px]">{fmt(sq.s25)}</td>
-                                    <td className="py-1.5 px-1 text-right font-semibold text-gray-700 bg-gray-50/60 text-[11px]">{fmt(sq.s26)}</td>
-                                    <td className={`py-1.5 px-2 text-right bg-gray-50/60 text-[11px] ${varColor(sq.v)}`}>{fmtVar(sq.v)}</td>
-                                  </tr>
-                                )
-                              })
+                            : (subRows[r.dim] ?? []).map((sub, si) => (
+                                <tr key={`sub-${ti}-${i}-${si}`} className="bg-amber-50/20 border-b border-amber-100/50">
+                                  <td className="py-1.5 pl-10 pr-4 text-gray-500 italic truncate border-r border-gray-100">{sub.dim}</td>
+                                  {trimMeses.flatMap(m => {
+                                    const d = sub.meses[m] ?? { y2025: 0, y2026: 0, var: null }
+                                    return [
+                                      <td key={`${m}-25`} className="py-1.5 px-2 text-right text-gray-400 text-[11px] border-l border-gray-100">{fmt(d.y2025)}</td>,
+                                      <td key={`${m}-26`} className="py-1.5 px-1 text-right text-gray-600 text-[11px]">{fmt(d.y2026)}</td>,
+                                    ]
+                                  })}
+                                </tr>
+                              ))
                           : [])
                       ]
                     })}
@@ -344,29 +330,13 @@ export default function SellOutYTD() {
                   <tfoot className="border-t-2 border-gray-300 bg-gray-50">
                     <tr className="font-bold text-gray-800">
                       <td className="py-2.5 px-4 text-xs uppercase tracking-widest text-gray-500 border-r border-gray-100">TOTAL</td>
-                      {trim.meses.flatMap(m => {
+                      {trimMeses.flatMap(m => {
                         const d = totals.meses[m] ?? { y2025: 0, y2026: 0 }
-                        const v = d.y2025 > 0 ? ((d.y2026 - d.y2025) / d.y2025) * 100 : null
                         return [
                           <td key={`${m}-25`} className="py-2.5 px-2 text-right border-l border-gray-100">{fmt(d.y2025)}</td>,
                           <td key={`${m}-26`} className="py-2.5 px-1 text-right">{fmt(d.y2026)}</td>,
-                          <td key={`${m}-v`}  className={`py-2.5 px-2 text-right ${varColor(v)}`}>{fmtVar(v)}</td>,
                         ]
                       })}
-                      {isLast ? (() => {
-                        return <>
-                          <td className="py-2.5 px-2 text-right border-l border-gray-300 bg-gray-100/60">{fmt(totals.total2025)}</td>
-                          <td className="py-2.5 px-1 text-right bg-gray-100/60">{fmt(totals.total2026)}</td>
-                          <td className={`py-2.5 px-2 text-right bg-gray-100/60 ${varColor(totalVar)}`}>{fmtVar(totalVar)}</td>
-                        </>
-                      })() : (() => {
-                        const qt = qSubTotals(trim.meses, totals)
-                        return <>
-                          <td className="py-2.5 px-2 text-right border-l border-gray-300 bg-gray-100/60">{fmt(qt.s25)}</td>
-                          <td className="py-2.5 px-1 text-right bg-gray-100/60">{fmt(qt.s26)}</td>
-                          <td className={`py-2.5 px-2 text-right bg-gray-100/60 ${varColor(qt.v)}`}>{fmtVar(qt.v)}</td>
-                        </>
-                      })()}
                     </tr>
                   </tfoot>
                 </table>
