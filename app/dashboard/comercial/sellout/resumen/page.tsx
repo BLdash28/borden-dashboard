@@ -58,10 +58,10 @@ function VarBadge({ v }: { v: number | null }) {
   if (v === null) return <span className="text-[11px]" style={{ color: 'var(--t3)' }}>—</span>
   const pos = v >= 0
   return (
-    <span className="inline-flex items-center gap-0.5 text-[11px] font-bold"
+    <span className="inline-flex items-center gap-0.5 text-[11px] font-bold tabular-nums"
       style={{ color: pos ? '#10b981' : '#ef4444' }}>
       {pos ? <ArrowUpRight size={11} /> : <ArrowDownRight size={11} />}
-      {Math.abs(v).toFixed(1)}%
+      {pos ? '+' : '−'}{Math.abs(v).toFixed(1)}%
     </span>
   )
 }
@@ -111,7 +111,7 @@ function ChartEmpty() {
 //  PÁGINA PRINCIPAL
 // ══════════════════════════════════════════════════════════
 export default function ResumenPage() {
-  const { fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses, buildParams } = useDashboardFilters()
+  const { fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses, buildParams, setCats: setFilterCats, setClientes: setFilterClientes } = useDashboardFilters()
 
   const [kpi,           setKpi]          = useState<any>(null)
   const [dias,          setDias]         = useState<any[]>([])
@@ -723,7 +723,8 @@ export default function ResumenPage() {
           <p className="text-[11px] mb-4" style={{ color: 'var(--t3)' }}>USD · {titulo}</p>
           {loading ? <ChartSkeleton /> : categorias.length === 0 ? <ChartEmpty /> : (() => {
             const total = categorias.reduce((s: number, c: any) => s + toNum(c.ventas_valor), 0)
-            return <DonutChartPro data={categorias.map((c: any) => ({ cat: c.categoria, qty: toNum(c.ventas_valor) }))} total={total} colorMap={{}} fallbackColors={COLORS} height={220} />
+            return <DonutChartPro data={categorias.map((c: any) => ({ cat: c.categoria, qty: toNum(c.ventas_valor) }))} total={total} colorMap={{}} fallbackColors={COLORS} height={220}
+              onSelect={v => setFilterCats(v ? [v] : [])} />
           })()}
         </div>
 
@@ -732,7 +733,8 @@ export default function ResumenPage() {
           <p className="text-[11px] mb-4" style={{ color: 'var(--t3)' }}>Unidades · {titulo}</p>
           {loading ? <ChartSkeleton /> : categorias.length === 0 ? <ChartEmpty /> : (() => {
             const total = categorias.reduce((s: number, c: any) => s + toNum(c.ventas_unidades), 0)
-            return <DonutChartPro data={categorias.map((c: any) => ({ cat: c.categoria, qty: toNum(c.ventas_unidades) }))} total={total} colorMap={{}} fallbackColors={COLORS} height={220} />
+            return <DonutChartPro data={categorias.map((c: any) => ({ cat: c.categoria, qty: toNum(c.ventas_unidades) }))} total={total} colorMap={{}} fallbackColors={COLORS} height={220}
+              onSelect={v => setFilterCats(v ? [v] : [])} />
           })()}
         </div>
 
@@ -741,7 +743,8 @@ export default function ResumenPage() {
           <p className="text-[11px] mb-4" style={{ color: 'var(--t3)' }}>USD · {titulo}</p>
           {loading ? <ChartSkeleton /> : clientes.length === 0 ? <ChartEmpty /> : (() => {
             const total = clientes.reduce((s: number, c: any) => s + toNum(c.ventas_valor), 0)
-            return <DonutChartPro data={clientes.map((c: any) => ({ cat: c.nombre, qty: toNum(c.ventas_valor) }))} total={total} colorMap={{}} fallbackColors={['#c8873a','#3a6fa8','#2a7a58','#6b4fa8','#c0402f','#2a8a8a','#a8863a','#3a8a4f','#7a3a8a','#3a5a8a']} height={220} />
+            return <DonutChartPro data={clientes.map((c: any) => ({ cat: c.nombre, qty: toNum(c.ventas_valor) }))} total={total} colorMap={{}} fallbackColors={['#c8873a','#3a6fa8','#2a7a58','#6b4fa8','#c0402f','#2a8a8a','#a8863a','#3a8a4f','#7a3a8a','#3a5a8a']} height={220}
+              onSelect={v => setFilterClientes(v ? [v] : [])} />
           })()}
         </div>
 
@@ -750,7 +753,8 @@ export default function ResumenPage() {
           <p className="text-[11px] mb-4" style={{ color: 'var(--t3)' }}>Unidades · {titulo}</p>
           {loading ? <ChartSkeleton /> : clientes.length === 0 ? <ChartEmpty /> : (() => {
             const total = clientes.reduce((s: number, c: any) => s + toNum(c.ventas_unidades), 0)
-            return <DonutChartPro data={clientes.map((c: any) => ({ cat: c.nombre, qty: toNum(c.ventas_unidades) }))} total={total} colorMap={{}} fallbackColors={['#c8873a','#3a6fa8','#2a7a58','#6b4fa8','#c0402f','#2a8a8a','#a8863a','#3a8a4f','#7a3a8a','#3a5a8a']} height={220} />
+            return <DonutChartPro data={clientes.map((c: any) => ({ cat: c.nombre, qty: toNum(c.ventas_unidades) }))} total={total} colorMap={{}} fallbackColors={['#c8873a','#3a6fa8','#2a7a58','#6b4fa8','#c0402f','#2a8a8a','#a8863a','#3a8a4f','#7a3a8a','#3a5a8a']} height={220}
+              onSelect={v => setFilterClientes(v ? [v] : [])} />
           })()}
         </div>
       </div>
