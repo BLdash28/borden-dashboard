@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer, Legend,
+  Tooltip, ResponsiveContainer, Legend, LabelList,
 } from 'recharts'
 
 // Formatters
@@ -27,6 +27,25 @@ const fmtCOP = (v: number) => {
   return '$' + Math.round(v).toLocaleString('es-CO')
 }
 const fmtNum = (v: number) => Math.round(v).toLocaleString('en-US')
+const fmtLblSellin = (v: any, useUsd = false) => {
+  const n = Number(v); if (!isFinite(n) || n === 0) return ''
+  if (useUsd) {
+    if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'
+    if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+    return '$' + Math.round(n)
+  }
+  if (Math.abs(n) >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'MM'
+  if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(0) + 'M'
+  if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+  return '$' + Math.round(n)
+}
+const fmtLblCop = (v: any) => {
+  const n = Number(v); if (!isFinite(n) || n === 0) return ''
+  if (Math.abs(n) >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'MM'
+  if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(0) + 'M'
+  if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+  return '$' + Math.round(n)
+}
 const MN12 = ['','ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
 
 type SellInData = {
@@ -213,27 +232,35 @@ export default function SellInLicenciamiento() {
               </div>
               <div className="h-[260px] mt-3">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyPlus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                  <BarChart data={monthlyPlus} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
                     <defs>
-                      <linearGradient id="gLic25" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
-                        <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.7}/>
+                      <linearGradient id="gLicSellin25" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
                       </linearGradient>
-                      <linearGradient id="gLic26" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
-                        <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                      <linearGradient id="gLicSellin26" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                     <YAxis tickFormatter={(v: any) => useUsd ? fmt$(Number(v)) : fmtCOP(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
                     <Tooltip
                       formatter={(v: any) => fmtVal(Number(v))}
                       cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     />
-                    <Bar dataKey="cop_25" name="2025" fill="url(#gLic25)" radius={[8,8,0,0]} maxBarSize={38} />
-                    <Bar dataKey="cop_26" name="2026" fill="url(#gLic26)" radius={[8,8,0,0]} maxBarSize={38} />
+                    <Bar dataKey="cop_25" name="2025" fill="url(#gLicSellin25)" radius={[6,6,0,0]} maxBarSize={38}>
+                      <LabelList dataKey="cop_25" position="top" offset={12} angle={-45}
+                        formatter={(v: any) => fmtLblSellin(v, useUsd)}
+                        style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                    </Bar>
+                    <Bar dataKey="cop_26" name="2026" fill="url(#gLicSellin26)" radius={[6,6,0,0]} maxBarSize={38}>
+                      <LabelList dataKey="cop_26" position="top" offset={12} angle={-45}
+                        formatter={(v: any) => fmtLblSellin(v, useUsd)}
+                        style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -254,27 +281,35 @@ export default function SellInLicenciamiento() {
                 </div>
                 <div className="h-[220px] mt-3">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyPlus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                    <BarChart data={monthlyPlus} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
                       <defs>
                         <linearGradient id="gLicUt25" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
-                          <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.7}/>
+                          <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                          <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
                         </linearGradient>
                         <linearGradient id="gLicUt26" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
-                          <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                          <stop offset="0%" stopColor="#2a7a58" stopOpacity={1}/>
+                          <stop offset="100%" stopColor="#4a9b78" stopOpacity={0.85}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                       <YAxis tickFormatter={(v: any) => fmtCOP(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                       <Tooltip
                         formatter={(v: any) => fmtCOP(Number(v))}
                         cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                         contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                       />
-                      <Bar dataKey="ut_25" name="2025" fill="url(#gLicUt25)" radius={[8,8,0,0]} maxBarSize={32} />
-                      <Bar dataKey="ut_26" name="2026" fill="url(#gLicUt26)" radius={[8,8,0,0]} maxBarSize={32} />
+                      <Bar dataKey="ut_25" name="2025" fill="url(#gLicUt25)" radius={[6,6,0,0]} maxBarSize={32}>
+                        <LabelList dataKey="ut_25" position="top" offset={12} angle={-45}
+                          formatter={fmtLblCop}
+                          style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                      </Bar>
+                      <Bar dataKey="ut_26" name="2026" fill="url(#gLicUt26)" radius={[6,6,0,0]} maxBarSize={32}>
+                        <LabelList dataKey="ut_26" position="top" offset={12} angle={-45}
+                          formatter={fmtLblCop}
+                          style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700, textAnchor: 'start' }} />
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

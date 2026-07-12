@@ -5,7 +5,7 @@ import MultiSelect from '@/components/dashboard/MultiSelect'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
   PieChart, Pie,
-  XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
   ResponsiveContainer, Legend, Cell, ReferenceLine,
 } from 'recharts'
 import InnovacionesSection from './InnovacionesSection'
@@ -84,6 +84,18 @@ const fmtFull = (v: unknown) => {
   const n = Number(v)
   if (!isFinite(n)) return '$0'
   return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+const fmtLblUsd = (v: any) => {
+  const n = Number(v); if (!isFinite(n) || n === 0) return ''
+  if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'
+  if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+  return '$' + Math.round(n)
+}
+const fmtLblUnd = (v: any) => {
+  const n = Number(v); if (!isFinite(n) || n === 0) return ''
+  if (Math.abs(n) >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+  if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(0) + 'K'
+  return String(Math.round(n))
 }
 
 function Delta({ d, isPp = false }: { d: number | null | undefined; isPp?: boolean }) {
@@ -794,19 +806,19 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             </div>
             <div className="h-[240px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                <BarChart data={monthly} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
                   <defs>
-                    <linearGradient id="wmGrad2026" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                    <linearGradient id="wmGradSO2026" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                     </linearGradient>
-                    <linearGradient id="wmGrad2025" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.95}/>
-                      <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.75}/>
+                    <linearGradient id="wmGradSO2025" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                   <Tooltip
                     formatter={(v: any, name: string) => [fmtFull(v), name]}
@@ -814,8 +826,16 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                     cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Bar dataKey="y2025" name="2025" fill="url(#wmGrad2025)" radius={[6,6,0,0]} maxBarSize={38} />
-                  <Bar dataKey="y2026" name="2026" fill="url(#wmGrad2026)" radius={[6,6,0,0]} maxBarSize={38} />
+                  <Bar dataKey="y2025" name="2025" fill="url(#wmGradSO2025)" radius={[6,6,0,0]} maxBarSize={38}>
+                    <LabelList dataKey="y2025" position="top" offset={12} angle={-45}
+                      formatter={fmtLblUsd}
+                      style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                  </Bar>
+                  <Bar dataKey="y2026" name="2026" fill="url(#wmGradSO2026)" radius={[6,6,0,0]} maxBarSize={38}>
+                    <LabelList dataKey="y2026" position="top" offset={12} angle={-45}
+                      formatter={fmtLblUsd}
+                      style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1035,15 +1055,15 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               )}
 
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }} barCategoryGap="20%">
+                <BarChart data={series} margin={{ top: 40, right: 16, left: 8, bottom: 4 }} barCategoryGap="35%" barGap={4}>
                   <defs>
                     <linearGradient id="gradWmEvol2024" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#e5e7eb" stopOpacity={0.95}/>
-                      <stop offset="100%" stopColor="#f3f4f6" stopOpacity={0.75}/>
+                      <stop offset="0%" stopColor="#d1d5db" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.85}/>
                     </linearGradient>
                     <linearGradient id="gradWmEvol2025" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.95}/>
-                      <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.75}/>
+                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
                     </linearGradient>
                     <linearGradient id="gradWmEvol2026" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
@@ -1051,7 +1071,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                   <Tooltip
                     formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]}
@@ -1063,18 +1083,30 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2024') && (
                     <Bar dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
-                      fill="url(#gradWmEvol2024)" radius={[4,4,0,0]} maxBarSize={30}
-                      onClick={() => toggleYear('y2024')} style={{ cursor: 'pointer' }} />
+                      fill="url(#gradWmEvol2024)" radius={[6,6,0,0]} maxBarSize={30}
+                      onClick={() => toggleYear('y2024')} style={{ cursor: 'pointer' }}>
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} position="top" offset={12} angle={-45}
+                        formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
+                        style={{ fontSize: 10, fill: '#6b7280', fontWeight: 700, textAnchor: 'start' }} />
+                    </Bar>
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2025') && (
                     <Bar dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
-                      fill="url(#gradWmEvol2025)" radius={[4,4,0,0]} maxBarSize={30}
-                      onClick={() => toggleYear('y2025')} style={{ cursor: 'pointer' }} />
+                      fill="url(#gradWmEvol2025)" radius={[6,6,0,0]} maxBarSize={30}
+                      onClick={() => toggleYear('y2025')} style={{ cursor: 'pointer' }}>
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} position="top" offset={12} angle={-45}
+                        formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
+                        style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                    </Bar>
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2026') && (
                     <Bar dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
-                      fill="url(#gradWmEvol2026)" radius={[4,4,0,0]} maxBarSize={30}
-                      onClick={() => toggleYear('y2026')} style={{ cursor: 'pointer' }} />
+                      fill="url(#gradWmEvol2026)" radius={[6,6,0,0]} maxBarSize={30}
+                      onClick={() => toggleYear('y2026')} style={{ cursor: 'pointer' }}>
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} position="top" offset={12} angle={-45}
+                        formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
+                        style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                    </Bar>
                   )}
                 </BarChart>
               </ResponsiveContainer>
@@ -1445,16 +1477,39 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   actual:  g.cob_actual_avg,
                   maxima:  g.cob_max_avg,
                 }))}
-                margin={{ top: 10, right: 20, left: 0, bottom: 40 }}
-                barCategoryGap="30%"
+                margin={{ top: 40, right: 16, left: 8, bottom: 40 }}
+                barCategoryGap="35%"
+                barGap={6}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="cadena" tick={{ fontSize: 10 }} angle={-20} textAnchor="end" interval={0} />
-                <YAxis domain={[0, 100]} tickFormatter={v => v + '%'} tick={{ fontSize: 11 }} width={42} />
-                <Tooltip formatter={(v: number, n: string) => [v.toFixed(1) + '%', n === 'maxima' ? 'Máx Histórica' : 'Actual 2026']} />
+                <defs>
+                  <linearGradient id="gradWmCobMax" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#d1d5db" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradWmCobAct" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2a7a58" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#4a9b78" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="cadena" tick={{ fontSize: 10, fill: '#64748b' }} angle={-20} textAnchor="end" interval={0} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tickFormatter={v => v + '%'} tick={{ fontSize: 11, fill: '#94a3b8' }} width={42} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v: number, n: string) => [v.toFixed(1) + '%', n === 'maxima' ? 'Máx Histórica' : 'Actual 2026']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
                 <Legend formatter={(n: string) => n === 'maxima' ? 'Máx Histórica' : 'Actual 2026'} />
-                <Bar dataKey="maxima" name="maxima" fill="#d1d5db" radius={[3, 3, 0, 0]} />
-                <Bar dataKey="actual" name="actual" fill="#1b3b5f" radius={[3, 3, 0, 0]} />
+                <Bar dataKey="maxima" name="maxima" fill="url(#gradWmCobMax)" radius={[6, 6, 0, 0]}>
+                  <LabelList dataKey="maxima" position="top" offset={12} angle={-45}
+                    formatter={(v: any) => v > 0 ? Number(v).toFixed(0) + '%' : ''}
+                    style={{ fontSize: 10, fill: '#6b7280', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
+                <Bar dataKey="actual" name="actual" fill="url(#gradWmCobAct)" radius={[6, 6, 0, 0]}>
+                  <LabelList dataKey="actual" position="top" offset={12} angle={-45}
+                    formatter={(v: any) => v > 0 ? Number(v).toFixed(0) + '%' : ''}
+                    style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>

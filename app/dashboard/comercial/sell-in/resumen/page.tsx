@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { TrendingUp, TrendingDown, Minus, RefreshCw } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, Customized,
+  Tooltip, Legend, ResponsiveContainer, Customized, LabelList,
 } from 'recharts'
 import FiltroMulti from '@/components/ui/FiltroMulti'
 
@@ -33,6 +33,13 @@ const fmt = (v: number) => {
 const fmtFull = (v: number) =>
   '$' + (isFinite(v) ? v : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const fmtN = (v: number) => v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v.toFixed(0)
+const fmtLblK = (v: any) => {
+  const n = Number(v); if (!isFinite(n) || n === 0) return ''
+  if (Math.abs(n) >= 1e9) return '$' + (n/1e9).toFixed(1) + 'MM'
+  if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(0) + 'M'
+  if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
+  return '$' + Math.round(n)
+}
 
 interface Kpi { valor: number; delta: number }
 interface KpiData {
@@ -289,23 +296,47 @@ export default function SellInResumen() {
                 outline dasheado) y 2026 encima (sólido), para que la diferencia real vs
                 proyección se lea a golpe de vista.
               */}
-              <BarChart data={mensual} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={-22}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="mes" tickFormatter={m => MESES[m]} tick={{ fontSize: 11 }} />
-                <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize: 11 }} width={52} />
+              <BarChart data={mensual} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={-22}>
+                <defs>
+                  <linearGradient id="gradSellinResPrev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradSellinResProy" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3a6fa8" stopOpacity={0.4}/>
+                    <stop offset="100%" stopColor="#5b8ec7" stopOpacity={0.25}/>
+                  </linearGradient>
+                  <linearGradient id="gradSellinResCurr" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="mes" tickFormatter={m => MESES[m]} tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={v => '$'+(v/1000).toFixed(0)+'K'} tick={{ fontSize: 11, fill: '#94a3b8' }} width={52} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(v: number) => fmtFull(v)}
                   labelFormatter={m => MESES_FULL[Number(m)]}
                   position={{ y: 170 }}
                   allowEscapeViewBox={{ y: true }}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey={prevKey}       name={prevKey}              fill={COLORS[2025]}      radius={[3,3,0,0]} maxBarSize={22} />
+                <Bar dataKey={prevKey}       name={prevKey}              fill="url(#gradSellinResPrev)"      radius={[6,6,0,0]} maxBarSize={22}>
+                  <LabelList dataKey={prevKey} position="top" offset={12} angle={-45}
+                    formatter={fmtLblK}
+                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
                 <Bar dataKey="proyeccion"    name={`Proyección ${ano}`}
-                     fill={COLORS.proyeccion} fillOpacity={0.35}
+                     fill="url(#gradSellinResProy)"
                      stroke={COLORS.proyeccion} strokeWidth={1.5} strokeDasharray="4 3"
-                     radius={[3,3,0,0]} maxBarSize={22} />
-                <Bar dataKey={currKey}       name={currKey}              fill={COLORS[2026]}      radius={[3,3,0,0]} maxBarSize={22} />
+                     radius={[6,6,0,0]} maxBarSize={22} />
+                <Bar dataKey={currKey}       name={currKey}              fill="url(#gradSellinResCurr)"      radius={[6,6,0,0]} maxBarSize={22}>
+                  <LabelList dataKey={currKey} position="top" offset={12} angle={-45}
+                    formatter={fmtLblK}
+                    style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
                 <Customized component={MonthDividers} />
               </BarChart>
             </ResponsiveContainer>

@@ -1012,6 +1012,24 @@ export default function ExitoEjecucion() {
     const yFmtUds = (v: number) => v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v)
     const tipVal = (v: unknown) => isCop ? fmtCOP(Number(v)) : fmt$(v)
     const tipUds = (v: unknown) => Number(v).toLocaleString('es-CO') + ' und'
+    const fmtLblVal = (v: any) => {
+      const n = Number(v); if (!isFinite(n) || n === 0) return ''
+      if (isCop) {
+        if (Math.abs(n) >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'MM'
+        if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(0) + 'M'
+        if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+        return '$' + Math.round(n)
+      }
+      if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'
+      if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+      return '$' + Math.round(n)
+    }
+    const fmtLblUds = (v: any) => {
+      const n = Number(v); if (!isFinite(n) || n === 0) return ''
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+      if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K'
+      return String(Math.round(n))
+    }
     // Cambia data si USD: kpis.monthly.y2025/y2026 son valores USD
     const monthlyVal = kpis.monthly.map(m => ({
       ...m,
@@ -1215,27 +1233,35 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[300px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyVal} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+              <BarChart data={monthlyVal} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
                 <defs>
-                  <linearGradient id="gradEvo25" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.95}/>
-                    <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.75}/>
+                  <linearGradient id="gradExitoEvoVent25" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
                   </linearGradient>
-                  <linearGradient id="gradEvo26" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                  <linearGradient id="gradExitoEvoVent26" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(v: unknown) => [tipVal(v), '']}
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="val2025" name={`2025 ${monLabel}`} fill="url(#gradEvo25)" radius={[8,8,0,0]} maxBarSize={38} />
-                <Bar dataKey="val2026" name={`2026 ${monLabel}`} fill="url(#gradEvo26)" radius={[8,8,0,0]} maxBarSize={38} />
+                <Bar dataKey="val2025" name={`2025 ${monLabel}`} fill="url(#gradExitoEvoVent25)" radius={[6,6,0,0]} maxBarSize={38}>
+                  <LabelList dataKey="val2025" position="top" offset={12} angle={-45}
+                    formatter={fmtLblVal}
+                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
+                <Bar dataKey="val2026" name={`2026 ${monLabel}`} fill="url(#gradExitoEvoVent26)" radius={[6,6,0,0]} maxBarSize={38}>
+                  <LabelList dataKey="val2026" position="top" offset={12} angle={-45}
+                    formatter={fmtLblVal}
+                    style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1255,27 +1281,35 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[300px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+              <BarChart data={monthly} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
                 <defs>
-                  <linearGradient id="gradUds25" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.95}/>
-                    <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.75}/>
+                  <linearGradient id="gradExitoEvoUds25" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
                   </linearGradient>
-                  <linearGradient id="gradUds26" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                  <linearGradient id="gradExitoEvoUds26" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={yFmtUds} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(v: unknown) => [tipUds(v), '']}
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="uds2025" name="2025 Und" fill="url(#gradUds25)" radius={[8,8,0,0]} maxBarSize={38} />
-                <Bar dataKey="uds2026" name="2026 Und" fill="url(#gradUds26)" radius={[8,8,0,0]} maxBarSize={38} />
+                <Bar dataKey="uds2025" name="2025 Und" fill="url(#gradExitoEvoUds25)" radius={[6,6,0,0]} maxBarSize={38}>
+                  <LabelList dataKey="uds2025" position="top" offset={12} angle={-45}
+                    formatter={fmtLblUds}
+                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
+                <Bar dataKey="uds2026" name="2026 Und" fill="url(#gradExitoEvoUds26)" radius={[6,6,0,0]} maxBarSize={38}>
+                  <LabelList dataKey="uds2026" position="top" offset={12} angle={-45}
+                    formatter={fmtLblUds}
+                    style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1295,29 +1329,32 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[260px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={growthMoM} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%">
+              <BarChart data={growthMoM} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%">
                 <defs>
-                  <linearGradient id="gradPos" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="gradExitoGrowthPos" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
                     <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
                   </linearGradient>
-                  <linearGradient id="gradNeg" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="gradExitoGrowthNeg" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#ef4444" stopOpacity={1}/>
                     <stop offset="100%" stopColor="#f87171" stopOpacity={0.85}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={(v: number) => v + '%'} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(v: unknown) => v === null ? ['—', 'Growth'] : [(v as number).toFixed(1) + '%', 'Growth']}
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="growth" radius={[8,8,0,0]} maxBarSize={40}>
+                <Bar dataKey="growth" radius={[6,6,0,0]} maxBarSize={40}>
                   {growthMoM.map((r, i) => (
-                    <Cell key={i} fill={r.growth === null ? '#e2e8f0' : r.growth >= 0 ? 'url(#gradPos)' : 'url(#gradNeg)'} />
+                    <Cell key={i} fill={r.growth === null ? '#e2e8f0' : r.growth >= 0 ? 'url(#gradExitoGrowthPos)' : 'url(#gradExitoGrowthNeg)'} />
                   ))}
+                  <LabelList dataKey="growth" position="top" offset={12} angle={-45}
+                    formatter={(v: any) => v === null || v === undefined ? '' : Number(v).toFixed(1) + '%'}
+                    style={{ fontSize: 10, fill: '#475569', fontWeight: 700, textAnchor: 'start' }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -1338,27 +1375,35 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[280px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={acumuladoVal} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+              <BarChart data={acumuladoVal} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
                 <defs>
-                  <linearGradient id="gradAcum25" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.95}/>
-                    <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.75}/>
+                  <linearGradient id="gradExitoAcum25" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
                   </linearGradient>
-                  <linearGradient id="gradAcum26" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#059669" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.85}/>
+                  <linearGradient id="gradExitoAcum26" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#2a7a58" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#4a9b78" stopOpacity={0.85}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(v: unknown) => [tipVal(v), '']}
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="acum2025" name="Acum 2025" fill="url(#gradAcum25)" radius={[6,6,0,0]} maxBarSize={38} />
-                <Bar dataKey="acum2026" name="Acum 2026" fill="url(#gradAcum26)" radius={[6,6,0,0]} maxBarSize={38} />
+                <Bar dataKey="acum2025" name="Acum 2025" fill="url(#gradExitoAcum25)" radius={[6,6,0,0]} maxBarSize={38}>
+                  <LabelList dataKey="acum2025" position="top" offset={12} angle={-45}
+                    formatter={fmtLblVal}
+                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
+                <Bar dataKey="acum2026" name="Acum 2026" fill="url(#gradExitoAcum26)" radius={[6,6,0,0]} maxBarSize={38}>
+                  <LabelList dataKey="acum2026" position="top" offset={12} angle={-45}
+                    formatter={fmtLblVal}
+                    style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -2755,6 +2800,25 @@ export default function ExitoEjecucion() {
 
     const { kpi, monthly, top_skus, ocs } = sellin
     const useUsd = moneda === 'usd'
+    const fmtLblSellin = (v: any) => {
+      const n = Number(v); if (!isFinite(n) || n === 0) return ''
+      if (useUsd) {
+        if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'
+        if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+        return '$' + Math.round(n)
+      }
+      if (Math.abs(n) >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'MM'
+      if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(0) + 'M'
+      if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+      return '$' + Math.round(n)
+    }
+    const fmtLblCop = (v: any) => {
+      const n = Number(v); if (!isFinite(n) || n === 0) return ''
+      if (Math.abs(n) >= 1e9) return '$' + (n / 1e9).toFixed(1) + 'MM'
+      if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(0) + 'M'
+      if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+      return '$' + Math.round(n)
+    }
 
     const fmtVal = (v: number) => useUsd ? fmtFull(v) : fmtCOP(v)
     const yFmt = (v: any) => useUsd ? fmt$(Number(v)) : fmtCOP(Number(v))
@@ -2867,27 +2931,35 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[260px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyPlus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+              <BarChart data={monthlyPlus} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
                 <defs>
-                  <linearGradient id="gradSellIn25" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
-                    <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.7}/>
+                  <linearGradient id="gradExitoSellIn25" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
                   </linearGradient>
-                  <linearGradient id="gradSellIn26" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                  <linearGradient id="gradExitoSellIn26" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(v: any) => fmtVal(Number(v))}
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="cop_25" name="2025" fill="url(#gradSellIn25)" radius={[8,8,0,0]} maxBarSize={38} />
-                <Bar dataKey="cop_26" name="2026" fill="url(#gradSellIn26)" radius={[8,8,0,0]} maxBarSize={38} />
+                <Bar dataKey="cop_25" name="2025" fill="url(#gradExitoSellIn25)" radius={[6,6,0,0]} maxBarSize={38}>
+                  <LabelList dataKey="cop_25" position="top" offset={12} angle={-45}
+                    formatter={fmtLblSellin}
+                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
+                <Bar dataKey="cop_26" name="2026" fill="url(#gradExitoSellIn26)" radius={[6,6,0,0]} maxBarSize={38}>
+                  <LabelList dataKey="cop_26" position="top" offset={12} angle={-45}
+                    formatter={fmtLblSellin}
+                    style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -2908,27 +2980,35 @@ export default function ExitoEjecucion() {
             </div>
             <div className="h-[220px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyPlus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                <BarChart data={monthlyPlus} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
                   <defs>
-                    <linearGradient id="gradUt25" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
-                      <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.7}/>
+                    <linearGradient id="gradExitoUt25" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
                     </linearGradient>
-                    <linearGradient id="gradUt26" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                    <linearGradient id="gradExitoUt26" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#2a7a58" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#4a9b78" stopOpacity={0.85}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={(v: any) => fmtCOP(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                   <Tooltip
                     formatter={(v: any) => fmtCOP(Number(v))}
                     cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Bar dataKey="ut_25" name="2025" fill="url(#gradUt25)" radius={[8,8,0,0]} maxBarSize={32} />
-                  <Bar dataKey="ut_26" name="2026" fill="url(#gradUt26)" radius={[8,8,0,0]} maxBarSize={32} />
+                  <Bar dataKey="ut_25" name="2025" fill="url(#gradExitoUt25)" radius={[6,6,0,0]} maxBarSize={32}>
+                    <LabelList dataKey="ut_25" position="top" offset={12} angle={-45}
+                      formatter={fmtLblCop}
+                      style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                  </Bar>
+                  <Bar dataKey="ut_26" name="2026" fill="url(#gradExitoUt26)" radius={[6,6,0,0]} maxBarSize={32}>
+                    <LabelList dataKey="ut_26" position="top" offset={12} angle={-45}
+                      formatter={fmtLblCop}
+                      style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700, textAnchor: 'start' }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>

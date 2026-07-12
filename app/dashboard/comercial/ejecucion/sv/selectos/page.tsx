@@ -1166,21 +1166,37 @@ export default function EjecucionSelectos() {
 
               {ts ? (
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={displayedSeries} margin={{ top: 4, right: 12, left: 0, bottom: 4 }} barCategoryGap="20%">
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
+                  <BarChart data={displayedSeries} margin={{ top: 40, right: 16, left: 8, bottom: 4 }} barCategoryGap="35%" barGap={4}>
+                    <defs>
+                      <linearGradient id="gradSelEvo2024" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#d1d5db" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.85}/>
+                      </linearGradient>
+                      <linearGradient id="gradSelEvo2025" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
+                      </linearGradient>
+                      <linearGradient id="gradSelEvo2026" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
                     <YAxis
                       tickFormatter={v => evolMedida === 'valor'
                         ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
                         : (v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v))
                       }
-                      tick={{ fontSize: 11 }} width={55}
+                      tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}
                     />
                     <Tooltip
                       formatter={(v: number, name: string) => [
                         evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'),
                         name,
                       ]}
+                      cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     />
                     <Legend />
                     {ts.baseline_val > 0 && evolMedida === 'valor' && (
@@ -1188,11 +1204,53 @@ export default function EjecucionSelectos() {
                         label={{ value: 'Baseline', fontSize: 9, fill: '#f59e0b', position: 'insideTopRight' }} />
                     )}
                     <Bar dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
-                      fill="#d1d5db" radius={[2, 2, 0, 0]} />
+                      fill="url(#gradSelEvo2024)" radius={[6, 6, 0, 0]}>
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} position="top" offset={12} angle={-45}
+                        formatter={(v: any) => {
+                          const n = Number(v); if (!isFinite(n) || n === 0) return ''
+                          if (evolMedida === 'valor') {
+                            if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
+                            if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
+                            return '$' + Math.round(n)
+                          }
+                          if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1) + 'M'
+                          if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K'
+                          return String(Math.round(n))
+                        }}
+                        style={{ fontSize: 10, fill: '#6b7280', fontWeight: 700, textAnchor: 'start' }} />
+                    </Bar>
                     <Bar dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
-                      fill="#93c5fd" radius={[2, 2, 0, 0]} />
+                      fill="url(#gradSelEvo2025)" radius={[6, 6, 0, 0]}>
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} position="top" offset={12} angle={-45}
+                        formatter={(v: any) => {
+                          const n = Number(v); if (!isFinite(n) || n === 0) return ''
+                          if (evolMedida === 'valor') {
+                            if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
+                            if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
+                            return '$' + Math.round(n)
+                          }
+                          if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1) + 'M'
+                          if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K'
+                          return String(Math.round(n))
+                        }}
+                        style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                    </Bar>
                     <Bar dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
-                      fill="#c8873a" radius={[2, 2, 0, 0]} />
+                      fill="url(#gradSelEvo2026)" radius={[6, 6, 0, 0]}>
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} position="top" offset={12} angle={-45}
+                        formatter={(v: any) => {
+                          const n = Number(v); if (!isFinite(n) || n === 0) return ''
+                          if (evolMedida === 'valor') {
+                            if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
+                            if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
+                            return '$' + Math.round(n)
+                          }
+                          if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1) + 'M'
+                          if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K'
+                          return String(Math.round(n))
+                        }}
+                        style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               ) : <div className="h-[280px] bg-gray-50 rounded-lg animate-pulse" />}
@@ -2524,12 +2582,31 @@ export default function EjecucionSelectos() {
             <h3 className="text-sm font-semibold text-gray-800 mb-1">📦 Sell-In Mensual (Calleja SV)</h3>
             <p className="text-xs text-gray-400 mb-4">Valor facturado a Calleja por mes</p>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={siChart} margin={{top:4,right:8,left:0,bottom:4}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-                <XAxis dataKey="name" tick={{fontSize:10}}/>
-                <YAxis tickFormatter={v => fmt$(v)} tick={{fontSize:10}} width={52}/>
-                <Tooltip formatter={(v: number) => [fmt$(v),'Sell-In']}/>
-                <Bar dataKey="sellin" fill="#0f4c81" radius={[3,3,0,0]}/>
+              <BarChart data={siChart} margin={{top:40,right:16,left:8,bottom:4}} barCategoryGap="35%">
+                <defs>
+                  <linearGradient id="gradSelSellin" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3a6fa8" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#5b8ec7" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false}/>
+                <XAxis dataKey="name" tick={{fontSize:12, fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                <YAxis tickFormatter={v => fmt$(v)} tick={{fontSize:11, fill:'#94a3b8'}} width={52} axisLine={false} tickLine={false}/>
+                <Tooltip
+                  formatter={(v: number) => [fmt$(v),'Sell-In']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="sellin" fill="url(#gradSelSellin)" radius={[6,6,0,0]}>
+                  <LabelList dataKey="sellin" position="top" offset={12} angle={-45}
+                    formatter={(v: any) => {
+                      const n = Number(v); if (!isFinite(n) || n === 0) return ''
+                      if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
+                      if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
+                      return '$' + Math.round(n)
+                    }}
+                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -2541,13 +2618,35 @@ export default function EjecucionSelectos() {
             <h3 className="text-sm font-semibold text-gray-800 mb-1">🛒 Sell-Out Mensual (Selectos)</h3>
             <p className="text-xs text-gray-400 mb-4">Venta real en tiendas (fact_ventas_selectos)</p>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={soChart} margin={{top:4,right:8,left:0,bottom:4}}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0"/>
-                <XAxis dataKey="name" tick={{fontSize:10}}/>
-                <YAxis tickFormatter={v => fmt$(v)} tick={{fontSize:10}} width={52}/>
-                <Tooltip formatter={(v: number) => [fmt$(v),'Sell-Out']}/>
-                <Bar dataKey="sellout" radius={[3,3,0,0]}>
-                  {soChart.map((_: any, i: number) => <Cell key={i} fill={i === soChart.length-1 ? 'rgba(15,76,129,0.35)' : '#c8873a'}/>)}
+              <BarChart data={soChart} margin={{top:40,right:16,left:8,bottom:4}} barCategoryGap="35%">
+                <defs>
+                  <linearGradient id="gradSelSelloutFull" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradSelSelloutPart" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#3a6fa8" stopOpacity={0.4}/>
+                    <stop offset="100%" stopColor="#5b8ec7" stopOpacity={0.25}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false}/>
+                <XAxis dataKey="name" tick={{fontSize:12, fill:'#64748b'}} axisLine={false} tickLine={false}/>
+                <YAxis tickFormatter={v => fmt$(v)} tick={{fontSize:11, fill:'#94a3b8'}} width={52} axisLine={false} tickLine={false}/>
+                <Tooltip
+                  formatter={(v: number) => [fmt$(v),'Sell-Out']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="sellout" radius={[6,6,0,0]}>
+                  {soChart.map((_: any, i: number) => <Cell key={i} fill={i === soChart.length-1 ? 'url(#gradSelSelloutPart)' : 'url(#gradSelSelloutFull)'}/>)}
+                  <LabelList dataKey="sellout" position="top" offset={12} angle={-45}
+                    formatter={(v: any) => {
+                      const n = Number(v); if (!isFinite(n) || n === 0) return ''
+                      if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
+                      if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
+                      return '$' + Math.round(n)
+                    }}
+                    style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
