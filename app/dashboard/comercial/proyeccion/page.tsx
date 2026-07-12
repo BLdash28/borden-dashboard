@@ -5,7 +5,7 @@ import { ChevronRight } from 'lucide-react'
 import FiltroMulti from '@/components/ui/FiltroMulti'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  Legend, ResponsiveContainer,
+  Legend, ResponsiveContainer, LabelList,
 } from 'recharts'
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
@@ -438,20 +438,54 @@ function ProyeccionInner() {
       {/* Gráfico */}
       {chartData.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
-          <h2 className="text-xs md:text-sm font-semibold text-gray-700 mb-3 md:mb-4">Proyectado vs Real por Mes</h2>
-          <div className="h-[200px] md:h-[320px]">
+          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3 md:mb-4">
+            <div>
+              <h2 className="text-xs md:text-sm font-semibold text-gray-700">Proyectado vs Real por Mes</h2>
+              <p className="text-[10px] text-gray-400 mt-0.5">USD · Cuota (Revision) 2026 vs Ventas reales</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> Proyectado</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Real</span>
+            </div>
+          </div>
+          <div className="h-[240px] md:h-[340px]">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-              <XAxis dataKey="mes_label" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={fmtK} tick={{ fontSize: 11, fill: '#9ca3af' }} axisLine={false} tickLine={false} width={72} />
-              <Tooltip content={<ChartTooltip />} cursor={{ fill: '#f9fafb' }} />
-              <Legend
-                wrapperStyle={{ fontSize: 12, paddingTop: 12 }}
-                formatter={(v: string) => v.charAt(0).toUpperCase() + v.slice(1)}
+            <BarChart data={chartData} margin={{ top: 24, right: 16, left: 8, bottom: 0 }} barCategoryGap="25%">
+              <defs>
+                <linearGradient id="gradProyProy" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.95}/>
+                  <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.75}/>
+                </linearGradient>
+                <linearGradient id="gradProyReal" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                  <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="mes_label" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={fmtK} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={72} />
+              <Tooltip
+                content={<ChartTooltip />}
+                cursor={{ fill: 'rgba(148,163,184,0.08)' }}
               />
-              <Bar dataKey="proyectado" name="Proyectado" fill="#3a6fa8" radius={[3, 3, 0, 0]} maxBarSize={40} />
-              <Bar dataKey="real"       name="Real"       fill="#2a7a58" radius={[3, 3, 0, 0]} maxBarSize={40} />
+              <Bar dataKey="proyectado" name="Proyectado" fill="url(#gradProyProy)" radius={[8,8,0,0]} maxBarSize={38}>
+                <LabelList
+                  dataKey="proyectado"
+                  position="top"
+                  offset={6}
+                  formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
+                  style={{ fontSize: 10, fill: '#64748b', fontWeight: 600 }}
+                />
+              </Bar>
+              <Bar dataKey="real" name="Real" fill="url(#gradProyReal)" radius={[8,8,0,0]} maxBarSize={38}>
+                <LabelList
+                  dataKey="real"
+                  position="top"
+                  offset={6}
+                  formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
+                  style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700 }}
+                />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
           </div>
