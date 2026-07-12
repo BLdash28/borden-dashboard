@@ -672,9 +672,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
             <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-2">🛒 SELL-OUT REAL YTD 2026 · WALMART {pais}</p>
             <p className="text-3xl font-bold mb-1">{fmtFull(soTotal)}</p>
-            <p className="text-xs text-blue-300 mb-4">
-              {cats.map((c: any) => c.valor_2026 > 0 ? `${c.categoria} ${fmtFull(c.valor_2026)}` : null).filter(Boolean).join(' + ') || `YTD 2026 · hasta ${soLast}`}
-            </p>
+            <p className="text-xs text-blue-300 mb-4">YTD 2026 · hasta {soLast}</p>
             <div className="border-t border-white/10 pt-3 grid grid-cols-3 gap-3">
               {cadenas.slice(0, 3).map((c: any) => (
                 <div key={c.cadena}>
@@ -690,9 +688,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
             <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-2">🔥 SELL-IN REAL YTD 2026 · {clienteSellin} {pais}</p>
             <p className="text-3xl font-bold mb-1">{fmtFull(siVal)}</p>
-            <p className="text-xs text-blue-300 mb-4">
-              {cats.map((c: any) => c.valor_2026 > 0 ? `${c.categoria} ${fmtFull(c.valor_2026)}` : null).filter(Boolean).join(' + ') || 'Facturación directa'}
-            </p>
+            <p className="text-xs text-blue-300 mb-4">Facturación directa</p>
             <div className="border-t border-white/10 pt-3 grid grid-cols-2 gap-4">
               <div>
                 <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-1">Crecimiento YTD vs 2025</p>
@@ -707,6 +703,37 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             </div>
           </div>
         </div>
+
+        {/* Categorías — desglose Sell-Out YTD 2026 */}
+        {cats.filter((c: any) => c.valor_2026 > 0).length > 0 && (
+          <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
+            <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-3">📊 SELL-OUT POR CATEGORÍA · YTD 2026</p>
+            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(cats.filter((c: any) => c.valor_2026 > 0).length, 4)} gap-4`}>
+              {cats.filter((c: any) => c.valor_2026 > 0).map((c: any) => {
+                const pct = soTotal > 0 ? (c.valor_2026 / soTotal * 100) : 0
+                const emoji = /queso/i.test(c.categoria) ? '🧀'
+                            : /leche/i.test(c.categoria) ? '🥛'
+                            : /helado/i.test(c.categoria) ? '🍦'
+                            : '📦'
+                return (
+                  <div key={c.categoria} className="border-t border-white/10 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 first:border-l-0 first:pl-0">
+                    <p className="text-[10px] uppercase tracking-widest text-blue-300 mb-1">{emoji} {c.categoria}</p>
+                    <p className="text-xl font-bold text-yellow-300">{fmtFull(c.valor_2026)}</p>
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
+                        <div className="h-full bg-yellow-300/70" style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-[10px] text-blue-300 whitespace-nowrap">{pct.toFixed(1)}%</span>
+                    </div>
+                    {c.uni_2026 != null && (
+                      <p className="text-[10px] text-blue-300 mt-1">{Number(c.uni_2026).toLocaleString('en-US')} u</p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Por cadena cards */}
         {cadenas.length > 0 && (
