@@ -353,7 +353,7 @@ function ProyeccionInner() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 md:gap-4">
         {/* 1. Cuota 2026 — card por cada tipo adicional (Revision / Forecast / etc.) */}
         {otrasProy.map(o => {
           const dif   = o.total - kpis.proy
@@ -377,6 +377,23 @@ function ProyeccionInner() {
                 </p>
                 <p className="text-lg md:text-2xl font-bold text-blue-700 break-all">{fmt(cuotaYTD)}</p>
               </div>
+              {/* Cumplimiento cuota YTD — % + Δ USD vs cuotaYTD */}
+              {(() => {
+                if (cuotaYTD <= 0) return null
+                const pct  = Math.round(kpis.real / cuotaYTD * 1000) / 10
+                const dif  = kpis.real - cuotaYTD
+                const cls  = pct >= 100 ? 'text-emerald-600' : pct >= 85 ? 'text-yellow-600' : 'text-red-600'
+                return (
+                  <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50">
+                    <p className="text-xs font-semibold text-blue-700 mb-0.5 md:mb-1 leading-tight">Cumplimiento cuota YTD</p>
+                    <p className="text-[10px] text-gray-400 mb-1 md:mb-2">Real / Cuota YTD</p>
+                    <p className={`text-lg md:text-2xl font-bold ${cls}`}>{pct}%</p>
+                    <p className={`text-[11px] font-semibold mt-0.5 ${dif >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                      {fmtDiff(dif)}
+                    </p>
+                  </div>
+                )
+              })()}
             </React.Fragment>
           )
         })}
