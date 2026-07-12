@@ -20,8 +20,15 @@ export async function GET(req: NextRequest) {
 
     const inNums = (col: string, vals: number[]) => `${col} IN (${vals.join(',')})`
 
-    // ── Proyecciones nivel empresa (tipo=ORIGINAL) ────────────────────────────────
-    const pWhere: string[] = ['categoria IS NULL', "tipo = 'ORIGINAL'"]
+    // Fuente por defecto: REVISION (la Cuota). Si no existe REVISION para el filtro,
+    // el cliente puede pedir ORIGINAL. Se acepta `?fuente=ORIGINAL|REVISION`.
+    const fuenteSolicitada = (sp.get('fuente') ?? 'REVISION').toUpperCase()
+    const fuente           = fuenteSolicitada === 'ORIGINAL' ? 'ORIGINAL' : 'REVISION'
+
+    // ── Proyecciones nivel empresa ────────────────────────────────
+    // Para ORIGINAL: existen filas con categoria IS NULL (empresa-level).
+    // Para REVISION: solo hay cat-level → sintetizamos SUMando por empresa.
+    const pWhere: string[] = []
     const pParams: unknown[] = []
     let pi = 1
     if (empresas.length) {
@@ -32,15 +39,40 @@ export async function GET(req: NextRequest) {
     }
     if (anosParam.length)  pWhere.push(inNums('ano', anosParam))
     if (mesesParam.length) pWhere.push(inNums('mes', mesesParam))
+    // Sub-filtros aplican al agregar cat-level (para REVISION) — no rompen ORIGINAL
+    // porque en ORIGINAL empresa-level la fila no tiene categoria/pais/cliente.
+    if (fuente === 'REVISION') {
+      if (categorias.length) {
+        pWhere.push(`categoria IN (${categorias.map(() => `$${pi++}`).join(',')})`)
+        pParams.push(...categorias)
+      }
+      if (paises.length) {
+        pWhere.push(`pais IN (${paises.map(() => `$${pi++}`).join(',')})`)
+        pParams.push(...paises)
+      }
+      if (clientes.length) {
+        pWhere.push(`cliente IN (${clientes.map(() => `$${pi++}`).join(',')})`)
+        pParams.push(...clientes)
+      }
+    }
 
+    const projSql = fuente === 'ORIGINAL'
+      ? `
+        SELECT ano, mes, empresa, valor_usd
+        FROM proyecciones
+        WHERE tipo='ORIGINAL' AND categoria IS NULL AND ${pWhere.join(' AND ')}
+        ORDER BY mes ASC, empresa ASC
+      `
+      : `
+        SELECT ano, mes, empresa, SUM(valor_usd)::numeric AS valor_usd
+        FROM proyecciones
+        WHERE tipo='REVISION' AND categoria IS NOT NULL AND ${pWhere.join(' AND ')}
+        GROUP BY ano, mes, empresa
+        ORDER BY mes ASC, empresa ASC
+      `
     const { rows: projRows } = await pool.query<{
       ano: string; mes: string; empresa: string; valor_usd: string
-    }>(`
-      SELECT ano, mes, empresa, valor_usd
-      FROM proyecciones
-      WHERE ${pWhere.join(' AND ')}
-      ORDER BY mes ASC, empresa ASC
-    `, pParams)
+    }>(projSql, pParams)
 
     // ── Ventas reales sellin (sin filtro de sub-categoría para real empresa-level) ─
     const rWhere: string[] = ['venta_neta > 0']
@@ -74,8 +106,8 @@ export async function GET(req: NextRequest) {
     )
     const anos = anosRows.map(r => r.ano)
 
-    // ── Cat-rows — filtrados por todos los params (tipo=ORIGINAL) ──
-    const cWhere: string[] = ['categoria IS NOT NULL', "tipo = 'ORIGINAL'"]
+    // ── Cat-rows — filtrados por todos los params, tipo = fuente ──
+    const cWhere: string[] = ['categoria IS NOT NULL', `tipo = '${fuente}'`]
     const cParams: unknown[] = []
     let ci = 1
     if (empresas.length) {
@@ -187,10 +219,10 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // ── Otras proyecciones (tipo != ORIGINAL) — totales por tipo ────────────────
+    // ── Otras proyecciones (tipo != fuente) — totales por tipo ─────────────────
     // Aplica los mismos filtros de contexto (empresas/ano/mes/categoria/pais/cliente)
     // para que el card sea comparable con la selección actual.
-    const oWhere: string[] = ["tipo <> 'ORIGINAL'"]
+    const oWhere: string[] = [`tipo <> '${fuente}'`]
     const oParams: unknown[] = []
     let oi = 1
     if (empresas.length) {
