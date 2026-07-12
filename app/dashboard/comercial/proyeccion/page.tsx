@@ -353,7 +353,7 @@ function ProyeccionInner() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
         {/* 1. Cuota 2026 — card por cada tipo adicional (Revision / Forecast / etc.) */}
         {otrasProy.map(o => {
           const dif   = o.total - kpis.proy
@@ -404,19 +404,7 @@ function ProyeccionInner() {
             {fmtDiff(kpis.dif)}
           </p>
         </div>
-        {/* 3. % Cumplimiento */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
-          <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">% Cumplimiento</p>
-          <div className="text-lg md:text-2xl font-bold">
-            {kpis.pct === null
-              ? <span className="text-gray-400 text-xs">—</span>
-              : <span className={kpis.pct >= (kpis.facing ?? 0) ? 'text-green-600' : 'text-red-600'}>
-                  {kpis.pct}%
-                </span>
-            }
-          </div>
-        </div>
-        {/* 4. Facing — Esperado vs Actual en un mismo card */}
+        {/* 3. Facing — Esperado vs Actual en un mismo card */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
           <p className="text-xs font-semibold text-gray-500 mb-0.5 md:mb-1 leading-tight">Facing</p>
           <p className="text-[10px] text-gray-400 mb-2">
