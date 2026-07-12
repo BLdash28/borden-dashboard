@@ -2169,37 +2169,11 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         </div>
       </div>
 
-      {/* ── Filtros de sección (legacy) ── */}
+      {/* ── Controles específicos de Evolución (Vista/Medida/SKUs/Período) ── */}
+      {section === 'evolucion' && (
       <div className="px-6 pt-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
           <div className="flex items-start gap-x-4 gap-y-3 flex-wrap text-xs">
-
-            {/* División */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">División</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {DIVS.map(d => (
-                  <button key={d.key}
-                    onClick={() => { setDiv(d.key); saveFilter('div', d.key) }}
-                    className={`px-4 py-1.5 font-medium transition-colors ${div === d.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {d.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Subcategoría */}
-            {evolSubcatOpts.length > 0 && (
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] uppercase tracking-widest text-gray-400">Subcategoría</span>
-                <select value={evolSubcat}
-                  onChange={e => { setEvolSubcat(e.target.value); saveFilter('subcat', e.target.value) }}
-                  className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 text-xs h-[30px]">
-                  <option value="">Todas</option>
-                  {evolSubcatOpts.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-            )}
 
             {/* Vista */}
             <div className="flex flex-col gap-1">
@@ -2277,6 +2251,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           </div>
         </div>
       </div>
+      )}
 
       {/* ── Section nav ── */}
       <div className="px-6 pt-4">
