@@ -382,6 +382,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   // Data
   const [sellout,     setSellout]     = useState<any>(null)
   const [sellin,      setSellin]      = useState<any>(null)
+  const [sellinPorCat, setSellinPorCat] = useState<Record<string, number>>({})
   const [ts,          setTs]          = useState<any>(null)
   const [evoTop5,     setEvoTop5]     = useState<any>(null)
   const [comparativo, setComparativo] = useState<any>(null)
@@ -521,12 +522,24 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
     if (section === 'resumen') {
       setL('resumen', true)
+      const CATS = ['Quesos', 'Leches', 'Helados']
       Promise.all([
         fetch(`/api/comercial/ejecucion/walmart/kpis?${qs}`).then(r => r.json()),
         fetch(`/api/comercial/sell-in/kpis?pais=${pais}&cliente=${clienteSellin}${currentCat ? '&categoria=' + encodeURIComponent(currentCat) : ''}`).then(r => r.json()),
         fetch(`/api/comercial/ejecucion/walmart/inventario?${qs}`).then(r => r.json()).catch(() => null),
-      ]).then(([so, si, invData]) => { setSellout(so); setSellin(si); if (invData) setInv(invData) })
-        .finally(() => setL('resumen', false))
+        // Sell-In por categoría — para el card de desglose
+        Promise.all(CATS.map(cat =>
+          fetch(`/api/comercial/sell-in/kpis?pais=${pais}&cliente=${clienteSellin}&categoria=${encodeURIComponent(cat)}`)
+            .then(r => r.json())
+            .then(d => ({ cat, valor: d?.kpis?.ingresos?.valor ?? 0 }))
+            .catch(() => ({ cat, valor: 0 }))
+        )),
+      ]).then(([so, si, invData, siPorCat]) => {
+        setSellout(so); setSellin(si); if (invData) setInv(invData)
+        const map: Record<string, number> = {}
+        for (const { cat, valor } of siPorCat) map[cat] = valor
+        setSellinPorCat(map)
+      }).finally(() => setL('resumen', false))
 
     } else if (section === 'evolucion') {
       setL('evolucion', true)
@@ -666,71 +679,73 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           </div>
         )}
 
-        {/* Dark cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* Sell-Out */}
-          <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
-            <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-2">🛒 SELL-OUT REAL YTD 2026 · WALMART {pais}</p>
-            <p className="text-3xl font-bold mb-1">{fmtFull(soTotal)}</p>
-            <p className="text-xs text-blue-300 mb-4">YTD 2026 · hasta {soLast}</p>
-            <div className="border-t border-white/10 pt-3 grid grid-cols-3 gap-3">
-              {cadenas.slice(0, 3).map((c: any) => (
-                <div key={c.cadena}>
-                  <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-0.5 truncate">{c.cadena}</p>
-                  <p className="text-sm font-bold text-yellow-300">{fmtFull(c.valor_2026)}</p>
-                  <p className="text-[10px] text-blue-300">{c.uni_2026.toLocaleString('en-US')} u</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Sell-In */}
-          <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
-            <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-2">🔥 SELL-IN REAL YTD 2026 · {clienteSellin} {pais}</p>
-            <p className="text-3xl font-bold mb-1">{fmtFull(siVal)}</p>
-            <p className="text-xs text-blue-300 mb-4">Facturación directa</p>
-            <div className="border-t border-white/10 pt-3 grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-1">Crecimiento YTD vs 2025</p>
-                <p className="text-sm font-bold text-yellow-300">
-                  {siDelta !== null ? `${siDelta > 0 ? '+' : ''}${siDelta.toFixed(1)}%` : 'Sin datos 2025'}
-                </p>
-              </div>
-              <div>
-                <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-1">Cajas YTD</p>
-                <p className="text-sm font-bold text-yellow-300">{Math.round(siCajas).toLocaleString('en-US')}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Categorías — desglose Sell-Out YTD 2026 */}
+        {/* Sell-Out & Sell-In por Categoría — YTD 2026 */}
         {cats.filter((c: any) => c.valor_2026 > 0).length > 0 && (
           <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
-            <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-3">📊 SELL-OUT POR CATEGORÍA · YTD 2026</p>
+            <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+              <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest">📊 SELL-OUT vs SELL-IN POR CATEGORÍA · YTD 2026 · {pais}</p>
+              <div className="flex gap-4 text-[10px]">
+                <span className="text-blue-300">Sell-Out total: <b className="text-yellow-300">{fmtFull(soTotal)}</b></span>
+                <span className="text-blue-300">Sell-In total: <b className="text-yellow-300">{fmtFull(siVal)}</b></span>
+              </div>
+            </div>
             <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(cats.filter((c: any) => c.valor_2026 > 0).length, 4)} gap-4`}>
               {cats.filter((c: any) => c.valor_2026 > 0).map((c: any) => {
-                const pct = soTotal > 0 ? (c.valor_2026 / soTotal * 100) : 0
+                const pctSo = soTotal > 0 ? (c.valor_2026 / soTotal * 100) : 0
+                const siCat = sellinPorCat[c.categoria] ?? 0
+                const pctSi = siVal > 0 ? (siCat / siVal * 100) : 0
                 const emoji = /queso/i.test(c.categoria) ? '🧀'
                             : /leche/i.test(c.categoria) ? '🥛'
                             : /helado/i.test(c.categoria) ? '🍦'
                             : '📦'
                 return (
                   <div key={c.categoria} className="border-t border-white/10 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 first:border-l-0 first:pl-0">
-                    <p className="text-[10px] uppercase tracking-widest text-blue-300 mb-1">{emoji} {c.categoria}</p>
-                    <p className="text-xl font-bold text-yellow-300">{fmtFull(c.valor_2026)}</p>
-                    <div className="mt-1.5 flex items-center gap-2">
-                      <div className="flex-1 h-1.5 rounded-full bg-white/10 overflow-hidden">
-                        <div className="h-full bg-yellow-300/70" style={{ width: `${pct}%` }} />
+                    <p className="text-[10px] uppercase tracking-widest text-blue-300 mb-2">{emoji} {c.categoria}</p>
+                    {/* Sell-Out */}
+                    <div className="mb-2">
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-[9px] uppercase tracking-widest text-blue-300">Sell-Out</span>
+                        <span className="text-[10px] text-blue-300">{pctSo.toFixed(1)}%</span>
                       </div>
-                      <span className="text-[10px] text-blue-300 whitespace-nowrap">{pct.toFixed(1)}%</span>
+                      <p className="text-lg font-bold text-yellow-300 leading-tight">{fmtFull(c.valor_2026)}</p>
+                      <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1">
+                        <div className="h-full bg-yellow-300/70" style={{ width: `${pctSo}%` }} />
+                      </div>
+                    </div>
+                    {/* Sell-In */}
+                    <div>
+                      <div className="flex items-baseline justify-between">
+                        <span className="text-[9px] uppercase tracking-widest text-blue-300">Sell-In</span>
+                        <span className="text-[10px] text-blue-300">{pctSi.toFixed(1)}%</span>
+                      </div>
+                      <p className="text-lg font-bold text-emerald-300 leading-tight">{siCat > 0 ? fmtFull(siCat) : <span className="text-blue-400 text-xs">Sin datos</span>}</p>
+                      <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1">
+                        <div className="h-full bg-emerald-300/70" style={{ width: `${pctSi}%` }} />
+                      </div>
                     </div>
                     {c.uni_2026 != null && (
-                      <p className="text-[10px] text-blue-300 mt-1">{Number(c.uni_2026).toLocaleString('en-US')} u</p>
+                      <p className="text-[10px] text-blue-300 mt-2">{Number(c.uni_2026).toLocaleString('en-US')} u vendidas</p>
                     )}
                   </div>
                 )
               })}
+            </div>
+            {/* Footer con métricas Sell-In */}
+            <div className="border-t border-white/10 mt-4 pt-3 flex flex-wrap gap-6">
+              <div>
+                <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-0.5">Sell-In · Crecimiento YTD vs 2025</p>
+                <p className="text-sm font-bold text-yellow-300">
+                  {siDelta !== null ? `${siDelta > 0 ? '+' : ''}${siDelta.toFixed(1)}%` : 'Sin datos 2025'}
+                </p>
+              </div>
+              <div>
+                <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-0.5">Sell-In · Cajas YTD</p>
+                <p className="text-sm font-bold text-yellow-300">{Math.round(siCajas).toLocaleString('en-US')}</p>
+              </div>
+              <div>
+                <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-0.5">Sell-Out · hasta</p>
+                <p className="text-sm font-bold text-yellow-300">{soLast}</p>
+              </div>
             </div>
           </div>
         )}
@@ -779,17 +794,15 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             </div>
             <div className="h-[240px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
                   <defs>
                     <linearGradient id="wmGrad2026" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#f59e0b" stopOpacity={0.4}/>
-                      <stop offset="60%"  stopColor="#f59e0b" stopOpacity={0.1}/>
-                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/>
+                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
                     </linearGradient>
                     <linearGradient id="wmGrad2025" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.25}/>
-                      <stop offset="60%"  stopColor="#94a3b8" stopOpacity={0.07}/>
-                      <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                      <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.95}/>
+                      <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.75}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -798,13 +811,12 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   <Tooltip
                     formatter={(v: any, name: string) => [fmtFull(v), name]}
                     labelFormatter={(label: string) => label}
+                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Area type="monotone" dataKey="y2025" name="2025" stroke="#94a3b8" strokeWidth={2}
-                    fill="url(#wmGrad2025)" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
-                  <Area type="monotone" dataKey="y2026" name="2026" stroke="#f59e0b" strokeWidth={2.5}
-                    fill="url(#wmGrad2026)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }} connectNulls={false} />
-                </AreaChart>
+                  <Bar dataKey="y2025" name="2025" fill="url(#wmGrad2025)" radius={[6,6,0,0]} maxBarSize={38} />
+                  <Bar dataKey="y2026" name="2026" fill="url(#wmGrad2026)" radius={[6,6,0,0]} maxBarSize={38} />
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
@@ -1023,65 +1035,61 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               )}
 
               <ResponsiveContainer width="100%" height={280}>
-                <AreaChart data={series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                <BarChart data={series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }} barCategoryGap="20%">
                   <defs>
-                    <linearGradient id="gradWmEvol2026" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.4}/>
-                      <stop offset="60%"  stopColor="#c8873a" stopOpacity={0.1}/>
-                      <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
+                    <linearGradient id="gradWmEvol2024" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#e5e7eb" stopOpacity={0.95}/>
+                      <stop offset="100%" stopColor="#f3f4f6" stopOpacity={0.75}/>
                     </linearGradient>
                     <linearGradient id="gradWmEvol2025" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#60a5fa" stopOpacity={0.25}/>
-                      <stop offset="100%" stopColor="#60a5fa" stopOpacity={0}/>
+                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.95}/>
+                      <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.75}/>
+                    </linearGradient>
+                    <linearGradient id="gradWmEvol2026" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
-                  <Tooltip formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]}
+                  <Tooltip
+                    formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]}
+                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
                   {ts?.baseline_val > 0 && evolMedida === 'valor' && (
                     <ReferenceLine y={ts.baseline_val} stroke="#f59e0b" strokeDasharray="4 4"
                       label={{ value: 'Baseline', fontSize: 9, fill: '#f59e0b', position: 'insideTopRight' }} />
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2024') && (
-                    <Line type="monotone" dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
-                      stroke="#d1d5db" strokeWidth={evolYearFilter === 'y2024' ? 2.5 : 1.5} dot={false}
-                      strokeDasharray={evolYearFilter ? undefined : '4 4'}
-                      connectNulls onClick={() => toggleYear('y2024')}
-                      style={{ cursor: 'pointer' }} />
+                    <Bar dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
+                      fill="url(#gradWmEvol2024)" radius={[4,4,0,0]} maxBarSize={30}
+                      onClick={() => toggleYear('y2024')} style={{ cursor: 'pointer' }} />
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2025') && (
-                    <Area type="monotone" dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
-                      stroke="#60a5fa" strokeWidth={evolYearFilter === 'y2025' ? 2.5 : 2}
-                      fill="url(#gradWmEvol2025)" dot={false}
-                      activeDot={{ r: 4 }}
-                      connectNulls onClick={() => toggleYear('y2025')}
-                      style={{ cursor: 'pointer' }} />
+                    <Bar dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
+                      fill="url(#gradWmEvol2025)" radius={[4,4,0,0]} maxBarSize={30}
+                      onClick={() => toggleYear('y2025')} style={{ cursor: 'pointer' }} />
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2026') && (
-                    <Area type="monotone" dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
-                      stroke="#c8873a" strokeWidth={evolYearFilter === 'y2026' ? 3 : 2.5}
-                      fill="url(#gradWmEvol2026)" dot={false}
-                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }}
-                      connectNulls onClick={() => toggleYear('y2026')}
-                      style={{ cursor: 'pointer' }} />
+                    <Bar dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
+                      fill="url(#gradWmEvol2026)" radius={[4,4,0,0]} maxBarSize={30}
+                      onClick={() => toggleYear('y2026')} style={{ cursor: 'pointer' }} />
                   )}
-                </AreaChart>
+                </BarChart>
               </ResponsiveContainer>
 
               <div className="flex items-center gap-3 mt-3 text-[10px] flex-wrap">
                 {[
-                  { key: 'y2024', label: '2024', color: '#d1d5db', dash: true },
-                  { key: 'y2025', label: '2025', color: '#60a5fa', dash: false },
-                  { key: 'y2026', label: '2026 YTD', color: '#c8873a', dash: false },
-                ].map(({ key, label, color, dash }) => {
+                  { key: 'y2024', label: '2024',      color: '#e5e7eb' },
+                  { key: 'y2025', label: '2025',      color: '#60a5fa' },
+                  { key: 'y2026', label: '2026 YTD',  color: '#c8873a' },
+                ].map(({ key, label, color }) => {
                   const active = !evolYearFilter || evolYearFilter === key
                   return (
                     <button key={key} onClick={() => toggleYear(key)}
                       className={`flex items-center gap-1.5 transition-opacity ${active ? 'opacity-100' : 'opacity-30'}`}>
-                      <span className={`w-5 h-0.5 inline-block ${dash ? 'border-t-2 border-dashed' : ''}`}
-                        style={{ background: dash ? 'transparent' : color, borderColor: color }} />
+                      <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: color }} />
                       <span style={{ color: active ? '#6b7280' : '#d1d5db' }}>{label}</span>
                     </button>
                   )

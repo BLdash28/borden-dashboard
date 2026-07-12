@@ -1215,15 +1215,15 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[300px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={monthlyVal} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={monthlyVal} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
                 <defs>
                   <linearGradient id="gradEvo25" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.25}/>
-                    <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                    <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.95}/>
+                    <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.75}/>
                   </linearGradient>
                   <linearGradient id="gradEvo26" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.4}/>
-                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/>
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -1231,13 +1231,12 @@ export default function ExitoEjecucion() {
                 <YAxis tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(v: unknown) => [tipVal(v), '']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Area dataKey="val2025" name={`2025 ${monLabel}`} type="monotone" stroke="#94a3b8" strokeWidth={2}
-                  fill="url(#gradEvo25)" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
-                <Area dataKey="val2026" name={`2026 ${monLabel}`} type="monotone" stroke="#f59e0b" strokeWidth={2.5}
-                  fill="url(#gradEvo26)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }} connectNulls={false} />
-              </AreaChart>
+                <Bar dataKey="val2025" name={`2025 ${monLabel}`} fill="url(#gradEvo25)" radius={[8,8,0,0]} maxBarSize={38} />
+                <Bar dataKey="val2026" name={`2026 ${monLabel}`} fill="url(#gradEvo26)" radius={[8,8,0,0]} maxBarSize={38} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -1339,11 +1338,15 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[280px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={acumuladoVal} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={acumuladoVal} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
                 <defs>
+                  <linearGradient id="gradAcum25" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#cbd5e1" stopOpacity={0.95}/>
+                    <stop offset="100%" stopColor="#e2e8f0" stopOpacity={0.75}/>
+                  </linearGradient>
                   <linearGradient id="gradAcum26" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#059669" stopOpacity={0.35}/>
-                    <stop offset="100%" stopColor="#059669" stopOpacity={0}/>
+                    <stop offset="0%" stopColor="#059669" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.85}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -1351,12 +1354,12 @@ export default function ExitoEjecucion() {
                 <YAxis tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(v: unknown) => [tipVal(v), '']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Line dataKey="acum2025" name="Acum 2025" type="monotone" stroke="#94a3b8" strokeWidth={2} strokeDasharray="4 3" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
-                <Area dataKey="acum2026" name="Acum 2026" type="monotone" stroke="#059669" strokeWidth={2.5}
-                  fill="url(#gradAcum26)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#059669' }} connectNulls={false} />
-              </AreaChart>
+                <Bar dataKey="acum2025" name="Acum 2025" fill="url(#gradAcum25)" radius={[6,6,0,0]} maxBarSize={38} />
+                <Bar dataKey="acum2026" name="Acum 2026" fill="url(#gradAcum26)" radius={[6,6,0,0]} maxBarSize={38} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
