@@ -1,9 +1,11 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { RefreshCw, TrendingUp, TrendingDown, Minus, Download } from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, Minus, Download, SlidersHorizontal, X } from 'lucide-react'
+import MultiSelect from '@/components/dashboard/MultiSelect'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
-  XAxis, YAxis, CartesianGrid, Tooltip,
+  PieChart, Pie,
+  XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
   ResponsiveContainer, Legend, Cell,
 } from 'recharts'
 
@@ -18,8 +20,8 @@ const SECTIONS = [
   { key: 'resumen',          label: 'Resumen'             },
   { key: 'sellin',           label: 'Sell-In'             },
   { key: 'evolucion',        label: 'Evolución Ventas'    },
-  { key: 'seguimiento',      label: 'Seguimiento Semanal' },
   { key: 'pareto',           label: 'Pareto'              },
+  { key: 'devoluciones',     label: 'Devoluciones'        },
   { key: 'cobertura',        label: 'Cobertura'           },
   { key: 'inventarios',      label: 'Inventarios'         },
   { key: 'calidad',          label: 'Calidad Inventario'  },
@@ -183,9 +185,17 @@ type PrecioRow = {
   codigo_borden: string | null
   sku: string | null
   descripcion: string | null
+  subcategoria: string | null
   gramos: number | null
+  // Costo Centurion (importador)
+  costo_ant_cop: number | null
+  costo_cop: number | null
+  // Lista de precios (venta a Grupo Éxito)
   precio_anterior_cop: number | null
   precio_vigente_cop: number | null
+  // PVP sugerido al público
+  pvp_ant_cop: number | null
+  pvp_sugerido_cop: number | null
   fecha_vigencia_desde: string | null
   es_oferta: boolean
   es_innovacion: boolean
@@ -305,7 +315,32 @@ export default function ExitoEjecucion() {
 
   const [section,      setSection]      = useState('resumen')
   const [div,          setDiv]          = useState('TOTAL')
-  const [cadenaFilter, setCadenaFilter] = useState('')
+  // Filtros globales (multi-select)
+  const [cadenasSel,    setCadenasSel]    = useState<string[]>([])
+  const [subcatSel,     setSubcatSel]     = useState<string[]>([])
+  const [deptoSel,      setDeptoSel]      = useState<string[]>([])
+  const [ciudadSel,     setCiudadSel]     = useState<string[]>([])
+  const [skuSel,        setSkuSel]        = useState<string[]>([])
+  const [filtrosOpts,   setFiltrosOpts]   = useState<{
+    cadenas:       { value: string; venta: number }[]
+    subcategorias: { value: string; venta: number }[]
+    departamentos: { value: string; venta: number }[]
+    ciudades:      { value: string; departamento: string | null; venta: number }[]
+    skus:          { value: string; descripcion: string | null; subcategoria: string | null; venta: number }[]
+  } | null>(null)
+  const [showFiltros,   setShowFiltros]   = useState(false)
+  // Persiste el toggle Filtros abierto/cerrado
+  useEffect(() => {
+    const saved = localStorage.getItem(`${storageKey}-showFiltros`)
+    if (saved === '1') setShowFiltros(true)
+  }, []) // eslint-disable-line
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}-showFiltros`, showFiltros ? '1' : '0')
+  }, [showFiltros])
+
+  // Compat: cadenaFilter legacy = primer item si hay UNA sola cadena seleccionada
+  const cadenaFilter = cadenasSel.length === 1 ? cadenasSel[0] : ''
+
   const [moneda,       setMoneda]       = useState<'cop' | 'usd'>('cop')
   const [topN,         setTopN]         = useState(13)
   const [loading,      setLoading]      = useState<Record<string, boolean>>({})
@@ -314,14 +349,18 @@ export default function ExitoEjecucion() {
   const [kpis,    setKpis]    = useState<KpisData | null>(null)
   const [topSkus, setTopSkus] = useState<TopSku[]>([])
   const [seg,     setSeg]     = useState<SegData | null>(null)
-  const [segTab,  setSegTab]  = useState<'producto' | 'cadena' | 'subformato' | 'geografia'>('producto')
+  const [segTab,  setSegTab]  = useState<'producto' | 'cadena' | 'subformato' | 'geografia' | 'devoluciones'>('producto')
   const [segMode, setSegMode] = useState<'cop' | 'usd' | 'und'>('cop')
+  const [devTabla, setDevTabla] = useState<{ ano: number; ultimo_mes: number; ultima_fecha: string | null; ultimo_dia: number; dias_mes: number; por_producto: SegRow[] } | null>(null)
   const [precios,       setPrecios]       = useState<PrecioRow[] | null>(null)
   const [preciosCarga,  setPreciosCarga]  = useState<string | null>(null)
   const [innov,         setInnov]         = useState<InnovItem[] | null>(null)
   const [inv,           setInv]           = useState<InvData | null>(null)
   const [sellin,        setSellin]        = useState<SellInData | null>(null)
   const [calidad,       setCalidad]       = useState<CalidadData | null>(null)
+  // Sort para tabla Top SKUs Inventarios
+  const [invSortCol, setInvSortCol] = useState<'pdvs' | 'quiebres' | 'uds'>('uds')
+  const [invSortDir, setInvSortDir] = useState<'asc' | 'desc'>('desc')
   const [calidadDetalle, setCalidadDetalle] = useState<{
     sku: string
     descripcion: string | null
@@ -339,13 +378,42 @@ export default function ExitoEjecucion() {
   const isL  = (k: string) => !!loading[k]
   const saveFilter = (key: string, val: string) => localStorage.setItem(`${storageKey}-${key}`, val)
 
-  // Drill-down PDVs — se usa en Calidad Inventario e Inventarios (Top 20 SKUs).
+  // Serializa los filtros activos en un querystring reusable
+  const buildFilterQS = (extra?: Record<string, string>) => {
+    const q = new URLSearchParams()
+    if (cadenasSel.length) q.set('cadenas',       cadenasSel.join(','))
+    if (subcatSel.length)  q.set('subcategorias', subcatSel.join(','))
+    if (deptoSel.length)   q.set('departamentos', deptoSel.join(','))
+    if (ciudadSel.length)  q.set('ciudades',      ciudadSel.join(','))
+    if (skuSel.length)     q.set('skus',          skuSel.join(','))
+    if (extra) for (const [k, v] of Object.entries(extra)) if (v) q.set(k, v)
+    return q.toString()
+  }
+
+  // Clave de invalidación de caché en loadedRef — cambia con los filtros
+  const filterKey = useMemo(() =>
+    [cadenasSel, subcatSel, deptoSel, ciudadSel, skuSel]
+      .map(a => a.join('|')).join('::'),
+    [cadenasSel, subcatSel, deptoSel, ciudadSel, skuSel])
+
+  // Reset del ref cuando cambian los filtros
+  useEffect(() => { loadedRef.current = {} }, [filterKey])
+
+  // Drill-down PDVs — se usa en Calidad Inventario e Inventarios (Top SKUs).
   const openDetallePDVs = (sku: string, descripcion: string | null, bucket: 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10' | 'todos' = 'todos') => {
     setCalidadDetalle({ sku, descripcion, bucket, loading: true, pdvs: [] })
+    const qs = buildFilterQS({ sku, bucket })
+    fetch(`/api/comercial/ejecucion/co/exito/calidad-inventario/pdvs?${qs}`)
+      .then(r => r.json())
+      .then(d => setCalidadDetalle(prev => prev ? { ...prev, loading: false, pdvs: d.pdvs ?? [] } : null))
+      .catch(() => setCalidadDetalle(prev => prev ? { ...prev, loading: false } : null))
+  }
+
+  // Drill-down por Cadena — muestra todos los PDVs de una cadena con sus totales
+  const openDetalleCadena = (cadena: string) => {
+    setCalidadDetalle({ sku: `Cadena: ${cadena}`, descripcion: `Todos los PDVs · ${cadena}`, bucket: 'todos', loading: true, pdvs: [] })
     const q = new URLSearchParams()
-    q.set('sku', sku)
-    q.set('bucket', bucket)
-    if (cadenaFilter) q.set('cadena', cadenaFilter)
+    q.set('cadenas', cadena)
     fetch(`/api/comercial/ejecucion/co/exito/calidad-inventario/pdvs?${q}`)
       .then(r => r.json())
       .then(d => setCalidadDetalle(prev => prev ? { ...prev, loading: false, pdvs: d.pdvs ?? [] } : null))
@@ -370,43 +438,90 @@ export default function ExitoEjecucion() {
     if (target) setSection(target)
     const savedDiv    = localStorage.getItem(`${storageKey}-div`)
     if (savedDiv && DIVS.some(d => d.key === savedDiv)) setDiv(savedDiv)
-    const savedCadena = localStorage.getItem(`${storageKey}-cadena`)
-    if (savedCadena !== null) setCadenaFilter(savedCadena)
     const savedMon = localStorage.getItem(`${storageKey}-moneda`)
     if (savedMon === 'cop' || savedMon === 'usd') setMoneda(savedMon)
+    // Restaurar filtros multi-select
+    const readArr = (k: string): string[] => {
+      const raw = localStorage.getItem(`${storageKey}-${k}`)
+      if (!raw) return []
+      try { const v = JSON.parse(raw); return Array.isArray(v) ? v : [] } catch { return [] }
+    }
+    setCadenasSel(readArr('cadenas'))
+    setSubcatSel(readArr('subcategorias'))
+    setDeptoSel(readArr('departamentos'))
+    setCiudadSel(readArr('ciudades'))
+    setSkuSel(readArr('skus'))
   }, []) // eslint-disable-line
 
-  // Fetch KPIs cada vez que cambia div/cadena
+  // Persistir filtros en localStorage
   useEffect(() => {
-    const p = new URLSearchParams()
-    if (currentCat)    p.set('categoria', currentCat)
-    if (cadenaFilter)  p.set('cadena',    cadenaFilter)
+    localStorage.setItem(`${storageKey}-cadenas`,       JSON.stringify(cadenasSel))
+    localStorage.setItem(`${storageKey}-subcategorias`, JSON.stringify(subcatSel))
+    localStorage.setItem(`${storageKey}-departamentos`, JSON.stringify(deptoSel))
+    localStorage.setItem(`${storageKey}-ciudades`,      JSON.stringify(ciudadSel))
+    localStorage.setItem(`${storageKey}-skus`,          JSON.stringify(skuSel))
+  }, [cadenasSel, subcatSel, deptoSel, ciudadSel, skuSel])
+
+  // Cargar catálogo de opciones (una vez)
+  useEffect(() => {
+    fetch('/api/comercial/ejecucion/co/exito/filtros-opciones')
+      .then(r => r.json())
+      .then(d => setFiltrosOpts({
+        cadenas:       d.cadenas       ?? [],
+        subcategorias: d.subcategorias ?? [],
+        departamentos: d.departamentos ?? [],
+        ciudades:      d.ciudades      ?? [],
+        skus:          d.skus          ?? [],
+      }))
+      .catch(() => {})
+  }, [])
+
+  // Fetch por sección — refetch cada vez que cambia section, div, filtros o topN
+  useEffect(() => {
+    const extraCat: Record<string, string> = currentCat ? { categoria: currentCat } : {}
+    const qs = buildFilterQS(extraCat)
 
     if (section === 'resumen' || section === 'evolucion') {
       setL('kpis', true)
-      fetch(`/api/comercial/ejecucion/co/exito/kpis?${p}`)
+      fetch(`/api/comercial/ejecucion/co/exito/kpis?${qs}`)
         .then(r => r.json()).then(setKpis).finally(() => setL('kpis', false))
     }
 
     if (section === 'pareto') {
       setL('pareto', true)
-      const pp = new URLSearchParams(p); pp.set('top', String(topN))
-      fetch(`/api/comercial/ejecucion/co/exito/top-skus?${pp}`)
+      const qsp = buildFilterQS({ ...extraCat, top: String(topN) })
+      fetch(`/api/comercial/ejecucion/co/exito/top-skus?${qsp}`)
         .then(r => r.json()).then(d => setTopSkus(d.rows ?? []))
         .finally(() => setL('pareto', false))
     }
 
-    if (section === 'seguimiento' && !loadedRef.current.seg) {
+    if ((section === 'seguimiento' || section === 'evolucion') && !loadedRef.current.seg) {
       loadedRef.current.seg = true
       setL('seg', true)
-      fetch(`/api/comercial/ejecucion/co/exito/seguimiento?ano=2026`)
+      const qsg = buildFilterQS({ ano: '2026' })
+      fetch(`/api/comercial/ejecucion/co/exito/seguimiento?${qsg}`)
         .then(r => r.json()).then(setSeg).finally(() => setL('seg', false))
+    }
+
+    if ((section === 'evolucion' || section === 'devoluciones') && !loadedRef.current.devTabla) {
+      loadedRef.current.devTabla = true
+      fetch(`/api/comercial/ejecucion/co/exito/devoluciones-tabla?${qs}`)
+        .then(r => r.json()).then(setDevTabla).catch(() => {})
+    }
+
+    // Sell-In también sirve como referencia para calcular % devol vs venta
+    if (section === 'devoluciones' && !loadedRef.current.sellin) {
+      loadedRef.current.sellin = true
+      setL('sellin', true)
+      fetch(`/api/comercial/ejecucion/co/exito/sellin?${qs}`)
+        .then(r => r.json()).then(setSellin)
+        .finally(() => setL('sellin', false))
     }
 
     if (section === 'precios' && !loadedRef.current.precios) {
       loadedRef.current.precios = true
       setL('precios', true)
-      fetch(`/api/comercial/ejecucion/co/exito/precios`)
+      fetch(`/api/comercial/ejecucion/co/exito/precios?${qs}`)
         .then(r => r.json())
         .then(d => { setPrecios(d.filas ?? []); setPreciosCarga(d.ultima_carga ?? null) })
         .finally(() => setL('precios', false))
@@ -415,7 +530,7 @@ export default function ExitoEjecucion() {
     if (section === 'innovaciones' && !loadedRef.current.innov) {
       loadedRef.current.innov = true
       setL('innov', true)
-      fetch(`/api/comercial/ejecucion/co/exito/innovaciones`)
+      fetch(`/api/comercial/ejecucion/co/exito/innovaciones?${qs}`)
         .then(r => r.json())
         .then(d => setInnov(d.items ?? []))
         .finally(() => setL('innov', false))
@@ -424,9 +539,7 @@ export default function ExitoEjecucion() {
     if ((section === 'inventarios' || section === 'cobertura') && !loadedRef.current.inv) {
       loadedRef.current.inv = true
       setL('inv', true)
-      const q = new URLSearchParams()
-      if (cadenaFilter) q.set('cadena', cadenaFilter)
-      fetch(`/api/comercial/ejecucion/co/exito/inventario?${q}`)
+      fetch(`/api/comercial/ejecucion/co/exito/inventario?${qs}`)
         .then(r => r.json()).then(setInv)
         .finally(() => setL('inv', false))
     }
@@ -435,7 +548,7 @@ export default function ExitoEjecucion() {
     if ((section === 'sellin' || section === 'resumen') && !loadedRef.current.sellin) {
       loadedRef.current.sellin = true
       setL('sellin', true)
-      fetch('/api/comercial/ejecucion/co/exito/sellin')
+      fetch(`/api/comercial/ejecucion/co/exito/sellin?${qs}`)
         .then(r => r.json()).then(setSellin)
         .finally(() => setL('sellin', false))
     }
@@ -444,19 +557,17 @@ export default function ExitoEjecucion() {
     if (section === 'calidad' && !loadedRef.current.calidad) {
       loadedRef.current.calidad = true
       setL('calidad', true)
-      const q = new URLSearchParams()
-      if (cadenaFilter) q.set('cadena', cadenaFilter)
-      fetch(`/api/comercial/ejecucion/co/exito/calidad-inventario?${q}`)
+      fetch(`/api/comercial/ejecucion/co/exito/calidad-inventario?${qs}`)
         .then(r => r.json()).then(setCalidad)
         .finally(() => setL('calidad', false))
     }
-  }, [section, div, cadenaFilter, topN]) // eslint-disable-line
+  }, [section, div, filterKey, topN]) // eslint-disable-line
 
-  // Cargar KPIs al primer mount
+  // Cargar KPIs al primer mount (usa filtros si ya estaban guardados)
   useEffect(() => {
     if (!kpis) {
       setL('kpis', true)
-      fetch(`/api/comercial/ejecucion/co/exito/kpis`)
+      fetch(`/api/comercial/ejecucion/co/exito/kpis?${buildFilterQS()}`)
         .then(r => r.json()).then(setKpis).finally(() => setL('kpis', false))
     }
   }, []) // eslint-disable-line
@@ -470,6 +581,25 @@ export default function ExitoEjecucion() {
     const isCop = moneda === 'cop'
     const fmtVal = (v: number) => isCop ? fmtCOP(v) : fmtFull(v)
     const yTick  = (v: any)    => isCop ? fmtCOP(Number(v)) : fmt$(v)
+    // Formatos compactos para labels arriba de las barras
+    const fmtBarLbl = (v: any) => {
+      const n = Number(v); if (!isFinite(n) || n === 0) return ''
+      if (isCop) {
+        if (Math.abs(n) >= 1e9) return '$' + (n / 1e9).toFixed(1) + ' MM'
+        if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(0) + 'M'
+        if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+        return '$' + Math.round(n)
+      }
+      if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'
+      if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+      return '$' + Math.round(n)
+    }
+    const fmtUdsLbl = (v: any) => {
+      const n = Number(v); if (!isFinite(n) || n === 0) return ''
+      if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+      if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K'
+      return String(Math.round(n))
+    }
 
     const soTotal  = isCop ? kpis.ytd_2026_cop : kpis.ytd_2026
     const soPrev   = isCop ? kpis.ytd_2025_cop : kpis.ytd_2025
@@ -487,43 +617,20 @@ export default function ExitoEjecucion() {
     }))
     const valCadena  = (v_usd: number, v_cop: number) => isCop ? v_cop : v_usd
 
-    const pdfUrl = `/api/comercial/ejecucion/co/exito/resumen-pdf?${new URLSearchParams({
-      ...(cadenaFilter ? { cadena: cadenaFilter } : {}),
-      moneda,
-    }).toString()}`
+    const pdfUrl = `/api/comercial/ejecucion/co/exito/resumen-pdf?${buildFilterQS({ moneda })}`
 
     return (
       <div className="space-y-5">
 
-        {/* KPIs */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sell-Out</p>
-            <a href={pdfUrl}
-               className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg transition-colors">
-              <Download size={12}/> Descargar PDF
-            </a>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { label: `Sell-Out FY 2026 (${moneda.toUpperCase()})`, value: fmtVal(soTotal), sub: `hasta ${soLast}`, icon: '🛒' },
-              { label: 'vs YTD 2025',       value: soDelta !== null ? <Delta d={soDelta} /> : <span className="text-sm text-gray-400">Sin hist.</span>, sub: soPrev > 0 ? `2025: ${fmtVal(soPrev)}` : 'Sin dato 2025', icon: '📊' },
-              { label: 'Unidades FY',       value: soUnits.toLocaleString('en-US'), sub: `hasta ${soLast}`, icon: '📦' },
-              { label: 'Promedio Mensual',  value: fmtVal(soAvg), sub: `${kpis.ultimo_mes} meses`, icon: '📅' },
-            ].map(c => (
-              <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
-                  <span className="text-lg">{c.icon}</span>
-                </div>
-                <p className="text-2xl font-bold mb-1 text-gray-800">{c.value}</p>
-                <p className="text-xs text-gray-400">{c.sub}</p>
-              </div>
-            ))}
-          </div>
+        {/* Descargar PDF — botón arriba del todo */}
+        <div className="flex items-center justify-end">
+          <a href={pdfUrl}
+             className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg transition-colors shadow-sm">
+            <Download size={12}/> Descargar PDF
+          </a>
         </div>
 
-        {/* Sell-In KPIs */}
+        {/* Sell-In KPIs (primero) */}
         {sellin && (
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -541,7 +648,7 @@ export default function ExitoEjecucion() {
                 const cop = moneda === 'usd' ? k.usd_26 : k.cop_26
                 const copFmt = moneda === 'usd' ? fmtFull(cop) : fmtCOP(cop)
                 return [
-                  { label: `Sell-In FY 2026 (${moneda.toUpperCase()})`, value: copFmt, sub: `hasta mes ${k.ultimo_mes || '—'}`, icon: '🧾' },
+                  { label: `Sell-In YTD 2026 (${moneda.toUpperCase()})`, value: copFmt, sub: `hasta mes ${k.ultimo_mes || '—'}`, icon: '🧾' },
                   { label: 'Unidades Sell-In',     value: fmtNum(k.uds_26), sub: `${fmtNum(k.uds_25)} en 2025`, icon: '📦' },
                   { label: 'Utilidad Bruta (COP)', value: fmtCOP(k.ut_26), sub: k.margen_pct !== null ? `Margen ${k.margen_pct.toFixed(1)}%` : '—', icon: '💰' },
                   { label: 'Margen Bruto %',       value: k.margen_pct !== null ? `${k.margen_pct.toFixed(1)}%` : '—', sub: k.margen_pct_25 !== null ? `2025: ${k.margen_pct_25.toFixed(1)}%` : 'Sin dato 2025', icon: '📈' },
@@ -560,47 +667,34 @@ export default function ExitoEjecucion() {
           </div>
         )}
 
-        {/* Dark card */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
-            <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-2">🛒 SELL-OUT REAL FY 2026 · GRUPO ÉXITO CO ({moneda.toUpperCase()})</p>
-            <p className="text-3xl font-bold mb-1">{fmtVal(soTotal)}</p>
-            <p className="text-xs text-blue-300 mb-4">
-              {cats.map(c => {
-                const v = valCadena(c.valor_2026, c.valor_2026_cop)
-                return v > 0 ? `${c.categoria} ${fmtVal(v)}` : null
-              }).filter(Boolean).join(' + ') || `FY 2026 · hasta ${soLast}`}
-            </p>
-            <div className="border-t border-white/10 pt-3 grid grid-cols-3 gap-3">
-              {cadenasR.slice(0, 3).map(c => (
-                <div key={c.cadena}>
-                  <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-0.5 truncate">{c.cadena}</p>
-                  <p className="text-sm font-bold text-yellow-300">{fmtVal(valCadena(c.valor_2026, c.valor_2026_cop))}</p>
-                  <p className="text-[10px] text-blue-300">{c.uni_2026.toLocaleString('en-US')} u</p>
-                </div>
-              ))}
-            </div>
+        {/* Sell-Out KPIs (después de Sell-In) */}
+        <div>
+          <div className="mb-2">
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Sell-Out</p>
           </div>
-
-          <div className="bg-[#1b3b5f] rounded-xl p-5 text-white flex flex-col justify-between">
-            <div>
-              <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-2">📅 SEGUIMIENTO SEMANAL</p>
-              <p className="text-sm text-blue-100 mb-3">
-                Reporte semanal:<br/>
-                <span className="text-xs text-blue-300">Sell-Out por Producto, Cadena y Subcadena con RR y proyección de cierre.</span>
-              </p>
-            </div>
-            <button onClick={() => goSection('seguimiento')}
-              className="self-start mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#1b3b5f] bg-yellow-300 hover:bg-yellow-400 px-4 py-2 rounded-lg transition-colors">
-              Ver Seguimiento Semanal →
-            </button>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: `Sell-Out YTD 2026 (${moneda.toUpperCase()})`, value: fmtVal(soTotal), sub: `hasta ${soLast}`, icon: '🛒' },
+              { label: 'vs YTD 2025',       value: soDelta !== null ? <Delta d={soDelta} /> : <span className="text-sm text-gray-400">Sin hist.</span>, sub: soPrev > 0 ? `2025: ${fmtVal(soPrev)}` : 'Sin dato 2025', icon: '📊' },
+              { label: 'Unidades YTD',      value: soUnits.toLocaleString('en-US'), sub: `hasta ${soLast}`, icon: '📦' },
+              { label: 'Promedio Mensual',  value: fmtVal(soAvg), sub: `${kpis.ultimo_mes} meses`, icon: '📅' },
+            ].map(c => (
+              <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
+                  <span className="text-lg">{c.icon}</span>
+                </div>
+                <p className="text-2xl font-bold mb-1 text-gray-800">{c.value}</p>
+                <p className="text-xs text-gray-400">{c.sub}</p>
+              </div>
+            ))}
           </div>
         </div>
 
         {/* Por cadena cards */}
         {cadenasR.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Por Cadena · Sell-Out FY 2026 ({moneda.toUpperCase()})</p>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Por Cadena · Sell-Out YTD 2026 ({moneda.toUpperCase()})</p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {cadenasR.map(c => {
                 const cVal  = valCadena(c.valor_2026, c.valor_2026_cop)
@@ -627,8 +721,22 @@ export default function ExitoEjecucion() {
           </div>
         )}
 
-        {/* Monthly area chart */}
-        {monthly.length > 0 && (
+        {/* Evolución Sell-Out — barras */}
+        {monthly.length > 0 && (() => {
+          // Redondear al siguiente múltiplo "bonito" (paso = magnitud/2).
+          // Ej: max=434M → magnitud=100M, paso=50M, ceil = 450M
+          const niceMax = (v: number): number | undefined => {
+            if (v <= 0) return undefined
+            const mag  = Math.pow(10, Math.floor(Math.log10(v)))
+            const step = mag / 2
+            return Math.ceil(v / step) * step
+          }
+          const maxEvol = Math.max(
+            ...monthly.map(m => Math.max(m.v2025 ?? 0, m.v2026 ?? 0)),
+            0,
+          )
+          const evolMax = niceMax(maxEvol)
+          return (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <div className="flex items-center justify-between mb-1">
               <div>
@@ -636,39 +744,46 @@ export default function ExitoEjecucion() {
                 <p className="text-[11px] text-gray-400">2025 · 2026 ({moneda.toUpperCase()})</p>
               </div>
               <div className="flex items-center gap-3 text-[11px]">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> 2026</span>
               </div>
             </div>
             <div className="h-[240px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
                   <defs>
-                    <linearGradient id="grad2026" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.4}/>
-                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/>
+                    <linearGradient id="gradBar2025" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.75}/>
                     </linearGradient>
-                    <linearGradient id="grad2025" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.25}/>
-                      <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                    <linearGradient id="gradBar2026" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={yTick} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={yTick} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}
+                    domain={evolMax ? [0, evolMax] : [0, 'auto']} />
                   <Tooltip
                     formatter={(v: any, name: string) => [fmtVal(Number(v)), name]}
+                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Area type="monotone" dataKey="v2025" name="2025" stroke="#94a3b8" strokeWidth={2}
-                    fill="url(#grad2025)" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
-                  <Area type="monotone" dataKey="v2026" name="2026" stroke="#f59e0b" strokeWidth={2.5}
-                    fill="url(#grad2026)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }} connectNulls={false} />
-                </AreaChart>
+                  <Bar dataKey="v2025" name="2025" fill="url(#gradBar2025)" radius={[8,8,0,0]} maxBarSize={38}>
+                    <LabelList dataKey="v2025" position="top" formatter={fmtBarLbl}
+                      style={{ fontSize: 9, fill: '#64748b', fontWeight: 600 }} />
+                  </Bar>
+                  <Bar dataKey="v2026" name="2026" fill="url(#gradBar2026)" radius={[8,8,0,0]} maxBarSize={38}>
+                    <LabelList dataKey="v2026" position="top" formatter={fmtBarLbl}
+                      style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* Chart Sell-Out vs Sell-In vs Devoluciones — lineal con gradient */}
         {sellin && monthly.length > 0 && (() => {
@@ -688,6 +803,12 @@ export default function ExitoEjecucion() {
               devoluciones: isCop ? devolCop : devolUsd,
             }
           }).filter(m => (m.sellout && m.sellout > 0) || (m.sellin && m.sellin > 0) || (m.devoluciones && m.devoluciones > 0))
+          // Ticks fijos por pedido: 200, 300, 400 y 500 (en la unidad de moneda).
+          // En COP asumimos que representan millones (200M, 300M, ..., 500M).
+          // En USD son unidades directas (200, 300, ..., 500).
+          const factor = isCop ? 1e6 : 1
+          const compTicks = [200 * factor, 300 * factor, 400 * factor, 500 * factor]
+          const compMax   = 500 * factor
           return (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-1">
@@ -703,41 +824,43 @@ export default function ExitoEjecucion() {
               </div>
               <div className="h-[280px] mt-3">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={compare} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <BarChart data={compare} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%">
                     <defs>
-                      <linearGradient id="gradSellinLine" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%"   stopColor="#3b82f6" stopOpacity={0.35}/>
-                        <stop offset="60%"  stopColor="#3b82f6" stopOpacity={0.08}/>
-                        <stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/>
+                      <linearGradient id="gradBarSellin" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor="#3b82f6" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
                       </linearGradient>
-                      <linearGradient id="gradSelloutLine" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%"   stopColor="#f59e0b" stopOpacity={0.4}/>
-                        <stop offset="60%"  stopColor="#f59e0b" stopOpacity={0.1}/>
-                        <stop offset="100%" stopColor="#f59e0b" stopOpacity={0}/>
+                      <linearGradient id="gradBarSellout" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor="#f59e0b" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
                       </linearGradient>
-                      <linearGradient id="gradDevol" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%"   stopColor="#ef4444" stopOpacity={0.3}/>
-                        <stop offset="60%"  stopColor="#ef4444" stopOpacity={0.08}/>
-                        <stop offset="100%" stopColor="#ef4444" stopOpacity={0}/>
+                      <linearGradient id="gradBarDevol" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor="#ef4444" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#f87171" stopOpacity={0.85}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={yTick} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={yTick} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}
+                      domain={[0, compMax]} ticks={compTicks} />
                     <Tooltip
                       formatter={(v: any, name: string) => [fmtVal(Number(v)), name]}
+                      cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     />
-                    <Area type="monotone" dataKey="sellin" name="Sell-In" stroke="#3b82f6" strokeWidth={2.5}
-                          fill="url(#gradSellinLine)" dot={false}
-                          activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#3b82f6' }} connectNulls />
-                    <Area type="monotone" dataKey="sellout" name="Sell-Out" stroke="#f59e0b" strokeWidth={2.5}
-                          fill="url(#gradSelloutLine)" dot={false}
-                          activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }} connectNulls />
-                    <Area type="monotone" dataKey="devoluciones" name="Devoluciones" stroke="#ef4444" strokeWidth={2.5}
-                          fill="url(#gradDevol)" dot={false}
-                          activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#ef4444' }} connectNulls />
-                  </AreaChart>
+                    <Bar dataKey="sellin"       name="Sell-In"      fill="url(#gradBarSellin)"  radius={[8,8,0,0]} maxBarSize={28}>
+                      <LabelList dataKey="sellin"       position="top" formatter={fmtBarLbl}
+                        style={{ fontSize: 9, fill: '#1e40af', fontWeight: 700 }} />
+                    </Bar>
+                    <Bar dataKey="sellout"      name="Sell-Out"     fill="url(#gradBarSellout)" radius={[8,8,0,0]} maxBarSize={28}>
+                      <LabelList dataKey="sellout"      position="top" formatter={fmtBarLbl}
+                        style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
+                    </Bar>
+                    <Bar dataKey="devoluciones" name="Devoluciones" fill="url(#gradBarDevol)"   radius={[8,8,0,0]} maxBarSize={28}>
+                      <LabelList dataKey="devoluciones" position="top" formatter={fmtBarLbl}
+                        style={{ fontSize: 9, fill: '#b91c1c', fontWeight: 700 }} />
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -758,16 +881,20 @@ export default function ExitoEjecucion() {
                 </div>
                 <div className="flex items-center gap-3 text-[11px]">
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Venta ({moneda.toUpperCase()})</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> Unidades</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> Unidades</span>
                 </div>
               </div>
               <div className="h-[260px] mt-3">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={valUdsData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="30%">
+                  <BarChart data={valUdsData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
                     <defs>
                       <linearGradient id="gradValor" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
-                        <stop offset="100%" stopColor="#fde68a" stopOpacity={0.75}/>
+                        <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                      </linearGradient>
+                      <linearGradient id="gradUnidades" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -784,13 +911,17 @@ export default function ExitoEjecucion() {
                       cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     />
-                    <Bar yAxisId="left" dataKey="valor" name={`Venta (${moneda.toUpperCase()})`}
-                      fill="url(#gradValor)" radius={[8,8,0,0]} maxBarSize={44} />
-                    <Line yAxisId="right" type="monotone" dataKey="unidades" name="Unidades"
-                      stroke="#10b981" strokeWidth={2.5}
-                      dot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#10b981' }}
-                      activeDot={{ r: 6, strokeWidth: 2, fill: '#fff', stroke: '#10b981' }} />
-                  </ComposedChart>
+                    <Bar yAxisId="left"  dataKey="valor"    name={`Venta (${moneda.toUpperCase()})`}
+                      fill="url(#gradValor)"    radius={[8,8,0,0]} maxBarSize={28}>
+                      <LabelList dataKey="valor"    position="top" formatter={fmtBarLbl}
+                        style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
+                    </Bar>
+                    <Bar yAxisId="right" dataKey="unidades" name="Unidades"
+                      fill="url(#gradUnidades)" radius={[8,8,0,0]} maxBarSize={28}>
+                      <LabelList dataKey="unidades" position="top" formatter={fmtUdsLbl}
+                        style={{ fontSize: 9, fill: '#065f46', fontWeight: 700 }} />
+                    </Bar>
+                  </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
@@ -929,12 +1060,19 @@ export default function ExitoEjecucion() {
             <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">SELLOUT</span>
             <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">{monLabel}</span>
           </div>
-          <p className="text-xs text-gray-400 mb-3">Grupo Éxito Colombia {cadenaFilter && `· ${cadenaFilter}`}</p>
+          <p className="text-xs text-gray-400 mb-3">
+            Grupo Éxito Colombia
+            {cadenasSel.length > 0 && ` · ${cadenasSel.length === 1 ? cadenasSel[0] : `${cadenasSel.length} cadenas`}`}
+            {subcatSel.length > 0 && ` · ${subcatSel.length === 1 ? subcatSel[0] : `${subcatSel.length} subcategorías`}`}
+            {deptoSel.length > 0 && ` · ${deptoSel.length === 1 ? deptoSel[0] : `${deptoSel.length} deptos.`}`}
+            {ciudadSel.length > 0 && ` · ${ciudadSel.length === 1 ? ciudadSel[0] : `${ciudadSel.length} ciudades`}`}
+            {skuSel.length > 0 && ` · ${skuSel.length === 1 ? `SKU ${skuSel[0]}` : `${skuSel.length} SKUs`}`}
+          </p>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className={`rounded-lg px-4 py-2.5 border ${(kpis.delta_ytd ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
               <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(kpis.delta_ytd ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                FY 2026 vs 2025
+                YTD 2026 vs 2025
               </p>
               <p className={`text-lg font-bold ${(kpis.delta_ytd ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                 {kpis.ytd_2025 === 0 ? '—' : `${(kpis.delta_ytd ?? 0) > 0 ? '+' : ''}${(kpis.delta_ytd ?? 0).toFixed(1)}%`}
@@ -942,7 +1080,7 @@ export default function ExitoEjecucion() {
               <p className="text-[10px] text-gray-500 mt-0.5">{kpis.ultimo_mes_nombre ? `Ene–${kpis.ultimo_mes_nombre}` : ''}</p>
             </div>
             <div className="rounded-lg px-4 py-2.5 bg-amber-50 border border-amber-100">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-0.5">FY 2026 ({monLabel})</p>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-0.5">YTD 2026 ({monLabel})</p>
               <p className="text-lg font-bold text-amber-700">{isCop ? fmtCOP(totCop2026) : fmt$(kpis.ytd_2026)}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(kpis.uni_2026)} und</p>
             </div>
@@ -966,6 +1104,51 @@ export default function ExitoEjecucion() {
             </div>
           </div>
         </div>
+
+        {/* KPIs del Seguimiento Semanal — mismos que en la sección Seguimiento */}
+        {seg && (() => {
+          const totSeg: SegRow = {
+            key: '__total', label: 'TOTAL',
+            meses: {}, mesesUsd: {}, mesesUnd: {},
+            ytdCop: 0, ytdUsd: 0, ytdUnd: 0,
+            rrUnd: 0, rrCop: 0, rrUsd: 0,
+            undActual: 0, copActual: 0, usdActual: 0,
+            proyUnd: 0, proyCop: 0, proyUsd: 0,
+          }
+          for (const r of seg.por_producto ?? []) {
+            totSeg.ytdCop  += r.ytdCop;  totSeg.ytdUsd  += r.ytdUsd;  totSeg.ytdUnd  += r.ytdUnd
+            totSeg.rrCop   += r.rrCop;   totSeg.rrUsd   += r.rrUsd;   totSeg.rrUnd   += r.rrUnd
+            totSeg.proyCop += r.proyCop; totSeg.proyUsd += r.proyUsd; totSeg.proyUnd += r.proyUnd
+          }
+          const ultMesSeg    = seg.ultimo_mes
+          const mesActualLbl = MES_LBL_YR(ultMesSeg, seg.ano)
+          const cobertura    = seg.ultimo_dia && seg.dias_mes ? `${seg.ultimo_dia}/${seg.dias_mes} días` : '—'
+          return (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <h4 className="text-sm font-semibold text-gray-800">📅 Seguimiento Mensual</h4>
+                <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+                  {mesActualLbl}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <KpiCard
+                  label={`Total YTD ${seg.ano} (${moneda.toUpperCase()})`}
+                  value={isCop ? fmtCOP(totSeg.ytdCop) : fmt$(totSeg.ytdUsd)}
+                  sub={`${ultMesSeg} meses acumulados`}
+                />
+                <KpiCard label={`Total YTD ${seg.ano} (und)`} value={fmtNum(totSeg.ytdUnd)} sub={`${ultMesSeg} meses acumulados`} />
+                <KpiCard label={`RR und/día (${mesActualLbl})`} value={fmtRR(totSeg.rrUnd)} sub={`base ${cobertura}`} />
+                <KpiCard
+                  label={`Proy. cierre ${mesActualLbl} (${moneda.toUpperCase()})`}
+                  value={isCop ? fmtCOP(totSeg.proyCop) : fmt$(totSeg.proyUsd)}
+                  sub={`${fmtNum(totSeg.proyUnd)} und`}
+                  highlight
+                />
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Fila de estadísticas detalladas */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
@@ -1146,7 +1329,7 @@ export default function ExitoEjecucion() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-center justify-between mb-1">
             <div>
-              <h4 className="text-sm font-bold text-gray-800">Acumulado FY</h4>
+              <h4 className="text-sm font-bold text-gray-800">Acumulado YTD</h4>
               <p className="text-[11px] text-gray-400">Suma corriente Ene → mes en curso · {monLabel}</p>
             </div>
             <div className="flex items-center gap-3 text-[11px]">
@@ -1178,32 +1361,80 @@ export default function ExitoEjecucion() {
           </div>
         </div>
 
-        {/* Chart 5: Distribución por cadena (2026) */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <div>
-            <h4 className="text-sm font-bold text-gray-800">Distribución por cadena 2026</h4>
-            <p className="text-[11px] text-gray-400">Participación de ventas por cadena · {monLabel}</p>
+        {/* Chart 5: Distribución por cadena (2026) — Pie chart */}
+        {(() => {
+          const pieData = (kpis.por_cadena ?? [])
+            .filter(c => (isCop ? c.valor_2026_cop : c.valor_2026) > 0)
+            .map(c => ({
+              cadena: c.cadena,
+              valor: isCop ? c.valor_2026_cop : c.valor_2026,
+            }))
+          const totPie = pieData.reduce((s, x) => s + x.valor, 0)
+          return (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">Distribución por cadena 2026</h4>
+              <p className="text-[11px] text-gray-400">Participación de ventas por cadena · {monLabel}</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 items-center">
+              <div className="md:col-span-2 h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="valor"
+                      nameKey="cadena"
+                      cx="50%" cy="50%"
+                      innerRadius={60}
+                      outerRadius={100}
+                      paddingAngle={2}
+                      stroke="#fff"
+                      strokeWidth={2}
+                      label={(entry: any) => {
+                        const pct = totPie > 0 ? (entry.valor / totPie) * 100 : 0
+                        return pct >= 3 ? `${pct.toFixed(1)}%` : ''
+                      }}
+                      labelLine={false}
+                    >
+                      {pieData.map((c, i) => (
+                        <Cell key={i} fill={CADENA_COLORS[c.cadena] ?? '#c8873a'} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v: unknown) => [tipVal(v), '']}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              {/* Leyenda con % y monto */}
+              <div className="space-y-2">
+                {pieData
+                  .slice()
+                  .sort((a, b) => b.valor - a.valor)
+                  .map(c => {
+                    const pct = totPie > 0 ? (c.valor / totPie) * 100 : 0
+                    return (
+                      <div key={c.cadena} className="flex items-start gap-2 text-xs">
+                        <div className="w-2.5 h-2.5 rounded-sm mt-1 flex-shrink-0"
+                             style={{ background: CADENA_COLORS[c.cadena] ?? '#c8873a' }} />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-gray-700 truncate">{c.cadena}</p>
+                          <p className="text-[11px] text-gray-400 tabular-nums">
+                            {tipVal(c.valor)} <span className="text-gray-300">· {pct.toFixed(1)}%</span>
+                          </p>
+                        </div>
+                      </div>
+                    )
+                  })}
+              </div>
+            </div>
           </div>
-          <div className="h-[280px] mt-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={(kpis.por_cadena ?? []).filter(c => c.valor_2026 > 0)} layout="vertical" margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                <XAxis type="number" tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="cadena" tick={{ fontSize: 11, fill: '#64748b' }} width={110} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(v: unknown) => [tipVal(v), '']}
-                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                />
-                <Bar dataKey="valor_2026" radius={[0, 8, 8, 0]} maxBarSize={32}>
-                  {(kpis.por_cadena ?? []).map((c, i) => (
-                    <Cell key={i} fill={CADENA_COLORS[c.cadena] ?? '#c8873a'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+          )
+        })()}
+
+        {/* Tabla de Seguimiento Semanal (integrada en Evolución Ventas) */}
+        {seg && Seguimiento()}
       </div>
     )
   }
@@ -1246,7 +1477,7 @@ export default function ExitoEjecucion() {
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
             <div className="flex items-start justify-between mb-1 gap-4">
               <div>
-                <h3 className="text-sm font-bold text-gray-800">Pareto SKUs — Sell-Out FY 2026 ({moneda.toUpperCase()})</h3>
+                <h3 className="text-sm font-bold text-gray-800">Pareto SKUs — Sell-Out YTD 2026 ({moneda.toUpperCase()})</h3>
                 <p className="text-[11px] text-gray-400">Valor en {isCop ? 'pesos colombianos' : 'dólares'} · curva acumulada</p>
               </div>
               <div className="flex items-center gap-3 text-[11px]">
@@ -1301,7 +1532,7 @@ export default function ExitoEjecucion() {
           <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-gray-700">Detalle por SKU</h3>
-              <p className="text-xs text-gray-400">FY 2026 · sell-out Grupo Éxito CO</p>
+              <p className="text-xs text-gray-400">YTD 2026 · sell-out Grupo Éxito CO</p>
             </div>
             {grandTotal > 0 && <span className="text-xs font-semibold text-gray-500">{fmtVal(grandTotal)} total</span>}
           </div>
@@ -1370,10 +1601,11 @@ export default function ExitoEjecucion() {
     const effectiveSegMode: 'cop'|'usd'|'und' = segMode === 'und' ? 'und' : (isCop ? 'cop' : 'usd')
 
     const dataRows: SegRow[] =
-      segTab === 'producto'  ? seg.por_producto  :
-      segTab === 'cadena'    ? seg.por_cadena    :
-      segTab === 'subformato'? seg.por_subformato:
-                               (seg.por_geografia ?? [])
+      segTab === 'producto'    ? seg.por_producto  :
+      segTab === 'cadena'      ? seg.por_cadena    :
+      segTab === 'subformato'  ? seg.por_subformato:
+      segTab === 'devoluciones'? (devTabla?.por_producto ?? []) :
+                                 (seg.por_geografia ?? [])
 
     // Selector de "modo" (COP / USD / Unidades) — cambia qué se muestra en las celdas.
     const modeCfg = {
@@ -1456,7 +1688,7 @@ export default function ExitoEjecucion() {
       headers.push(segTab === 'producto' ? 'Producto' : firstColLabel)
       if (segTab === 'geografia') headers.push('PDVs')
       for (let m = 1; m <= ultimoMes; m++) headers.push(`${MES_LBL_YR(m, seg.ano)} (COP)`, `${MES_LBL_YR(m, seg.ano)} (USD)`, `${MES_LBL_YR(m, seg.ano)} (und)`)
-      headers.push(`Total FY ${seg.ano} (COP)`, `Total FY ${seg.ano} (USD)`, `Total FY ${seg.ano} (und)`,
+      headers.push(`Total YTD ${seg.ano} (COP)`, `Total YTD ${seg.ano} (USD)`, `Total YTD ${seg.ano} (und)`,
                    `RR und/día (${mesActualLbl})`, `RR COP/día`, `RR USD/día`,
                    `Und ${mesActualLbl}`, `COP ${mesActualLbl}`, `USD ${mesActualLbl}`,
                    `Proy. ${mesActualLbl} und`, `Proy. ${mesActualLbl} COP`, `Proy. ${mesActualLbl} USD`)
@@ -1489,50 +1721,27 @@ export default function ExitoEjecucion() {
 
     return (
       <div className="space-y-5">
-        {/* Header card */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
-                Informe Seguimiento Semanal · Sell-Out · {moneda.toUpperCase()}
-              </p>
-              <h2 className="text-base font-bold text-gray-800 mt-0.5">
-                Grupo Éxito · Colombia
-              </h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={exportCsv}
-                className="flex items-center gap-1.5 text-xs text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg">
-                <Download size={12}/> Exportar CSV
-              </button>
-            </div>
+        {/* Header + export CSV (los KPIs se muestran arriba en Evolución) */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h4 className="text-sm font-semibold text-gray-800">📋 Detalle Seguimiento Mensual</h4>
+            <p className="text-[11px] text-gray-400">Sell-Out · Grupo Éxito CO · {moneda.toUpperCase()}</p>
           </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-            <KpiCard
-              label={`Total FY ${seg.ano} (${moneda.toUpperCase()})`}
-              value={isCop ? fmtCOP(total.ytdCop) : fmt$(total.ytdUsd)}
-              sub={`${ultimoMes} meses acumulados`}
-            />
-            <KpiCard label={`Total FY ${seg.ano} (und)`} value={fmtNum(total.ytdUnd)} sub={`${ultimoMes} meses acumulados`} />
-            <KpiCard label={`RR und/día (${mesActualLbl})`} value={fmtRR(total.rrUnd)} sub={`base ${cobertura}`} />
-            <KpiCard
-              label={`Proy. cierre ${mesActualLbl} (${moneda.toUpperCase()})`}
-              value={isCop ? fmtCOP(total.proyCop) : fmt$(total.proyUsd)}
-              sub={`${fmtNum(total.proyUnd)} und`}
-              highlight
-            />
-          </div>
+          <button onClick={exportCsv}
+            className="flex items-center gap-1.5 text-xs text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg">
+            <Download size={12}/> Exportar CSV
+          </button>
         </div>
 
-        {/* Tabs internos + Toggle modo (COP / USD / Und) */}
+        {/* Tabs internos + Toggle modo (Valor / Unidades) */}
         <div className="flex items-center justify-between flex-wrap gap-2 border-b border-gray-200">
           <div className="flex items-center gap-1">
             {([
-              { key: 'producto',   label: 'Producto'  },
-              { key: 'cadena',     label: 'Cadena'    },
-              { key: 'subformato', label: 'Subcadena' },
-              { key: 'geografia',  label: 'Geografía' },
+              { key: 'producto',    label: 'Producto'    },
+              { key: 'cadena',      label: 'Cadena'      },
+              { key: 'subformato',  label: 'Subcadena'   },
+              { key: 'geografia',   label: 'Geografía'   },
+              { key: 'devoluciones',label: 'Devoluciones'},
             ] as const).map(t => (
               <button key={t.key}
                 onClick={() => setSegTab(t.key)}
@@ -1540,7 +1749,7 @@ export default function ExitoEjecucion() {
                   ${segTab === t.key
                     ? 'text-amber-700 border-amber-500'
                     : 'text-gray-500 border-transparent hover:text-gray-800'}`}>
-                Por {t.label}
+                {t.key === 'producto' ? 'Por Producto' : t.key === 'devoluciones' ? '↩️ Devoluciones' : `Por ${t.label}`}
               </button>
             ))}
           </div>
@@ -1584,7 +1793,7 @@ export default function ExitoEjecucion() {
                       {MES_LBL_YR(m, seg.ano)}
                     </th>
                   ))}
-                  <th className="px-3 py-2 text-right font-semibold bg-gray-100 whitespace-nowrap">FY {mode.colLabel}</th>
+                  <th className="px-3 py-2 text-right font-semibold bg-gray-100 whitespace-nowrap">YTD {mode.colLabel}</th>
                   <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">RR {mode.colLabel}/día</th>
                   <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">{mesActualLbl} {mode.colLabel}</th>
                   <th className="px-3 py-2 text-right font-semibold bg-amber-50 text-amber-700 whitespace-nowrap">Proy. {mode.colLabel}</th>
@@ -1599,10 +1808,10 @@ export default function ExitoEjecucion() {
                   const bg = isSinGeo ? 'bg-amber-50/60' : (i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50')
                   return (
                   <tr key={r.key} className={bg}>
-                    {segTab === 'producto' && (
+                    {(segTab === 'producto' || segTab === 'devoluciones') && (
                       <td className="px-3 py-2 text-gray-800 sticky left-0 bg-inherit">{r.label}</td>
                     )}
-                    {segTab !== 'producto' && (
+                    {(segTab !== 'producto' && segTab !== 'devoluciones') && (
                       <td className={`px-3 py-2 font-semibold sticky left-0 bg-inherit ${isSinGeo ? 'text-amber-700 italic' : 'text-gray-800'}`}>
                         {r.label}
                         {isSinGeo && <span className="ml-1 text-[10px] font-normal text-amber-600">· pendiente en base</span>}
@@ -1635,7 +1844,7 @@ export default function ExitoEjecucion() {
                 })}
                 {dataRows.length > 0 && (
                   <tr className="bg-gray-900 text-white font-semibold">
-                    {segTab === 'producto' && <td className="px-3 py-2 sticky left-0 bg-gray-900">TOTAL GENERAL</td>}
+                    {(segTab === 'producto' || segTab === 'devoluciones') && <td className="px-3 py-2 sticky left-0 bg-gray-900">TOTAL GENERAL</td>}
                     {segTab === 'cadena'   && <td className="px-3 py-2 sticky left-0 bg-gray-900">TOTAL GENERAL</td>}
                     {segTab === 'subformato' && (
                       <>
@@ -1675,6 +1884,165 @@ export default function ExitoEjecucion() {
             {segTab === 'producto' && ' Solo SKUs del listado priorizado.'}
             {segTab === 'geografia' && ' Agrupado por Departamento (fuente: base punto de venta).'}
           </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Devoluciones ─────────────────────────────────────────────────────────
+  function Devoluciones() {
+    if (!devTabla) return <div className="space-y-4"><CardSkeleton cols={4} /></div>
+    if (!devTabla.por_producto || devTabla.por_producto.length === 0) return (
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-10 text-center">
+        <p className="text-3xl mb-2">↩️</p>
+        <p className="text-sm font-semibold text-gray-600">Sin devoluciones registradas</p>
+      </div>
+    )
+
+    const isCop = moneda === 'cop'
+    const rows = devTabla.por_producto
+    const totUds = rows.reduce((s, r) => s + r.ytdUnd, 0)
+    const totCop = rows.reduce((s, r) => s + r.ytdCop, 0)
+    const totUsd = rows.reduce((s, r) => s + r.ytdUsd, 0)
+    const proyUds = rows.reduce((s, r) => s + r.proyUnd, 0)
+    const proyCop = rows.reduce((s, r) => s + r.proyCop, 0)
+    const mesActualLbl = MES_LBL_YR(devTabla.ultimo_mes, devTabla.ano)
+    const cobertura = devTabla.ultimo_dia > 0 && devTabla.dias_mes > 0
+      ? `${devTabla.ultimo_dia}/${devTabla.dias_mes} días` : '—'
+
+    // % devoluciones vs ventas: si tenemos sellin (venta total), calculamos
+    const ventaTotalCop = sellin?.kpi.cop_26 ?? 0
+    const pctDevol = ventaTotalCop > 0 ? (totCop / ventaTotalCop) * 100 : null
+
+    return (
+      <div className="space-y-5">
+        {/* Header */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Devoluciones · Grupo Éxito CO
+              </p>
+              <h2 className="text-base font-bold text-gray-800 mt-0.5">
+                YTD {devTabla.ano} · hasta {devTabla.ultima_fecha ?? '—'}
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Unidades devueltas + valor estimado a precio vigente. Fuente: devoluciones_exito.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <KpiCard
+              label={`Devoluciones YTD (${moneda.toUpperCase()})`}
+              value={isCop ? fmtCOP(totCop) : fmtFull(totUsd)}
+              sub={`${fmtNum(totUds)} unidades`}
+              highlight
+            />
+            <KpiCard
+              label="Unidades devueltas YTD"
+              value={fmtNum(totUds)}
+              sub={`${rows.length} SKUs distintos`}
+            />
+            <KpiCard
+              label={`% Devol. sobre Sell-In`}
+              value={pctDevol !== null ? `${pctDevol.toFixed(2)}%` : '—'}
+              sub={pctDevol !== null ? `${fmtCOP(totCop)} / ${fmtCOP(ventaTotalCop)}` : 'Cargá Sell-In primero'}
+            />
+            <KpiCard
+              label={`Proy. cierre ${mesActualLbl}`}
+              value={isCop ? fmtCOP(proyCop) : fmtFull((proyCop / ventaTotalCop) * (sellin?.kpi.usd_26 ?? 0))}
+              sub={`${fmtNum(proyUds)} und · base ${cobertura}`}
+            />
+          </div>
+        </div>
+
+        {/* Tabla por producto */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-700">↩️ Devoluciones por Producto</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">Unidades y valor estimado por mes</p>
+            </div>
+            <div className="flex items-center gap-1">
+              {([
+                { k: 'valor', lbl: `Valor (${moneda.toUpperCase()})` },
+                { k: 'und',   lbl: 'Unidades' },
+              ] as const).map(t => {
+                const isUnd = segMode === 'und'
+                const isActive = t.k === 'und' ? isUnd : !isUnd
+                return (
+                  <button key={t.k}
+                    onClick={() => setSegMode(t.k === 'und' ? 'und' : (isCop ? 'cop' : 'usd'))}
+                    className={`px-3 py-1 text-[11px] font-semibold rounded-md transition-colors
+                      ${isActive
+                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                        : 'text-gray-500 hover:text-gray-800 border border-transparent'}`}>
+                    {t.lbl}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-3 py-2.5 text-left font-semibold sticky left-0 bg-gray-50">Producto</th>
+                  {Array.from({ length: devTabla.ultimo_mes }, (_, i) => i + 1).map(m => (
+                    <th key={m} className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">
+                      {MES_LBL_YR(m, devTabla.ano)}
+                    </th>
+                  ))}
+                  <th className="px-3 py-2.5 text-right font-semibold bg-gray-100 whitespace-nowrap">
+                    YTD {segMode === 'und' ? 'und' : moneda.toUpperCase()}
+                  </th>
+                  <th className="px-3 py-2.5 text-right font-semibold bg-amber-50 text-amber-700 whitespace-nowrap">
+                    Proy. cierre
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => {
+                  const bg = i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'
+                  const pickMes = (m: number) => segMode === 'und' ? (r.mesesUnd[m] ?? 0)
+                                              : isCop           ? (r.meses[m] ?? 0)
+                                                                : (r.mesesUsd[m] ?? 0)
+                  const pickYtd = segMode === 'und' ? r.ytdUnd : isCop ? r.ytdCop : r.ytdUsd
+                  const pickProy = segMode === 'und' ? r.proyUnd : isCop ? r.proyCop : r.proyUsd
+                  const fmt = (v: number) => v === 0 ? <span className="text-gray-300">—</span>
+                    : segMode === 'und' ? fmtNum(v)
+                    : isCop             ? fmtCOP(v)
+                                        : fmtFull(v)
+                  return (
+                    <tr key={r.key} className={bg}>
+                      <td className="px-3 py-2 text-gray-800 sticky left-0 bg-inherit">{r.label}</td>
+                      {Array.from({ length: devTabla.ultimo_mes }, (_, i) => i + 1).map(m => (
+                        <td key={m} className="px-3 py-2 text-right tabular-nums text-gray-700">{fmt(pickMes(m))}</td>
+                      ))}
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50">{fmt(pickYtd)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-700 bg-amber-50/50">{fmt(pickProy)}</td>
+                    </tr>
+                  )
+                })}
+                {/* Total */}
+                <tr className="bg-gray-900 text-white font-semibold">
+                  <td className="px-3 py-2.5 sticky left-0 bg-gray-900">TOTAL</td>
+                  {Array.from({ length: devTabla.ultimo_mes }, (_, i) => i + 1).map(m => {
+                    const t = rows.reduce((s, r) => s + (segMode === 'und' ? (r.mesesUnd[m] ?? 0) : isCop ? (r.meses[m] ?? 0) : (r.mesesUsd[m] ?? 0)), 0)
+                    const f = segMode === 'und' ? fmtNum(t) : isCop ? fmtCOP(t) : fmtFull(t)
+                    return <td key={m} className="px-3 py-2.5 text-right tabular-nums">{t === 0 ? '—' : f}</td>
+                  })}
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    {segMode === 'und' ? fmtNum(totUds) : isCop ? fmtCOP(totCop) : fmtFull(totUsd)}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-amber-200">
+                    {segMode === 'und' ? fmtNum(proyUds) : isCop ? fmtCOP(proyCop) : fmtFull((proyCop / (ventaTotalCop || 1)) * (sellin?.kpi.usd_26 ?? 0))}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     )
@@ -1725,10 +2093,11 @@ export default function ExitoEjecucion() {
           </div>
         </div>
 
-        {/* Por cadena */}
+        {/* Por cadena — click en fila abre detalle por PDV */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-50">
             <h3 className="text-sm font-semibold text-gray-700">Por Cadena</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Click en cualquier fila para ver el detalle por PDV de esa cadena.</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -1748,8 +2117,11 @@ export default function ExitoEjecucion() {
                   const totalUds = inv.por_cadena.reduce((s, x) => s + x.uds, 0)
                   const pct = totalUds > 0 ? (c.uds / totalUds) * 100 : 0
                   const color = CADENA_COLORS[c.cadena ?? ''] ?? '#6b7280'
+                  const cad   = c.cadena ?? ''
                   return (
-                    <tr key={c.cadena ?? '—'} className="border-b border-gray-50">
+                    <tr key={cad || '—'}
+                        onClick={() => cad && openDetalleCadena(cad)}
+                        className={`border-b border-gray-50 ${cad ? 'cursor-pointer hover:bg-amber-50/60 transition-colors' : ''}`}>
                       <td className="px-4 py-2.5">
                         <span className="inline-flex items-center gap-2">
                           <div className="w-2 h-2 rounded-full" style={{ background: color }} />
@@ -1770,47 +2142,95 @@ export default function ExitoEjecucion() {
           </div>
         </div>
 
-        {/* Top 20 SKUs por unidades */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-gray-50">
-            <h3 className="text-sm font-semibold text-gray-700">Top 20 SKUs · por inventario</h3>
-            <p className="text-[11px] text-gray-400 mt-0.5">Click en cualquier fila para ver el detalle por PDV.</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
-                <tr>
-                  <th className="px-3 py-2 text-left">#</th>
-                  <th className="px-3 py-2 text-left">SKU</th>
-                  <th className="px-3 py-2 text-left">Descripción</th>
-                  <th className="px-3 py-2 text-left">Categoría</th>
-                  <th className="px-3 py-2 text-right">PDVs</th>
-                  <th className="px-3 py-2 text-right">Quiebres</th>
-                  <th className="px-3 py-2 text-right">Unidades</th>
-                </tr>
-              </thead>
-              <tbody>
-                {inv.top_skus.map((s, i) => (
-                  <tr key={s.sku ?? s.ean13 ?? i}
-                      onClick={() => openDetallePDVs(s.sku ?? s.plu ?? '', s.descripcion, 'todos')}
-                      className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} cursor-pointer hover:bg-amber-50/60 transition-colors`}>
-                    <td className="px-3 py-2 text-gray-400">{i + 1}</td>
-                    <td className="px-3 py-2 font-mono text-[11px] text-amber-700">{s.sku ?? '—'}</td>
-                    <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate">{s.descripcion}</td>
-                    <td className="px-3 py-2 text-gray-500 text-[11px]">{s.categoria ?? '—'}</td>
-                    <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{s.pdvs}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">
-                      {s.quiebres > 0
-                        ? <span className="text-red-600 font-semibold">{s.quiebres}</span>
-                        : <span className="text-gray-300">0</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right font-semibold text-gray-800 tabular-nums">{fmtNum(s.uds)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        {/* Top SKUs por inventario */}
+        {(() => {
+          type SortCol = 'pdvs' | 'quiebres' | 'uds'
+          const sortCol = invSortCol
+          const sortDir = invSortDir
+          const toggleSort = (col: SortCol) => {
+            if (col === sortCol) setInvSortDir(d => d === 'asc' ? 'desc' : 'asc')
+            else { setInvSortCol(col); setInvSortDir('desc') }
+          }
+          const SortArrow = ({ col }: { col: SortCol }) => {
+            const isActive = sortCol === col
+            const btn = (dir: 'desc' | 'asc', lbl: string) => (
+              <button
+                onClick={(e) => { e.stopPropagation(); setInvSortCol(col); setInvSortDir(dir) }}
+                className={`px-1.5 rounded text-[9px] font-bold leading-none py-0.5 border ${
+                  isActive && sortDir === dir
+                    ? 'bg-amber-500 text-white border-amber-500'
+                    : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50'
+                }`}
+                title={`Ordenar ${dir === 'desc' ? 'de mayor a menor' : 'de menor a mayor'}`}>
+                {lbl}
+              </button>
+            )
+            return (
+              <span className="inline-flex items-center gap-1 ml-1.5 align-middle">
+                {btn('desc', '▼ Mayor')}
+                {btn('asc',  '▲ Menor')}
+              </span>
+            )
+          }
+          const sortedSkus = [...inv.top_skus].sort((a, b) => {
+            const va = (a[sortCol] ?? 0) as number
+            const vb = (b[sortCol] ?? 0) as number
+            return sortDir === 'desc' ? vb - va : va - vb
+          })
+          return (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-50">
+                <h3 className="text-sm font-semibold text-gray-700">Top SKUs · por inventario</h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">Click en cualquier fila para ver el detalle por PDV.</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                    <tr>
+                      <th className="px-3 py-2 text-left">#</th>
+                      <th className="px-3 py-2 text-left">SKU</th>
+                      <th className="px-3 py-2 text-left">Descripción</th>
+                      <th className="px-3 py-2 text-left">Categoría</th>
+                      <th className="px-3 py-2 text-left">Subcategoría</th>
+                      <th className="px-3 py-2 text-right select-none cursor-pointer hover:text-amber-700"
+                          onClick={() => toggleSort('pdvs')} title="Ordenar por PDVs">
+                        PDVs<SortArrow col="pdvs" />
+                      </th>
+                      <th className="px-3 py-2 text-right select-none cursor-pointer hover:text-amber-700"
+                          onClick={() => toggleSort('quiebres')} title="Ordenar por quiebres">
+                        Quiebres<SortArrow col="quiebres" />
+                      </th>
+                      <th className="px-3 py-2 text-right select-none cursor-pointer hover:text-amber-700"
+                          onClick={() => toggleSort('uds')} title="Ordenar por unidades">
+                        Unidades<SortArrow col="uds" />
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedSkus.map((s, i) => (
+                      <tr key={s.sku ?? s.ean13 ?? i}
+                          onClick={() => openDetallePDVs(s.sku ?? s.plu ?? '', s.descripcion, 'todos')}
+                          className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} cursor-pointer hover:bg-amber-50/60 transition-colors`}>
+                        <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+                        <td className="px-3 py-2 font-mono text-[11px] text-amber-700">{s.sku ?? '—'}</td>
+                        <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate">{s.descripcion}</td>
+                        <td className="px-3 py-2 text-gray-500 text-[11px]">{s.categoria ?? '—'}</td>
+                        <td className="px-3 py-2 text-gray-500 text-[11px]">{s.subcategoria ?? '—'}</td>
+                        <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{s.pdvs}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">
+                          {s.quiebres > 0
+                            ? <span className="text-red-600 font-semibold">{s.quiebres}</span>
+                            : <span className="text-gray-300">0</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold text-gray-800 tabular-nums">{fmtNum(s.uds)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     )
   }
@@ -2157,10 +2577,18 @@ export default function ExitoEjecucion() {
           <td className="px-3 py-2 font-mono text-[11px] text-gray-700">{p.ean13}</td>
           <td className="px-3 py-2 font-mono text-[11px] text-gray-700">{p.plu}</td>
           <td className="px-3 py-2 font-mono text-[11px] text-gray-500">{p.codigo_borden}</td>
-          <td className="px-3 py-2 text-gray-800 max-w-[300px] truncate" title={p.descripcion ?? ''}>{p.descripcion}</td>
+          <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate" title={p.descripcion ?? ''}>{p.descripcion}</td>
           <td className="px-3 py-2 text-right tabular-nums text-gray-600">{p.gramos ?? '—'}</td>
+          {/* Costo Centurion */}
+          <td className="px-3 py-2 text-right tabular-nums text-gray-600 bg-purple-50/40">{fmtCop(p.costo_ant_cop)}</td>
+          <td className="px-3 py-2 text-right tabular-nums font-semibold text-purple-900 bg-purple-100/50">{fmtCop(p.costo_cop)}</td>
+          {/* Lista de Precios */}
           <td className="px-3 py-2 text-right tabular-nums text-gray-600 bg-orange-50/40">{fmtCop(p.precio_anterior_cop)}</td>
           <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-900 bg-orange-100/50">{fmtCop(p.precio_vigente_cop)}</td>
+          {/* PVP Sugerido */}
+          <td className="px-3 py-2 text-right tabular-nums text-gray-600 bg-cyan-50/40">{fmtCop(p.pvp_ant_cop)}</td>
+          <td className="px-3 py-2 text-right tabular-nums font-semibold text-cyan-900 bg-cyan-100/50">{fmtCop(p.pvp_sugerido_cop)}</td>
+          {/* Ajuste % */}
           <td className="px-3 py-2 text-right tabular-nums">
             {d === null
               ? <span className="text-gray-300">—</span>
@@ -2186,6 +2614,28 @@ export default function ExitoEjecucion() {
       return ds.length ? ds.reduce((s, x) => s + x, 0) / ds.length : 0
     })()
 
+    // Márgenes brutos (Lista de Precios vs Costo Centurion) — abril 2026
+    const margenLista = (() => {
+      const vals: number[] = []
+      for (const p of precios) {
+        if (p.precio_vigente_cop && p.costo_cop && p.precio_vigente_cop > 0) {
+          vals.push(((p.precio_vigente_cop - p.costo_cop) / p.precio_vigente_cop) * 100)
+        }
+      }
+      return vals.length ? vals.reduce((s, x) => s + x, 0) / vals.length : null
+    })()
+
+    // Márgen distribuidor (PVP Sugerido vs Lista de Precios)
+    const margenDist = (() => {
+      const vals: number[] = []
+      for (const p of precios) {
+        if (p.pvp_sugerido_cop && p.precio_vigente_cop && p.pvp_sugerido_cop > 0) {
+          vals.push(((p.pvp_sugerido_cop - p.precio_vigente_cop) / p.pvp_sugerido_cop) * 100)
+        }
+      }
+      return vals.length ? vals.reduce((s, x) => s + x, 0) / vals.length : null
+    })()
+
     return (
       <div className="space-y-5">
         {/* Header */}
@@ -2193,12 +2643,12 @@ export default function ExitoEjecucion() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
-                Lista de Precios · Grupo Éxito CO
+                Precios · Grupo Éxito CO
               </p>
               <h2 className="text-base font-bold text-gray-800 mt-0.5">
-                Precios vigentes por SKU
+                Costo Centurion · Lista de Precios · PVP Sugerido
               </h2>
-              <p className="text-xs text-gray-500 mt-1">Precios anteriores vs vigentes.</p>
+              <p className="text-xs text-gray-500 mt-1">Comparativo Marzo-26 vs Abril-26 por SKU.</p>
             </div>
           </div>
 
@@ -2214,30 +2664,16 @@ export default function ExitoEjecucion() {
               sub="Vigente vs anterior"
               highlight
             />
-            <KpiCard label="SKU con mayor subida" value={(() => {
-              let best = precios[0]; let bd = -Infinity
-              for (const p of precios) {
-                const d = delta(p.precio_anterior_cop, p.precio_vigente_cop) ?? -Infinity
-                if (d > bd) { bd = d; best = p }
-              }
-              return best?.descripcion?.slice(0, 22) ?? '—'
-            })()} sub={(() => {
-              const ds = precios.map(p => delta(p.precio_anterior_cop, p.precio_vigente_cop) ?? -Infinity)
-              const bd = Math.max(...ds)
-              return isFinite(bd) ? `+${bd.toFixed(1)}%` : '—'
-            })()} />
-            <KpiCard label="SKU con menor subida" value={(() => {
-              let low = precios[0]; let ld = Infinity
-              for (const p of precios) {
-                const d = delta(p.precio_anterior_cop, p.precio_vigente_cop) ?? Infinity
-                if (d < ld) { ld = d; low = p }
-              }
-              return low?.descripcion?.slice(0, 22) ?? '—'
-            })()} sub={(() => {
-              const ds = precios.map(p => delta(p.precio_anterior_cop, p.precio_vigente_cop) ?? Infinity)
-              const ld = Math.min(...ds)
-              return isFinite(ld) ? `${ld >= 0 ? '+' : ''}${ld.toFixed(1)}%` : '—'
-            })()} />
+            <KpiCard
+              label="Margen bruto Éxito"
+              value={margenLista !== null ? `${margenLista.toFixed(1)}%` : '—'}
+              sub="(Lista − Costo Centurion) / Lista"
+            />
+            <KpiCard
+              label="Margen distribuidor"
+              value={margenDist !== null ? `${margenDist.toFixed(1)}%` : '—'}
+              sub="(PVP − Lista) / PVP · Sugerido"
+            />
           </div>
         </div>
 
@@ -2245,23 +2681,44 @@ export default function ExitoEjecucion() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
-              <thead className="bg-cyan-50 text-cyan-800">
-                <tr>
-                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">EAN 13</th>
-                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">PLU</th>
-                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Código</th>
-                  <th className="px-3 py-2.5 text-left font-semibold uppercase tracking-wider">Descripción del Item</th>
-                  <th className="px-3 py-2.5 text-right font-semibold uppercase tracking-wider">GR</th>
-                  <th className="px-3 py-2.5 text-right font-semibold uppercase tracking-wider bg-orange-100 text-orange-800">Precio hasta MARZ-26</th>
-                  <th className="px-3 py-2.5 text-right font-semibold uppercase tracking-wider bg-orange-200 text-orange-900">Precio ABRIL-26 en adelante</th>
-                  <th className="px-3 py-2.5 text-right font-semibold uppercase tracking-wider">Ajuste %</th>
+              <thead className="text-[10px] uppercase tracking-wider">
+                {/* Grupos de columnas */}
+                <tr className="bg-gray-50 text-gray-500">
+                  <th colSpan={5}></th>
+                  <th colSpan={2} className="px-3 py-1.5 text-center font-bold text-purple-700 bg-purple-100 border-l-2 border-r-2 border-purple-200">
+                    💼 Costo Centurion
+                  </th>
+                  <th colSpan={2} className="px-3 py-1.5 text-center font-bold text-orange-800 bg-orange-100 border-r-2 border-orange-200">
+                    🏪 Lista de Precios (a Éxito)
+                  </th>
+                  <th colSpan={2} className="px-3 py-1.5 text-center font-bold text-cyan-800 bg-cyan-100 border-r-2 border-cyan-200">
+                    🛒 PVP Sugerido (al público)
+                  </th>
+                  <th></th>
+                </tr>
+                <tr className="bg-gray-50 text-gray-600">
+                  <th className="px-3 py-2 text-left font-semibold">EAN 13</th>
+                  <th className="px-3 py-2 text-left font-semibold">PLU</th>
+                  <th className="px-3 py-2 text-left font-semibold">Código</th>
+                  <th className="px-3 py-2 text-left font-semibold">Descripción del Item</th>
+                  <th className="px-3 py-2 text-right font-semibold">GR</th>
+                  {/* Centurion */}
+                  <th className="px-3 py-2 text-right font-semibold bg-purple-50 text-purple-800">Mar-26</th>
+                  <th className="px-3 py-2 text-right font-semibold bg-purple-100 text-purple-900">Abr-26</th>
+                  {/* Lista precios */}
+                  <th className="px-3 py-2 text-right font-semibold bg-orange-50 text-orange-800">Mar-26</th>
+                  <th className="px-3 py-2 text-right font-semibold bg-orange-100 text-orange-900">Abr-26</th>
+                  {/* PVP */}
+                  <th className="px-3 py-2 text-right font-semibold bg-cyan-50 text-cyan-800">Mar-26</th>
+                  <th className="px-3 py-2 text-right font-semibold bg-cyan-100 text-cyan-900">Abr-26</th>
+                  <th className="px-3 py-2 text-right font-semibold">Ajuste %</th>
                 </tr>
               </thead>
               <tbody>
                 {regulares.map((p, i) => renderRow(p, i))}
                 {innovaciones.length > 0 && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold text-emerald-700 bg-emerald-100/60 border-t border-emerald-200">
+                    <td colSpan={12} className="px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold text-emerald-700 bg-emerald-100/60 border-t border-emerald-200">
                       🆕 Innovaciones · Extracontenido Parmesano
                     </td>
                   </tr>
@@ -2269,7 +2726,7 @@ export default function ExitoEjecucion() {
                 {innovaciones.map((p, i) => renderRow(p, i + regulares.length))}
                 {ofertas.length > 0 && (
                   <tr>
-                    <td colSpan={8} className="px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold text-red-700 bg-red-100/50 border-t border-red-200">
+                    <td colSpan={12} className="px-3 py-1.5 text-[10px] uppercase tracking-widest font-semibold text-red-700 bg-red-100/50 border-t border-red-200">
                       🔖 Ofertas
                     </td>
                   </tr>
@@ -2279,7 +2736,9 @@ export default function ExitoEjecucion() {
             </table>
           </div>
           <p className="text-[10px] text-gray-400 px-4 py-2 border-t border-gray-100 bg-gray-50">
-            Precios en COP (pesos colombianos). Innovaciones (fondo verde) · Ofertas (fondo rosado). Columna "Ajuste %" = variación entre precio anterior y vigente.
+            Precios en COP (pesos colombianos). <b className="text-purple-700">Costo Centurion</b> = costo del importador ·
+            <b className="text-orange-700"> Lista de Precios</b> = venta a Grupo Éxito ·
+            <b className="text-cyan-700"> PVP Sugerido</b> = precio al público. Innovaciones (fondo verde) · Ofertas (fondo rosado). "Ajuste %" = variación de la lista de precios.
           </p>
         </div>
       </div>
@@ -2331,7 +2790,7 @@ export default function ExitoEjecucion() {
         {/* Header */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
-            Sell-In · Grupo Éxito CO · FY 2026
+            Sell-In · Grupo Éxito CO · YTD 2026
           </p>
           <h2 className="text-base font-bold text-gray-800 mt-0.5">
             Facturación a Grupo Éxito ({useUsd ? 'USD' : 'COP'})
@@ -2344,13 +2803,13 @@ export default function ExitoEjecucion() {
         {/* KPIs */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KpiCard
-            label={`Venta FY 2026 (${useUsd ? 'USD' : 'COP'})`}
+            label={`Venta YTD 2026 (${useUsd ? 'USD' : 'COP'})`}
             value={fmtVal(ventaCur)}
             sub={kpi.ultimo_mes > 0 ? `Hasta mes ${kpi.ultimo_mes}` : 'Sin dato'}
             highlight
           />
           <KpiCard
-            label="Unidades FY 2026"
+            label="Unidades YTD 2026"
             value={fmtNum(kpi.uds_26)}
             sub={kpi.delta_unidades !== null ? `${kpi.delta_unidades > 0 ? '+' : ''}${kpi.delta_unidades.toFixed(1)}% vs 2025` : 'Sin comparativo'}
           />
@@ -2478,17 +2937,21 @@ export default function ExitoEjecucion() {
                 <p className="text-[11px] text-gray-400">Evolución del margen · 2025 vs 2026</p>
               </div>
               <div className="flex items-center gap-3 text-[11px]">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-violet-500"/> 2026</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-violet-500"/> 2026</span>
               </div>
             </div>
             <div className="h-[220px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={monthlyPlus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={monthlyPlus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
                   <defs>
-                    <linearGradient id="gradMargen26" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.35}/>
-                      <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0}/>
+                    <linearGradient id="gradMargen25Bar" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
+                      <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.75}/>
+                    </linearGradient>
+                    <linearGradient id="gradMargen26Bar" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#a78bfa" stopOpacity={0.85}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -2496,12 +2959,20 @@ export default function ExitoEjecucion() {
                   <YAxis tickFormatter={(v: any) => `${Math.round(Number(v))}%`} tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} axisLine={false} tickLine={false} />
                   <Tooltip
                     formatter={(v: any) => v === null ? '—' : `${Number(v).toFixed(1)}%`}
+                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Line dataKey="margen_25_pct" name="2025" type="monotone" stroke="#94a3b8" strokeWidth={2} dot={false} activeDot={{ r: 4 }} connectNulls />
-                  <Area dataKey="margen_26_pct" name="2026" type="monotone" stroke="#8b5cf6" strokeWidth={2.5}
-                    fill="url(#gradMargen26)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#8b5cf6' }} connectNulls />
-                </AreaChart>
+                  <Bar dataKey="margen_25_pct" name="2025" fill="url(#gradMargen25Bar)" radius={[8,8,0,0]} maxBarSize={28}>
+                    <LabelList dataKey="margen_25_pct" position="top"
+                      formatter={(v: any) => v === null || v === undefined ? '' : `${Number(v).toFixed(0)}%`}
+                      style={{ fontSize: 9, fill: '#64748b', fontWeight: 600 }} />
+                  </Bar>
+                  <Bar dataKey="margen_26_pct" name="2026" fill="url(#gradMargen26Bar)" radius={[8,8,0,0]} maxBarSize={28}>
+                    <LabelList dataKey="margen_26_pct" position="top"
+                      formatter={(v: any) => v === null || v === undefined ? '' : `${Number(v).toFixed(0)}%`}
+                      style={{ fontSize: 9, fill: '#5b21b6', fontWeight: 700 }} />
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
@@ -2510,7 +2981,7 @@ export default function ExitoEjecucion() {
         {/* Distribución por subcategoría */}
         {porSubcat.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <h3 className="text-sm font-bold text-gray-800 mb-4">Sell-In por Subcategoría — FY 2026</h3>
+            <h3 className="text-sm font-bold text-gray-800 mb-4">Sell-In por Subcategoría — YTD 2026</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 text-gray-600">
@@ -2546,7 +3017,7 @@ export default function ExitoEjecucion() {
 
         {/* Top SKUs */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Top SKUs por Venta — FY 2026</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-4">Top SKUs por Venta — YTD 2026</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead className="bg-gray-50 text-gray-600">
@@ -2554,6 +3025,7 @@ export default function ExitoEjecucion() {
                   <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">#</th>
                   <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Descripción</th>
                   <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Categoría</th>
+                  <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Subcategoría</th>
                   <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Unidades</th>
                   <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Venta {useUsd ? 'USD' : 'COP'}</th>
                   <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Utilidad COP</th>
@@ -2566,6 +3038,7 @@ export default function ExitoEjecucion() {
                     <td className="px-3 py-2 text-gray-400 tabular-nums">{i + 1}</td>
                     <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate" title={s.descripcion ?? ''}>{s.descripcion ?? s.sku}</td>
                     <td className="px-3 py-2 text-gray-500">{s.categoria ?? '—'}</td>
+                    <td className="px-3 py-2 text-gray-500">{s.subcategoria ?? '—'}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmtNum(s.uds)}</td>
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{useUsd ? fmtFull(s.usd) : fmtCOP(s.cop)}</td>
                     <td className="px-3 py-2 text-right tabular-nums">{fmtCOP(s.ut)}</td>
@@ -2579,39 +3052,6 @@ export default function ExitoEjecucion() {
             <p className="text-[10px] text-gray-400 mt-2">Mostrando 15 de {top_skus.length} SKUs con Sell-In.</p>
           )}
         </div>
-
-        {/* Órdenes de compra recientes */}
-        {ocs.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Órdenes de Compra Recientes</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-gray-600">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">OC</th>
-                    <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Mes</th>
-                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider"># Líneas</th>
-                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Unidades</th>
-                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Venta COP</th>
-                    <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Utilidad COP</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ocs.map((o, i) => (
-                    <tr key={`${o.orden_compra}-${o.mes}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                      <td className="px-3 py-2 font-mono text-[11px] text-gray-700">{o.orden_compra}</td>
-                      <td className="px-3 py-2 text-gray-500">{MN12[o.mes]}-{String(o.ano).slice(-2)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{o.n_lineas}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{fmtNum(o.uds)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmtCOP(o.cop)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{fmtCOP(o.ut)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
       </div>
     )
   }
@@ -2871,7 +3311,8 @@ export default function ExitoEjecucion() {
       case 'calidad':       return Calidad()
       case 'evolucion':     return Evolucion()
       case 'pareto':        return Pareto()
-      case 'seguimiento':   return Seguimiento()
+      case 'devoluciones':  return Devoluciones()
+      // 'seguimiento' fue integrado en Evolución Ventas (2026-07-11)
       case 'cobertura':     return Cobertura()
       case 'inventarios':   return Inventarios()
       case 'innovaciones':  return Innovaciones()
@@ -2899,50 +3340,120 @@ export default function ExitoEjecucion() {
 
       {/* Filtros globales */}
       <div className="px-6 pt-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <div className="flex items-end gap-x-4 gap-y-3 flex-wrap text-xs">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4"
+             style={{ ['--acc' as any]: '#f59e0b', ['--bg' as any]: '#ffffff', ['--surface' as any]: '#ffffff',
+                      ['--border' as any]: '#e5e7eb', ['--t1' as any]: '#111827', ['--t2' as any]: '#374151', ['--t3' as any]: '#6b7280' }}>
 
-            {/* Cadena — desplegable */}
-            <div className="flex flex-col gap-1 min-w-[220px]">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">Cadena</span>
-              <select
-                value={cadenaFilter}
-                onChange={e => { setCadenaFilter(e.target.value); saveFilter('cadena', e.target.value) }}
-                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400 font-medium">
-                <option value="">Todas las cadenas</option>
-                {Array.from(new Set(cadenas)).sort().map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Moneda — toggle COP/USD */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">Moneda</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {(['cop','usd'] as const).map(m => (
-                  <button key={m}
-                    onClick={() => { setMoneda(m); saveFilter('moneda', m) }}
-                    className={`px-4 py-1.5 font-semibold transition-colors ${moneda === m ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {m.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Reset */}
-            {(cadenaFilter || moneda !== 'cop') && (
+          {/* Barra top: resumen selección + toggle avanzados + moneda + reset */}
+          <div className="flex items-center flex-wrap gap-3 justify-between">
+            <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={() => {
-                  setCadenaFilter(''); setMoneda('cop')
-                  ;['cadena','moneda'].forEach(k => localStorage.removeItem(`${storageKey}-${k}`))
-                }}
-                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
-                ↺ Reset
+                onClick={() => setShowFiltros(v => !v)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg">
+                <SlidersHorizontal size={12}/> Filtros {showFiltros ? '▲' : '▼'}
               </button>
-            )}
+              {/* Chips resumen */}
+              {[
+                { label: 'Cadena',       items: cadenasSel, onClear: () => setCadenasSel([]) },
+                { label: 'Subcategoría', items: subcatSel,  onClear: () => setSubcatSel([])  },
+                { label: 'Depto.',       items: deptoSel,   onClear: () => setDeptoSel([])   },
+                { label: 'Ciudad',       items: ciudadSel,  onClear: () => setCiudadSel([])  },
+                { label: 'SKU',          items: skuSel,     onClear: () => setSkuSel([])     },
+              ].filter(c => c.items.length > 0).map(c => (
+                <span key={c.label}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200 rounded-full px-2.5 py-1">
+                  <span className="text-amber-500">{c.label}:</span>
+                  <span>{c.items.length <= 2 ? c.items.join(', ') : `${c.items.length} sel.`}</span>
+                  <button onClick={c.onClear} className="ml-0.5 rounded-full hover:bg-amber-100 p-0.5" aria-label={`Limpiar ${c.label}`}>
+                    <X size={10}/>
+                  </button>
+                </span>
+              ))}
+            </div>
 
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Moneda */}
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] uppercase tracking-widest text-gray-400">Moneda</span>
+                <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                  {(['cop','usd'] as const).map(m => (
+                    <button key={m}
+                      onClick={() => { setMoneda(m); saveFilter('moneda', m) }}
+                      className={`px-4 py-1.5 text-xs font-semibold transition-colors ${moneda === m ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                      {m.toUpperCase()}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Reset global */}
+              {(cadenasSel.length + subcatSel.length + deptoSel.length + ciudadSel.length + skuSel.length > 0 || moneda !== 'cop') && (
+                <button
+                  onClick={() => {
+                    setCadenasSel([]); setSubcatSel([]); setDeptoSel([]); setCiudadSel([]); setSkuSel([])
+                    setMoneda('cop')
+                    localStorage.removeItem(`${storageKey}-moneda`)
+                  }}
+                  className="self-end px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
+                  ↺ Reset
+                </button>
+              )}
+            </div>
           </div>
+
+          {/* Sección expandible con los 5 multi-select */}
+          {showFiltros && (
+            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+              <MultiSelect
+                label="Cadena"
+                placeholder="Todas"
+                selectAllLabel="Todas las cadenas"
+                value={cadenasSel}
+                onChange={setCadenasSel}
+                options={(filtrosOpts?.cadenas ?? []).map(o => ({ value: o.value, label: o.value }))}
+              />
+              <MultiSelect
+                label="Subcategoría"
+                placeholder="Todas"
+                selectAllLabel="Todas las subcategorías"
+                value={subcatSel}
+                onChange={setSubcatSel}
+                options={(filtrosOpts?.subcategorias ?? []).map(o => ({ value: o.value, label: o.value }))}
+              />
+              <MultiSelect
+                label="Departamento"
+                placeholder="Todos"
+                selectAllLabel="Todos los departamentos"
+                value={deptoSel}
+                onChange={setDeptoSel}
+                options={(filtrosOpts?.departamentos ?? []).map(o => ({ value: o.value, label: o.value }))}
+              />
+              <MultiSelect
+                label="Ciudad"
+                placeholder="Todas"
+                selectAllLabel="Todas las ciudades"
+                value={ciudadSel}
+                onChange={setCiudadSel}
+                options={(filtrosOpts?.ciudades ?? [])
+                  // Si hay depto seleccionado, restringir la lista de ciudades a esos deptos
+                  .filter(o => deptoSel.length === 0 || (o.departamento && deptoSel.includes(o.departamento)))
+                  .map(o => ({ value: o.value, label: o.value }))}
+              />
+              <MultiSelect
+                label="SKU / Producto"
+                placeholder="Todos"
+                selectAllLabel="Todos los SKUs"
+                value={skuSel}
+                onChange={setSkuSel}
+                options={(filtrosOpts?.skus ?? [])
+                  // Restringir por subcategoría si hay seleccionadas
+                  .filter(o => subcatSel.length === 0 || (o.subcategoria && subcatSel.includes(o.subcategoria)))
+                  .map(o => ({
+                    value: o.value,
+                    label: o.descripcion ? `${o.value} · ${o.descripcion.slice(0, 32)}` : o.value,
+                  }))}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -2977,20 +3488,29 @@ export default function ExitoEjecucion() {
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${
-                    calidadDetalle.bucket === 'menos_de_3'   ? 'bg-red-100 text-red-700' :
-                    calidadDetalle.bucket === 'entre_3_y_10' ? 'bg-amber-100 text-amber-700' :
-                    calidadDetalle.bucket === 'mayor_a_10'   ? 'bg-emerald-100 text-emerald-700' :
-                                                              'bg-blue-100 text-blue-700'
-                  }`}>
-                    {calidadDetalle.bucket === 'menos_de_3'   ? '🚨 Stock < 3' :
-                     calidadDetalle.bucket === 'entre_3_y_10' ? '⚠️ Stock 3–10' :
-                     calidadDetalle.bucket === 'mayor_a_10'   ? '✓ Stock > 10' :
-                                                                '📦 Todos'}
-                  </span>
-                  <span className="text-[10px] font-mono text-gray-400">SKU {calidadDetalle.sku}</span>
-                </div>
+                {calidadDetalle.sku.startsWith('Cadena: ') ? (
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-blue-100 text-blue-700">
+                      🏬 Cadena completa
+                    </span>
+                    <span className="text-[10px] font-mono text-gray-400">{calidadDetalle.sku.replace('Cadena: ', '')}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+                      calidadDetalle.bucket === 'menos_de_3'   ? 'bg-red-100 text-red-700' :
+                      calidadDetalle.bucket === 'entre_3_y_10' ? 'bg-amber-100 text-amber-700' :
+                      calidadDetalle.bucket === 'mayor_a_10'   ? 'bg-emerald-100 text-emerald-700' :
+                                                                'bg-blue-100 text-blue-700'
+                    }`}>
+                      {calidadDetalle.bucket === 'menos_de_3'   ? '🚨 Stock < 3' :
+                       calidadDetalle.bucket === 'entre_3_y_10' ? '⚠️ Stock 3–10' :
+                       calidadDetalle.bucket === 'mayor_a_10'   ? '✓ Stock > 10' :
+                                                                  '📦 Todos'}
+                    </span>
+                    <span className="text-[10px] font-mono text-gray-400">SKU {calidadDetalle.sku}</span>
+                  </div>
+                )}
                 <h3 className="text-base font-bold text-gray-800">{calidadDetalle.descripcion ?? calidadDetalle.sku}</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
                   {calidadDetalle.loading ? 'Cargando...' : `${calidadDetalle.pdvs.length} PDVs · Snapshot ${calidad?.fecha ?? inv?.fecha ?? ''}`}

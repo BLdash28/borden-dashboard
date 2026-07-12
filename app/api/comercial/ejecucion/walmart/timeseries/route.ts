@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
-import { CADENA_NORM_SQL, cadenaWhereSQL } from '@/lib/db/walmart-cadena'
+import { CADENA_NORM_SQL } from '@/lib/db/walmart-cadena'
+import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
 
 export const revalidate = 300
 
@@ -9,15 +10,14 @@ const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov'
 
 export async function GET(req: NextRequest) {
   try {
-    const sp        = req.nextUrl.searchParams
-    const pais      = sp.get('pais')         ?? 'CR'
-    const categoria = sp.get('categoria')    ?? ''
-    const subcat    = sp.get('subcategoria') ?? ''
-    const cadena    = sp.get('cadena')       ?? ''
-    const paisSafe  = pais.replace(/'/g,"''")
-    const catFilter    = categoria ? `AND categoria    = '${categoria.replace(/'/g,"''")}'` : ''
-    const subcatFilter = subcat    ? `AND subcategoria = '${subcat.replace(/'/g,"''")}'`    : ''
-    const cadenaFilter = cadenaWhereSQL(cadena)
+    const sp   = req.nextUrl.searchParams
+    const pais = sp.get('pais') ?? 'CR'
+    const f    = parseWalmartFilters(req)
+    const w    = buildWalmartWhere(f, { startAt: 2 })
+    // Vista "por cadena": mostrar todas aunque haya filtro de cadena
+    const wSinCad = buildWalmartWhere({ ...f, cadenas: [] }, { startAt: 2 })
+    // Vista "por categoria": mostrar todas aunque haya filtro de categoria
+    const wSinCat = buildWalmartWhere({ ...f, categoria: '', categorias: [] }, { startAt: 2 })
 
     const [monthlyR, byCadenaR, byCatR, baselineR] = await Promise.all([
       // Overall monthly 2024/2025/2026
@@ -28,37 +28,37 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(ventas_valor)::numeric,    2) AS valor,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}' ${catFilter} ${subcatFilter} ${cadenaFilter}
+        WHERE pais = $1 AND ${w.where}
           AND fecha >= '2024-01-01' AND fecha < '2027-01-01'
         GROUP BY 1, 2
         ORDER BY 1, 2
-      `),
-      // Monthly by cadena (2026 only)
+      `, [pais, ...w.params]),
+      // Monthly by cadena (2026 only) — no filtramos por cadena aquí
       pool.query(`
         SELECT
           ${CADENA_NORM_SQL} AS cadena,
           EXTRACT(MONTH FROM fecha)::int AS mes,
           ROUND(SUM(ventas_valor)::numeric, 2) AS valor
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}'
+        WHERE pais = $1
           AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
-          ${catFilter} ${subcatFilter}
+          AND ${wSinCad.where}
         GROUP BY ${CADENA_NORM_SQL}, mes
         ORDER BY ${CADENA_NORM_SQL}, mes
-      `),
-      // Monthly by categoria (2026 only)
+      `, [pais, ...wSinCad.params]),
+      // Monthly by categoria (2026 only) — no filtramos por categoria aquí
       pool.query(`
         SELECT
           categoria,
           EXTRACT(MONTH FROM fecha)::int AS mes,
           ROUND(SUM(ventas_valor)::numeric, 2) AS valor
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}'
+        WHERE pais = $1
           AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
-          ${cadenaFilter}
+          AND ${wSinCat.where}
         GROUP BY categoria, mes
         ORDER BY categoria, mes
-      `),
+      `, [pais, ...wSinCat.params]),
       // Baseline: avg monthly value for months ≥$5K from Oct 2025 onwards
       pool.query(`
         WITH monthly AS (
@@ -67,9 +67,9 @@ export async function GET(req: NextRequest) {
             SUM(ventas_valor)    AS valor_mes,
             SUM(ventas_unidades) AS uni_mes
           FROM fact_ventas_walmart
-          WHERE pais = '${paisSafe}'
+          WHERE pais = $1
             AND fecha >= '2025-10-01' AND fecha < '2027-01-01'
-            ${catFilter} ${subcatFilter} ${cadenaFilter}
+            AND ${w.where}
           GROUP BY 1
           HAVING SUM(ventas_valor) >= 5000
         )
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
           COALESCE(AVG(valor_mes), 0) AS avg_val,
           COALESCE(AVG(uni_mes),   0) AS avg_uni
         FROM monthly
-      `),
+      `, [pais, ...w.params]),
     ])
 
     const baseline_val = parseFloat(baselineR.rows[0]?.avg_val ?? '0') || 0

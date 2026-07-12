@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { parseExitoFilters, buildExitoWhere } from '@/lib/api/exito-filtros'
 
 export const revalidate = 300
 
@@ -8,12 +9,19 @@ const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov'
 
 export async function GET(req: NextRequest) {
   try {
-    const categoria = req.nextUrl.searchParams.get('categoria') ?? ''
-    const cadena    = req.nextUrl.searchParams.get('cadena') ?? ''
-    const catFilter = categoria ? `AND categoria = '${categoria.replace(/'/g, "''")}'` : ''
-    const cadFilter = cadena    ? `AND cadena    = '${cadena.replace(/'/g, "''")}'`    : ''
+    const f = parseExitoFilters(req)
+
+    // WHERE base con filtros parametrizados
+    const wa = buildExitoWhere(f, { startAt: 1 })
+    const wb = buildExitoWhere(f, { startAt: 1 })     // clon para la 2ª query
+    const wc = buildExitoWhere(f, { startAt: 1, includeCategoria: false })  // cadena_R: no filtrar por cadena (queremos ver todas)
+    // Nota: para la vista "por cadena" queremos ver todas las cadenas aunque haya filtro,
+    // así el usuario puede comparar. Por eso construimos una versión sin cadena.
+    const fSinCadena = { ...f, cadenas: [] as string[] }
+    const wcad = buildExitoWhere(fSinCadena, { startAt: 1 })
 
     const [ytdR, cadenaR, catR, monthlyR, devolR] = await Promise.all([
+      // YTD 2026 vs 2025 (con todos los filtros aplicados)
       pool.query(`
         WITH cur AS (
           SELECT
@@ -23,8 +31,7 @@ export async function GET(req: NextRequest) {
             MAX(ano*10000 + mes*100 + dia) AS ultima_fecha_n,
             MAX(mes) AS ultimo_mes
           FROM fact_ventas_exito
-          WHERE pais = 'CO' AND ano = 2026
-            ${catFilter} ${cadFilter}
+          WHERE pais='CO' AND ano=2026 AND ${wa.where}
         ),
         prev AS (
           SELECT
@@ -32,9 +39,9 @@ export async function GET(req: NextRequest) {
             SUM(venta_valorcop)  AS valor_cop,
             SUM(ventas_unidades) AS unidades
           FROM fact_ventas_exito
-          WHERE pais = 'CO' AND ano = 2025
+          WHERE pais='CO' AND ano=2025
             AND mes <= (SELECT COALESCE(ultimo_mes, 12) FROM cur)
-            ${catFilter} ${cadFilter}
+            AND ${wa.where}
         )
         SELECT
           COALESCE(cur.valor, 0)      AS ytd_2026,
@@ -49,7 +56,9 @@ export async function GET(req: NextRequest) {
                THEN ROUND(((cur.valor - prev.valor) / prev.valor * 100)::numeric, 1)
                ELSE NULL END AS delta_ytd
         FROM cur, prev
-      `),
+      `, wa.params),
+
+      // por cadena — ignoramos el filtro de cadena para mostrar todas
       pool.query(`
         SELECT cadena,
           SUM(CASE WHEN ano = 2026 THEN ventas_valorusd ELSE 0 END) AS valor_2026,
@@ -58,48 +67,59 @@ export async function GET(req: NextRequest) {
           SUM(CASE WHEN ano = 2025 THEN ventas_valorusd ELSE 0 END) AS valor_2025,
           SUM(CASE WHEN ano = 2025 THEN venta_valorcop  ELSE 0 END) AS valor_2025_cop
         FROM fact_ventas_exito
-        WHERE pais = 'CO' AND ano IN (2025, 2026)
+        WHERE pais='CO' AND ano IN (2025, 2026)
           AND cadena IS NOT NULL AND cadena <> ''
-          ${catFilter}
+          AND ${wcad.where}
         GROUP BY cadena
         ORDER BY valor_2026 DESC
-      `),
+      `, wcad.params),
+
+      // por categoría (siempre útil aunque haya filtro)
       pool.query(`
         SELECT categoria,
           SUM(ventas_valorusd) AS valor_2026,
           SUM(venta_valorcop)  AS valor_2026_cop,
           SUM(ventas_unidades) AS uni_2026
         FROM fact_ventas_exito
-        WHERE pais = 'CO' AND ano = 2026
+        WHERE pais='CO' AND ano=2026
           AND categoria IS NOT NULL AND categoria <> ''
-          ${cadFilter}
+          AND ${wb.where}
         GROUP BY categoria
         ORDER BY valor_2026 DESC
-      `),
+      `, wb.params),
+
+      // monthly (con filtros aplicados)
       pool.query(`
         SELECT ano, mes,
           ROUND(SUM(ventas_valorusd)::numeric, 2) AS valor,
           ROUND(SUM(venta_valorcop)::numeric, 0)  AS valor_cop,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
         FROM fact_ventas_exito
-        WHERE pais = 'CO' AND ano IN (2025, 2026)
-          ${catFilter} ${cadFilter}
+        WHERE pais='CO' AND ano IN (2025, 2026) AND ${wa.where}
         GROUP BY ano, mes
         ORDER BY ano, mes
-      `),
+      `, wa.params),
+
       // Devoluciones mensuales — join con precios_exito para estimar valor COP
-      pool.query(`
-        SELECT d.ano, d.mes,
-          ROUND(SUM(d.unidades)::numeric, 0) AS uds,
-          ROUND(SUM(d.unidades * COALESCE(p.precio_vigente_cop, 0))::numeric, 0) AS valor_cop
-        FROM devoluciones_exito d
-        LEFT JOIN precios_exito p
-          ON (p.ean13 = d.codigo_barras OR p.sku = d.sku)
-         AND p.pais='CO' AND p.cliente='GRUPO ÉXITO'
-        WHERE d.pais='CO' AND d.ano IN (2025, 2026)
-          ${cadFilter ? cadFilter.replace(/cadena/g, 'd.cadena') : ''}
-        GROUP BY d.ano, d.mes ORDER BY d.ano, d.mes
-      `),
+      // (aplicamos solo filtro de cadena porque devoluciones_exito tiene subset de columnas)
+      (() => {
+        const df = {
+          ...f,
+          departamentos: [] as string[], ciudades: [] as string[], skus: [] as string[],
+        }
+        const wd = buildExitoWhere(df, { alias: 'd', startAt: 1 })
+        return pool.query(`
+          SELECT d.ano, d.mes,
+            ROUND(SUM(d.unidades)::numeric, 0) AS uds,
+            ROUND(SUM(d.unidades * COALESCE(p.precio_vigente_cop, 0))::numeric, 0) AS valor_cop
+          FROM devoluciones_exito d
+          LEFT JOIN precios_exito p
+            ON (p.ean13 = d.codigo_barras OR p.sku = d.sku)
+           AND p.pais='CO' AND p.cliente='GRUPO ÉXITO'
+          WHERE d.pais='CO' AND d.ano IN (2025, 2026) AND ${wd.where}
+          GROUP BY d.ano, d.mes ORDER BY d.ano, d.mes
+        `, wd.params)
+      })(),
     ])
 
     const row = ytdR.rows[0] ?? {}

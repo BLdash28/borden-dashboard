@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { parseExitoFilters, buildExitoWhere } from '@/lib/api/exito-filtros'
 import PDFDocument from 'pdfkit'
 import { readFileSync } from 'fs'
 import path from 'path'
@@ -33,10 +34,12 @@ const fmtNum = (v: number) => Math.round(v).toLocaleString('es-CO')
 
 export async function GET(req: NextRequest) {
   try {
-    const cadena = req.nextUrl.searchParams.get('cadena') ?? ''
+    const filt   = parseExitoFilters(req)
     const moneda = (req.nextUrl.searchParams.get('moneda') ?? 'cop').toLowerCase()
 
-    const cadFilter = cadena ? `AND cadena = '${cadena.replace(/'/g, "''")}'` : ''
+    const w  = buildExitoWhere(filt, { startAt: 1 })
+    // Para el listado "por cadena" mostramos todas independientemente del filtro
+    const wCad = buildExitoWhere({ ...filt, cadenas: [] }, { startAt: 1 })
 
     // Query datos
     const [kpiR, cadenaR, catR, monthlyR, invR] = await Promise.all([
@@ -48,7 +51,7 @@ export async function GET(req: NextRequest) {
                  MAX(mes) AS ultimo_mes,
                  MAX(ano*10000 + mes*100 + dia) AS ult_n
           FROM fact_ventas_exito
-          WHERE pais='CO' AND ano=2026 ${cadFilter}
+          WHERE pais='CO' AND ano=2026 AND ${w.where}
         ),
         prev AS (
           SELECT SUM(ventas_valorusd) AS usd,
@@ -56,14 +59,14 @@ export async function GET(req: NextRequest) {
                  SUM(ventas_unidades) AS uds
           FROM fact_ventas_exito
           WHERE pais='CO' AND ano=2025
-            AND mes <= (SELECT COALESCE(ultimo_mes,12) FROM cur) ${cadFilter}
+            AND mes <= (SELECT COALESCE(ultimo_mes,12) FROM cur) AND ${w.where}
         )
         SELECT
           COALESCE(cur.usd,0) AS usd_26, COALESCE(cur.cop,0) AS cop_26, COALESCE(cur.uds,0) AS uds_26,
           COALESCE(prev.usd,0) AS usd_25, COALESCE(prev.cop,0) AS cop_25, COALESCE(prev.uds,0) AS uds_25,
           cur.ultimo_mes, cur.ult_n
         FROM cur, prev
-      `),
+      `, w.params),
       pool.query(`
         SELECT cadena,
           SUM(CASE WHEN ano=2026 THEN venta_valorcop  ELSE 0 END) AS cop_26,
@@ -72,26 +75,28 @@ export async function GET(req: NextRequest) {
           SUM(CASE WHEN ano=2025 THEN venta_valorcop  ELSE 0 END) AS cop_25
         FROM fact_ventas_exito
         WHERE pais='CO' AND ano IN (2025, 2026) AND cadena IS NOT NULL AND cadena <> ''
+          AND ${wCad.where}
         GROUP BY cadena ORDER BY cop_26 DESC
-      `),
+      `, wCad.params),
       pool.query(`
         SELECT categoria,
           SUM(venta_valorcop)  AS cop_26,
           SUM(ventas_valorusd) AS usd_26,
           SUM(ventas_unidades) AS uds_26
         FROM fact_ventas_exito
-        WHERE pais='CO' AND ano=2026 AND categoria IS NOT NULL AND categoria <> '' ${cadFilter}
+        WHERE pais='CO' AND ano=2026 AND categoria IS NOT NULL AND categoria <> ''
+          AND ${w.where}
         GROUP BY categoria ORDER BY cop_26 DESC
-      `),
+      `, w.params),
       pool.query(`
         SELECT ano, mes,
           SUM(venta_valorcop)  AS cop,
           SUM(ventas_valorusd) AS usd,
           SUM(ventas_unidades) AS uds
         FROM fact_ventas_exito
-        WHERE pais='CO' AND ano IN (2025, 2026) ${cadFilter}
+        WHERE pais='CO' AND ano IN (2025, 2026) AND ${w.where}
         GROUP BY ano, mes ORDER BY ano, mes
-      `),
+      `, w.params),
       pool.query(`
         SELECT COUNT(DISTINCT punto_venta) AS pdvs,
                SUM(inv_unidades)  AS uds,
@@ -141,7 +146,7 @@ export async function GET(req: NextRequest) {
     doc.font('Helvetica-Bold').fontSize(20).fillColor(GRAY_1)
        .text('Resumen Ejecutivo · Grupo Éxito Colombia', M + 130, M + 4)
     doc.font('Helvetica').fontSize(10).fillColor(GRAY_2)
-       .text(`Sell-Out · FY 2026${cadena ? ` · ${cadena}` : ''} · Moneda: ${moneda.toUpperCase()}`, M + 130, M + 30)
+       .text(`Sell-Out · FY 2026${filt.cadenas.length ? ` · ${filt.cadenas.length === 1 ? filt.cadenas[0] : `${filt.cadenas.length} cadenas`}` : ''} · Moneda: ${moneda.toUpperCase()}`, M + 130, M + 30)
     doc.font('Helvetica').fontSize(9).fillColor(GRAY_3)
        .text(`Última carga: ${ultima_fecha} · Generado: ${new Date().toISOString().slice(0,10)}`,
              PAGE_W - M - 220, M + 8, { width: 220, align: 'right' })

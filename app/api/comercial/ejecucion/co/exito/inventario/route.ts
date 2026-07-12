@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { parseExitoFilters } from '@/lib/api/exito-filtros'
 
 export const revalidate = 300
 
@@ -20,7 +21,14 @@ export const revalidate = 300
  */
 export async function GET(req: NextRequest) {
   try {
-    const cadena = req.nextUrl.searchParams.get('cadena') ?? ''
+    const filt   = parseExitoFilters(req)
+    // Compat: si viene un solo valor, se comporta como cadena legacy
+    const cadena = filt.cadenas.length === 1 ? filt.cadenas[0] : ''
+    // Si vienen múltiples cadenas: usar el IN() sanitizado en cadFilter
+    const escapeSql = (s: string) => s.replace(/'/g, "''")
+    const cadenaMulti = filt.cadenas.length > 1
+      ? filt.cadenas.map(c => `'${escapeSql(c)}'`).join(',')
+      : ''
     const fechaQ = req.nextUrl.searchParams.get('fecha')  ?? ''
 
     // Última fecha
@@ -34,8 +42,12 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ fecha: null, kpi: null, por_cadena: [], top_skus: [], detalle: [] })
     }
 
-    const cadFilter = cadena ? `AND cadena = '${cadena.replace(/'/g, "''")}'` : ''
-    const cadFilterInv = cadena ? `AND i.cadena = '${cadena.replace(/'/g, "''")}'` : ''
+    const cadFilter = cadena
+      ? `AND cadena = '${escapeSql(cadena)}'`
+      : cadenaMulti ? `AND cadena IN (${cadenaMulti})` : ''
+    const cadFilterInv = cadena
+      ? `AND i.cadena = '${escapeSql(cadena)}'`
+      : cadenaMulti ? `AND i.cadena IN (${cadenaMulti})` : ''
 
     // Universo: PDVs activos (con presencia Borden en el snapshot) × SKUs activos
     const [univR, kpiInvR, cadenaAggR, skusR, quiebresR, invBajoR] = await Promise.all([

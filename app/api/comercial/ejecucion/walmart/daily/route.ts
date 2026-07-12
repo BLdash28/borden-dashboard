@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
-import { CADENA_NORM_SQL, cadenaWhereSQL } from '@/lib/db/walmart-cadena'
+import { CADENA_NORM_SQL } from '@/lib/db/walmart-cadena'
+import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
 
 export const revalidate = 300
 
@@ -17,24 +18,22 @@ function formatFecha(iso: string) {
 
 export async function GET(req: NextRequest) {
   try {
-    const sp        = req.nextUrl.searchParams
-    const pais      = sp.get('pais')         ?? 'CR'
-    const categoria = sp.get('categoria')    ?? ''
-    const subcat    = sp.get('subcategoria') ?? ''
-    const cadena    = sp.get('cadena')       ?? ''
-    const desde     = sp.get('desde')        || '2026-01-01'
-    const hasta     = sp.get('hasta')        || '2026-12-31'
-    const topN      = Math.min(Math.max(parseInt(sp.get('top') ?? '5'), 1), 200)
+    const sp    = req.nextUrl.searchParams
+    const pais  = sp.get('pais')  ?? 'CR'
+    const desde = sp.get('desde') || '2026-01-01'
+    const hasta = sp.get('hasta') || '2026-12-31'
+    const topN  = Math.min(Math.max(parseInt(sp.get('top') ?? '5'), 1), 200)
+    const f     = parseWalmartFilters(req)
 
-    const p    = `'${pais.replace(/'/g, "''")}'`
-    const catF = categoria ? `AND categoria    = '${categoria.replace(/'/g, "''")}'` : ''
-    const subF = subcat    ? `AND subcategoria = '${subcat.replace(/'/g, "''")}'`    : ''
-    const cadF = cadenaWhereSQL(cadena)
+    // params base: $1=pais, $2=desde, $3=hasta, luego filtros walmart
+    const w  = buildWalmartWhere(f, { startAt: 4 })
+    const wF = buildWalmartWhere(f, { alias: 'f', startAt: 4 })
+    // "byCadena" queremos mostrar todas las cadenas → sin filtro cadena
+    const wSinCad = buildWalmartWhere({ ...f, cadenas: [] }, { startAt: 4 })
 
-    // shared WHERE for simple queries
-    const where  = `pais = ${p} AND fecha BETWEEN $1 AND $2 ${catF} ${subF} ${cadF}`
-    // shared WHERE for aliased f. queries
-    const whereF = `f.pais = ${p} AND f.fecha BETWEEN $1 AND $2 ${catF.replace(/AND /g, 'AND f.')} ${subF.replace(/AND /g, 'AND f.')} ${cadF.replace(/AND /g, 'AND f.')}`
+    const params  = [pais, desde, hasta, ...w.params]
+    const paramsF = [pais, desde, hasta, ...wF.params]
+    const paramsSinCad = [pais, desde, hasta, ...wSinCad.params]
 
     const [overallR, byCadenaR, bySkuR] = await Promise.all([
 
@@ -43,24 +42,27 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(ventas_valor)::numeric,    2) AS valor,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
         FROM fact_ventas_walmart
-        WHERE ${where}
+        WHERE pais = $1 AND fecha BETWEEN $2 AND $3 AND ${w.where}
         GROUP BY fecha::date ORDER BY fecha::date
-      `, [desde, hasta]),
+      `, params),
 
-      cadena ? Promise.resolve({ rows: [] as any[] }) : pool.query(`
+      // Wide byCadena: si hay filtro de cadena mostramos igual todas las cadenas del catálogo
+      // filtrado por los demás criterios (útil para comparar). Si no hay filtro de cadena,
+      // devuelve todas por default.
+      pool.query(`
         SELECT fecha::date AS fecha, ${CADENA_NORM_SQL} AS cadena,
           ROUND(SUM(ventas_valor)::numeric,    2) AS valor,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
         FROM fact_ventas_walmart
-        WHERE ${where}
+        WHERE pais = $1 AND fecha BETWEEN $2 AND $3 AND ${wSinCad.where}
         GROUP BY fecha::date, ${CADENA_NORM_SQL} ORDER BY fecha::date, ${CADENA_NORM_SQL}
-      `, [desde, hasta]),
+      `, paramsSinCad),
 
       pool.query(`
         WITH top_skus AS (
           SELECT codigo_barras, MAX(descripcion) AS descripcion
           FROM fact_ventas_walmart
-          WHERE ${where}
+          WHERE pais = $1 AND fecha BETWEEN $2 AND $3 AND ${w.where}
           GROUP BY codigo_barras
           ORDER BY SUM(ventas_valor) DESC
           LIMIT ${topN}
@@ -70,10 +72,10 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(f.ventas_unidades)::numeric, 0) AS unidades
         FROM fact_ventas_walmart f
         JOIN top_skus t ON t.codigo_barras = f.codigo_barras
-        WHERE ${whereF}
+        WHERE f.pais = $1 AND f.fecha BETWEEN $2 AND $3 AND ${wF.where}
         GROUP BY f.fecha::date, t.descripcion
         ORDER BY f.fecha::date, t.descripcion
-      `, [desde, hasta]),
+      `, paramsF),
 
     ])
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
 
 export const revalidate = 300
 
@@ -8,20 +9,18 @@ const MN = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', '
 
 export async function GET(req: NextRequest) {
   try {
-    const sp       = req.nextUrl.searchParams
-    const pais     = sp.get('pais')         ?? 'CR'
-    const cat      = sp.get('categoria')    ?? ''
-    const subcat   = sp.get('subcategoria') ?? ''
-    const topN     = Math.min(Math.max(parseInt(sp.get('top') ?? '5'), 1), 200)
-    const paisSafe  = pais.replace(/'/g, "''")
-    const catFilter  = cat    ? `AND categoria    = '${cat.replace(/'/g, "''")}'`    : ''
-    const subFilter  = subcat ? `AND subcategoria = '${subcat.replace(/'/g, "''")}'` : ''
+    const sp   = req.nextUrl.searchParams
+    const pais = sp.get('pais') ?? 'CR'
+    const topN = Math.min(Math.max(parseInt(sp.get('top') ?? '5'), 1), 200)
+    const f    = parseWalmartFilters(req)
+    const w    = buildWalmartWhere(f, { startAt: 2 })
+    const wF   = buildWalmartWhere(f, { alias: 'f', startAt: 2 })
 
     const { rows } = await pool.query(`
       WITH top_skus AS (
         SELECT codigo_barras, SUM(ventas_valor) AS total
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}' AND EXTRACT(YEAR FROM fecha) = 2026 ${catFilter} ${subFilter}
+        WHERE pais = $1 AND EXTRACT(YEAR FROM fecha) = 2026 AND ${w.where}
         GROUP BY codigo_barras
         ORDER BY total DESC
         LIMIT ${topN}
@@ -35,10 +34,10 @@ export async function GET(req: NextRequest) {
         ROUND(SUM(f.ventas_unidades)::numeric, 0) AS unidades
       FROM fact_ventas_walmart f
       JOIN top_skus t ON t.codigo_barras = f.codigo_barras
-      WHERE f.pais = '${paisSafe}' AND EXTRACT(YEAR FROM f.fecha) = 2026 ${catFilter}
+      WHERE f.pais = $1 AND EXTRACT(YEAR FROM f.fecha) = 2026 AND ${wF.where}
       GROUP BY f.codigo_barras, EXTRACT(MONTH FROM f.fecha)
       ORDER BY f.codigo_barras, mes
-    `)
+    `, [pais, ...w.params])
 
     const skuMap: Record<string, { sku: string; descripcion: string; categoria: string; series: { mes: number; mes_nombre: string; valor: number; unidades: number }[] }> = {}
     for (const row of rows) {

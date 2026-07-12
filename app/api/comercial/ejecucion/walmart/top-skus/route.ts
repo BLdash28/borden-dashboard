@@ -1,20 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
-import { cadenaWhereSQL } from '@/lib/db/walmart-cadena'
+import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
 
 export const revalidate = 300
 
 export async function GET(req: NextRequest) {
   try {
-    const sp        = req.nextUrl.searchParams
-    const pais      = sp.get('pais')      ?? 'CR'
-    const categoria = sp.get('categoria') ?? ''
-    const cadena    = sp.get('cadena')    ?? ''
-    const top       = Math.min(parseInt(sp.get('top') ?? '20'), 50)
-    const paisSafe     = pais.replace(/'/g,"''")
-    const catFilter    = categoria ? `AND categoria = '${categoria.replace(/'/g,"''")}'` : ''
-    const cadenaFilter = cadenaWhereSQL(cadena)
+    const sp   = req.nextUrl.searchParams
+    const pais = sp.get('pais') ?? 'CR'
+    const top  = Math.min(parseInt(sp.get('top') ?? '20'), 50)
+    const f    = parseWalmartFilters(req)
+    const w    = buildWalmartWhere(f, { startAt: 2 })
 
     const { rows } = await pool.query(`
       WITH cur AS (
@@ -23,9 +20,9 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(ventas_valor)::numeric,    2) AS valor_2026,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS uni_2026
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}'
+        WHERE pais = $1
           AND EXTRACT(YEAR FROM fecha) = 2026
-          ${catFilter} ${cadenaFilter}
+          AND ${w.where}
         GROUP BY descripcion, sku, categoria, subcategoria
       ),
       prev AS (
@@ -33,15 +30,15 @@ export async function GET(req: NextRequest) {
           descripcion,
           ROUND(SUM(ventas_valor)::numeric, 2) AS valor_2025
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}'
+        WHERE pais = $1
           AND EXTRACT(YEAR FROM fecha) = 2025
           AND EXTRACT(MONTH FROM fecha) <= (
             SELECT COALESCE(MAX(EXTRACT(MONTH FROM fecha)), 12)
             FROM fact_ventas_walmart
-            WHERE pais = '${paisSafe}' AND EXTRACT(YEAR FROM fecha) = 2026
-            ${catFilter} ${cadenaFilter}
+            WHERE pais = $1 AND EXTRACT(YEAR FROM fecha) = 2026
+              AND ${w.where}
           )
-          ${catFilter} ${cadenaFilter}
+          AND ${w.where}
         GROUP BY descripcion
       ),
       total AS (
@@ -61,7 +58,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN prev p ON p.descripcion = c.descripcion
       ORDER BY c.valor_2026 DESC
       LIMIT ${top}
-    `)
+    `, [pais, ...w.params])
 
     // Compute cumulative share for pareto line
     let cumShare = 0

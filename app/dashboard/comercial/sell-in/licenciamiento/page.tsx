@@ -59,11 +59,27 @@ export default function SellInLicenciamiento() {
     if (col === sortCol) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortCol(col); setSortDir('desc') }
   }
-  const SortArrow = ({ col }: { col: SortCol }) => (
-    <span className={`ml-1 inline-block ${sortCol === col ? 'text-amber-600' : 'text-gray-300'}`}>
-      {sortCol === col ? (sortDir === 'desc' ? '▼' : '▲') : '↕'}
-    </span>
-  )
+  const SortArrow = ({ col }: { col: SortCol }) => {
+    const isActive = sortCol === col
+    const btn = (dir: 'desc' | 'asc', lbl: string) => (
+      <button
+        onClick={(e) => { e.stopPropagation(); setSortCol(col); setSortDir(dir) }}
+        className={`px-1.5 rounded text-[9px] font-bold leading-none py-0.5 border ${
+          isActive && sortDir === dir
+            ? 'bg-amber-500 text-white border-amber-500'
+            : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50'
+        }`}
+        title={`Ordenar ${dir === 'desc' ? 'de mayor a menor' : 'de menor a mayor'}`}>
+        {lbl}
+      </button>
+    )
+    return (
+      <span className="inline-flex items-center gap-1 ml-1.5 align-middle">
+        {btn('desc', '▼ Mayor')}
+        {btn('asc',  '▲ Menor')}
+      </span>
+    )
+  }
 
   useEffect(() => {
     if (tipo !== 'colombia') return
@@ -156,7 +172,7 @@ export default function SellInLicenciamiento() {
             {/* KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <div className="bg-amber-50 border border-amber-200 rounded-xl shadow-sm p-4">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Venta FY 2026 ({useUsd?'USD':'COP'})</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Venta YTD 2026 ({useUsd?'USD':'COP'})</p>
                 <p className="text-xl font-bold text-amber-700">{fmtVal(ventaCur)}</p>
                 <p className="text-[10px] text-gray-500 mt-0.5">Hasta mes {kpi.ultimo_mes || '—'}</p>
               </div>
@@ -301,7 +317,7 @@ export default function SellInLicenciamiento() {
 
             {/* Top SKUs */}
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-              <h3 className="text-sm font-semibold text-gray-700 mb-4">Top SKUs FY 2026</h3>
+              <h3 className="text-sm font-semibold text-gray-700 mb-4">Top SKUs YTD 2026</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-gray-50 text-gray-600">

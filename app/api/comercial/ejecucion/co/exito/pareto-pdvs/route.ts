@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { parseExitoFilters, buildExitoWhere } from '@/lib/api/exito-filtros'
 
 export const revalidate = 300
 
@@ -16,10 +17,8 @@ export const revalidate = 300
  */
 export async function GET(req: NextRequest) {
   try {
-    const cadena    = req.nextUrl.searchParams.get('cadena')    ?? ''
-    const categoria = req.nextUrl.searchParams.get('categoria') ?? ''
-    const cadFilter = cadena    ? `AND cadena    = '${cadena.replace(/'/g, "''")}'`    : ''
-    const catFilter = categoria ? `AND categoria = '${categoria.replace(/'/g, "''")}'` : ''
+    const filt = parseExitoFilters(req)
+    const w    = buildExitoWhere(filt, { startAt: 1 })
 
     const r = await pool.query(`
       SELECT
@@ -34,10 +33,10 @@ export async function GET(req: NextRequest) {
       FROM fact_ventas_exito
       WHERE pais='CO' AND ano=2026
         AND punto_venta IS NOT NULL AND punto_venta <> ''
-        ${cadFilter} ${catFilter}
+        AND ${w.where}
       GROUP BY punto_venta
       ORDER BY valor_usd DESC
-    `)
+    `, w.params)
 
     const rows = r.rows.map(x => ({
       punto_venta:  x.punto_venta,

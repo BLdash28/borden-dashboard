@@ -1,6 +1,7 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { parseExitoFilters, buildExitoWhere } from '@/lib/api/exito-filtros'
 
 export const revalidate = 300
 
@@ -12,8 +13,12 @@ export const revalidate = 300
  * Si aún no hay ventas, se marca con `sin_ventas: true` — la sección UI
  * puede mostrar el catálogo y esperar a que arranquen.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const filt = parseExitoFilters(req)
+    // WHERE parametrizado que se agrega a cada sub-query — $3+ (ya usamos $1,$2 para skus/barras)
+    const w = buildExitoWhere(filt, { startAt: 3 })
+
     // 1. SKUs innovación desde precios_exito
     const catR = await pool.query(
       `SELECT ean13, plu, codigo_borden, sku, descripcion, gramos,
@@ -41,8 +46,9 @@ export async function GET() {
          FROM fact_ventas_exito
          WHERE pais='CO'
            AND (sku = ANY($1::text[]) OR codigo_barras = ANY($2::text[]))
+           AND ${w.where}
          GROUP BY ano, mes ORDER BY ano, mes`,
-        [skus, barras],
+        [skus, barras, ...w.params],
       )
 
       const monthly = ventasR.rows.map(r => ({
@@ -65,8 +71,9 @@ export async function GET() {
          FROM fact_ventas_exito
          WHERE pais='CO'
            AND (sku = ANY($1::text[]) OR codigo_barras = ANY($2::text[]))
+           AND ${w.where}
          GROUP BY ano, mes, dia ORDER BY ano, mes, dia`,
-        [skus, barras],
+        [skus, barras, ...w.params],
       )
       const daily = dailyR.rows.map(r => {
         const a = parseInt(r.ano), m = parseInt(r.mes), d = parseInt(r.dia)
@@ -84,8 +91,9 @@ export async function GET() {
         `SELECT MIN(ano*10000 + mes*100 + dia) AS f, MAX(ano*10000 + mes*100 + dia) AS ult
          FROM fact_ventas_exito
          WHERE pais='CO' AND (sku = ANY($1::text[]) OR codigo_barras = ANY($2::text[]))
-           AND ventas_unidades > 0`,
-        [skus, barras],
+           AND ventas_unidades > 0
+           AND ${w.where}`,
+        [skus, barras, ...w.params],
       )
       const pFn = parseInt(primeraR.rows[0]?.f ?? '0')
       const uFn = parseInt(primeraR.rows[0]?.ult ?? '0')

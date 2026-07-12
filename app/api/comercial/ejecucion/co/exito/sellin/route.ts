@@ -1,8 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { parseExitoFilters } from '@/lib/api/exito-filtros'
 
 export const revalidate = 300
+
+/**
+ * sellin_exito solo tiene sku/subcategoria/categoria — no cadena ni geografía.
+ * Aplicamos únicamente filtros compatibles.
+ */
+function buildSellinWhere(f: ReturnType<typeof parseExitoFilters>, startAt: number) {
+  let n = startAt
+  const parts: string[] = []
+  const params: unknown[] = []
+  if (f.categoria)          { parts.push(`categoria = $${n++}`);    params.push(f.categoria) }
+  if (f.subcategorias.length) { parts.push(`subcategoria = ANY($${n++})`); params.push(f.subcategorias) }
+  if (f.skus.length)          { parts.push(`sku = ANY($${n++})`);          params.push(f.skus) }
+  return { where: parts.length ? parts.join(' AND ') : 'TRUE', params, next: n }
+}
 
 /**
  * Sell-In Grupo Éxito CO — carga inicial + evolución mensual.
@@ -11,8 +26,10 @@ export const revalidate = 300
  * y detalle por SKU (ranking por venta). Se usa tanto en la sección Sell-In
  * de la Ejecución CO como en el módulo "Licenciamiento Colombia".
  */
-export async function GET(_req: NextRequest) {
+export async function GET(req: NextRequest) {
   try {
+    const filt = parseExitoFilters(req)
+    const w    = buildSellinWhere(filt, 1)
     const [kpiR, monthlyR, skuR, ocR, monthlyBySkuR] = await Promise.all([
       // KPI FY 2026 + comparativo FY 2025 (mismo período)
       pool.query(`
@@ -25,7 +42,7 @@ export async function GET(_req: NextRequest) {
             SUM(utilidad_bruta_cop)    AS ut,
             MAX(mes)                   AS ultimo_mes
           FROM sellin_exito
-          WHERE pais='CO' AND ano=2026
+          WHERE pais='CO' AND ano=2026 AND ${w.where}
         ),
         prev AS (
           SELECT
@@ -36,6 +53,7 @@ export async function GET(_req: NextRequest) {
           FROM sellin_exito
           WHERE pais='CO' AND ano=2025
             AND mes <= (SELECT COALESCE(ultimo_mes, 12) FROM cur)
+            AND ${w.where}
         )
         SELECT
           COALESCE(cur.uds, 0)   AS uds_26,
@@ -49,7 +67,7 @@ export async function GET(_req: NextRequest) {
           COALESCE(prev.ut, 0)   AS ut_25,
           cur.ultimo_mes
         FROM cur, prev
-      `),
+      `, w.params),
       // Evolución mensual
       pool.query(`
         SELECT ano, mes,
@@ -59,28 +77,35 @@ export async function GET(_req: NextRequest) {
           SUM(utilidad_bruta_cop) AS ut,
           SUM(costo_venta_cop)    AS costo
         FROM sellin_exito
-        WHERE pais='CO' AND ano IN (2025, 2026)
+        WHERE pais='CO' AND ano IN (2025, 2026) AND ${w.where}
         GROUP BY ano, mes ORDER BY ano, mes
-      `),
+      `, w.params),
       // Top SKUs por venta 2026 — enriquecido con subcategoria desde dim_producto_co
-      pool.query(`
-        SELECT
-          s.sku,
-          MAX(s.descripcion)                        AS descripcion,
-          MAX(COALESCE(s.categoria, d.categoria))   AS categoria,
-          MAX(COALESCE(s.subcategoria, d.subcategoria)) AS subcategoria,
-          SUM(s.cantidad_und)                       AS uds,
-          SUM(s.valor_venta_cop)                    AS cop,
-          SUM(s.valor_venta_usd)                    AS usd,
-          SUM(s.utilidad_bruta_cop)                 AS ut,
-          CASE WHEN SUM(s.valor_venta_cop) > 0
-               THEN (SUM(s.utilidad_bruta_cop) / SUM(s.valor_venta_cop)) * 100
-               ELSE NULL END                        AS margen_pct
-        FROM sellin_exito s
-        LEFT JOIN dim_producto_co d ON d.sku = s.sku
-        WHERE s.pais='CO' AND s.ano=2026 AND s.sku IS NOT NULL AND s.sku <> ''
-        GROUP BY s.sku ORDER BY cop DESC
-      `),
+      // Filtros compatibles: subcategoria (sobre s), sku (sobre s), categoria (sobre s)
+      (() => {
+        const ws = buildSellinWhere(filt, 1)
+        // Renombramos las columnas al alias s
+        const whereS = ws.where === 'TRUE' ? 'TRUE' : ws.where.replace(/(?<![.\w])(categoria|subcategoria|sku)/g, 's.$1')
+        return pool.query(`
+          SELECT
+            s.sku,
+            MAX(s.descripcion)                        AS descripcion,
+            MAX(COALESCE(s.categoria, d.categoria))   AS categoria,
+            MAX(COALESCE(s.subcategoria, d.subcategoria)) AS subcategoria,
+            SUM(s.cantidad_und)                       AS uds,
+            SUM(s.valor_venta_cop)                    AS cop,
+            SUM(s.valor_venta_usd)                    AS usd,
+            SUM(s.utilidad_bruta_cop)                 AS ut,
+            CASE WHEN SUM(s.valor_venta_cop) > 0
+                 THEN (SUM(s.utilidad_bruta_cop) / SUM(s.valor_venta_cop)) * 100
+                 ELSE NULL END                        AS margen_pct
+          FROM sellin_exito s
+          LEFT JOIN dim_producto_co d ON d.sku = s.sku
+          WHERE s.pais='CO' AND s.ano=2026 AND s.sku IS NOT NULL AND s.sku <> ''
+            AND ${whereS}
+          GROUP BY s.sku ORDER BY cop DESC
+        `, ws.params)
+      })(),
       // Órdenes de compra recientes (últimas 20)
       pool.query(`
         SELECT orden_compra,
@@ -91,10 +116,11 @@ export async function GET(_req: NextRequest) {
           SUM(utilidad_bruta_cop)      AS ut
         FROM sellin_exito
         WHERE pais='CO' AND ano=2026 AND orden_compra IS NOT NULL AND orden_compra <> ''
+          AND ${w.where}
         GROUP BY orden_compra, ano, mes
         ORDER BY ano DESC, mes DESC, cop DESC
         LIMIT 30
-      `),
+      `, w.params),
 
       // Evolución mensual por SKU — para chart de Sell-In por producto
       pool.query(`
@@ -106,9 +132,10 @@ export async function GET(_req: NextRequest) {
           SUM(s.valor_venta_usd) AS usd
         FROM sellin_exito s
         WHERE s.pais='CO' AND s.ano=2026 AND s.sku IS NOT NULL AND s.sku <> ''
+          AND ${w.where}
         GROUP BY s.sku, s.mes
         ORDER BY s.sku, s.mes
-      `),
+      `, w.params),
     ])
 
     const k = kpiR.rows[0] ?? {}

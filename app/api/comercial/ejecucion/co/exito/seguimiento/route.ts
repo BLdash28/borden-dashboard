@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { parseExitoFilters, buildExitoWhere } from '@/lib/api/exito-filtros'
 
 export const revalidate = 300
 
@@ -62,11 +63,15 @@ type RowOut = {
 export async function GET(req: NextRequest) {
   try {
     const ano = parseInt(req.nextUrl.searchParams.get('ano') ?? '2026')
+    const f   = parseExitoFilters(req)
 
-    // Última fecha cargada para el año
+    // Última fecha cargada para el año (con filtros aplicados)
+    const wUlt = buildExitoWhere(f, { startAt: 2 })
     const ultR = await pool.query(
-      `SELECT MAX(ano*10000 + mes*100 + dia) AS f FROM fact_ventas_exito WHERE pais='CO' AND ano=$1`,
-      [ano],
+      `SELECT MAX(ano*10000 + mes*100 + dia) AS f
+         FROM fact_ventas_exito
+        WHERE pais='CO' AND ano=$1 AND ${wUlt.where}`,
+      [ano, ...wUlt.params],
     )
     const fNum = parseInt(ultR.rows[0]?.f ?? '0')
     if (!fNum) {
@@ -84,6 +89,8 @@ export async function GET(req: NextRequest) {
     const diaActual = fNum % 100
     const ultimaFecha = `${ano}-${String(mesActual).padStart(2, '0')}-${String(diaActual).padStart(2, '0')}`
 
+    // Todas las sub-queries usan los mismos filtros
+    const w = buildExitoWhere(f, { startAt: 2 })
     const [prodR, cadR, subR, geoR] = await Promise.all([
       pool.query(
         `SELECT sku, mes,
@@ -92,8 +99,9 @@ export async function GET(req: NextRequest) {
                 SUM(venta_valorcop)::numeric   AS cop
          FROM fact_ventas_exito
          WHERE pais='CO' AND ano=$1 AND sku IS NOT NULL AND sku <> ''
+           AND ${w.where}
          GROUP BY sku, mes`,
-        [ano],
+        [ano, ...w.params],
       ),
       pool.query(
         `SELECT cadena AS grp, mes,
@@ -102,18 +110,20 @@ export async function GET(req: NextRequest) {
                 SUM(venta_valorcop)::numeric   AS cop
          FROM fact_ventas_exito
          WHERE pais='CO' AND ano=$1 AND cadena IS NOT NULL AND cadena <> ''
+           AND ${w.where}
          GROUP BY cadena, mes`,
-        [ano],
+        [ano, ...w.params],
       ),
       pool.query(
-        `SELECT subformato AS grp, cadena, mes,
+        `SELECT subcadena AS grp, cadena, mes,
                 SUM(ventas_unidades)::numeric AS und,
                 SUM(ventas_valorusd)::numeric  AS usd,
                 SUM(venta_valorcop)::numeric   AS cop
          FROM fact_ventas_exito
-         WHERE pais='CO' AND ano=$1 AND subformato IS NOT NULL AND subformato <> ''
-         GROUP BY subformato, cadena, mes`,
-        [ano],
+         WHERE pais='CO' AND ano=$1 AND subcadena IS NOT NULL AND subcadena <> ''
+           AND ${w.where}
+         GROUP BY subcadena, cadena, mes`,
+        [ano, ...w.params],
       ),
       pool.query(
         `SELECT COALESCE(NULLIF(departamento, ''), 'SIN GEOGRAFÍA') AS grp, mes,
@@ -122,9 +132,9 @@ export async function GET(req: NextRequest) {
                 SUM(ventas_valorusd)::numeric  AS usd,
                 SUM(venta_valorcop)::numeric   AS cop
          FROM fact_ventas_exito
-         WHERE pais='CO' AND ano=$1
+         WHERE pais='CO' AND ano=$1 AND ${w.where}
          GROUP BY COALESCE(NULLIF(departamento, ''), 'SIN GEOGRAFÍA'), mes`,
-        [ano],
+        [ano, ...w.params],
       ),
     ])
 

@@ -1,23 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
 
 export const dynamic   = 'force-dynamic'
 export const revalidate = 0
 
 export async function GET(req: NextRequest) {
   try {
-    const pais      = req.nextUrl.searchParams.get('pais')     ?? 'CR'
-    const categoria = req.nextUrl.searchParams.get('categoria') ?? ''
-    const paisSafe  = pais.replace(/'/g, "''")
-    const catFilter = categoria
-      ? `AND COALESCE(dp.categoria, '') = '${categoria.replace(/'/g, "''")}'`
-      : ''
+    const pais = req.nextUrl.searchParams.get('pais') ?? 'CR'
+    const f    = parseWalmartFilters(req)
+
+    // WHEREs — se aplican sobre fact_inventario_walmart_pdv (alias t) y
+    // fact_inventario_walmart_cedi (alias c). También sobre fact_ventas_walmart
+    // (subquery vel) sin alias.
+    // PDV: tiene cadena, categoria, punto_venta, sku (NO subcategoria/formato)
+    const wT   = buildWalmartWhere(f, { alias: 't', startAt: 2, omit: ['subcategoria', 'formato'] })
+    // CEDI: solo tiene categoria, sku (NO cadena/subcategoria/formato/punto_venta)
+    const wC   = buildWalmartWhere(f, { alias: 'c', startAt: 2, omit: ['cadena', 'subcategoria', 'formato', 'punto_venta'] })
+    // Ventas (referencia velocity): tabla completa, todos los filtros aplican
+    const wV   = buildWalmartWhere(f, { startAt: 2 })
 
     // ── Check availability ──────────────────────────────────────────────────
     const [countTiendas, countCedi] = await Promise.all([
-      pool.query(`SELECT COUNT(*) AS n FROM fact_inventario_walmart_pdv  WHERE pais = '${paisSafe}'`),
-      pool.query(`SELECT COUNT(*) AS n FROM fact_inventario_walmart_cedi WHERE pais = '${paisSafe}'`),
+      pool.query(`SELECT COUNT(*) AS n FROM fact_inventario_walmart_pdv  WHERE pais = $1`, [pais]),
+      pool.query(`SELECT COUNT(*) AS n FROM fact_inventario_walmart_cedi WHERE pais = $1`, [pais]),
     ])
     const nTiendas = parseInt(countTiendas.rows[0]?.n ?? '0')
     const nCedi    = parseInt(countCedi.rows[0]?.n    ?? '0')
@@ -32,7 +39,7 @@ export async function GET(req: NextRequest) {
       // PDV: aggregated by SKU with sell-out pricing
       nTiendas > 0 ? pool.query(`
         WITH ultima AS (
-          SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = '${paisSafe}'
+          SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = $1
         ),
         base AS (
           SELECT
@@ -52,7 +59,7 @@ export async function GET(req: NextRequest) {
                  ELSE LTRIM(LEFT(t.codigo_barras, LENGTH(t.codigo_barras)-1), '0')
             END
           ) = LTRIM(LEFT(dp.codigo_barras, LENGTH(dp.codigo_barras)-1), '0')
-          WHERE t.pais = '${paisSafe}' ${catFilter}
+          WHERE t.pais = $1 AND ${wT.where}
           GROUP BY COALESCE(dp.codigo_barras, t.codigo_barras)
         ),
         vel AS (
@@ -63,7 +70,7 @@ export async function GET(req: NextRequest) {
               ELSE 0 END AS precio_unitario
           FROM fact_ventas_walmart
           WHERE fecha >= CURRENT_DATE - INTERVAL '90 days'
-            AND pais = '${paisSafe}'
+            AND pais = $1 AND ${wV.where}
           GROUP BY codigo_barras
         )
         SELECT
@@ -77,12 +84,12 @@ export async function GET(req: NextRequest) {
         LEFT JOIN vel v ON b.codigo_barras = v.codigo_barras
         ORDER BY b.inv_mano DESC
         LIMIT 300
-      `) : Promise.resolve({ rows: [] }),
+      `, [pais, ...wT.params]) : Promise.resolve({ rows: [] }),
 
       // CEDI: per-SKU with VNPK conversion and pricing
       nCedi > 0 ? pool.query(`
         WITH ultima AS (
-          SELECT MAX(fecha) AS f FROM fact_inventario_walmart_cedi WHERE pais = '${paisSafe}'
+          SELECT MAX(fecha) AS f FROM fact_inventario_walmart_cedi WHERE pais = $1
         ),
         vel AS (
           SELECT codigo_barras,
@@ -92,7 +99,7 @@ export async function GET(req: NextRequest) {
               ELSE 0 END AS precio_unitario
           FROM fact_ventas_walmart
           WHERE fecha >= CURRENT_DATE - INTERVAL '90 days'
-            AND pais = '${paisSafe}'
+            AND pais = $1 AND ${wV.where}
           GROUP BY codigo_barras
         )
         SELECT
@@ -119,20 +126,21 @@ export async function GET(req: NextRequest) {
           END
         ) = LTRIM(LEFT(dp.codigo_barras, LENGTH(dp.codigo_barras)-1), '0')
         LEFT JOIN vel ON COALESCE(dp.codigo_barras, c.codigo_barras) = vel.codigo_barras
-        WHERE c.pais = '${paisSafe}' ${catFilter}
+        WHERE c.pais = $1 AND ${wC.where}
         ORDER BY c.inv_cajas DESC
         LIMIT 300
-      `) : Promise.resolve({ rows: [] }),
+      `, [pais, ...wC.params]) : Promise.resolve({ rows: [] }),
 
       // Store-level DOH counts (SKU × Tienda combinations)
       nTiendas > 0 ? pool.query(`
         WITH ultima AS (
-          SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = '${paisSafe}'
+          SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = $1
         ),
         vel AS (
           SELECT codigo_barras, SUM(ventas_unidades)::float / 90.0 AS vpd
           FROM fact_ventas_walmart
-          WHERE fecha >= CURRENT_DATE - INTERVAL '90 days' AND pais = '${paisSafe}'
+          WHERE fecha >= CURRENT_DATE - INTERVAL '90 days' AND pais = $1
+            AND ${wV.where}
           GROUP BY codigo_barras
         )
         SELECT
@@ -156,8 +164,8 @@ export async function GET(req: NextRequest) {
           END
         ) = LTRIM(LEFT(dp.codigo_barras, LENGTH(dp.codigo_barras)-1), '0')
         LEFT JOIN vel v ON COALESCE(dp.codigo_barras, t.codigo_barras) = v.codigo_barras
-        WHERE t.pais = '${paisSafe}'
-      `) : Promise.resolve({ rows: [{ tiendas_distinct: 0, criticos: 0, alertas: 0, sobrestock: 0 }] }),
+        WHERE t.pais = $1 AND ${wT.where}
+      `, [pais, ...wT.params]) : Promise.resolve({ rows: [{ tiendas_distinct: 0, criticos: 0, alertas: 0, sobrestock: 0 }] }),
     ])
 
     // ── Assemble ────────────────────────────────────────────────────────────

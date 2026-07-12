@@ -1,6 +1,7 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
-import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { RefreshCw, TrendingUp, TrendingDown, Minus, SlidersHorizontal, X } from 'lucide-react'
+import MultiSelect from '@/components/dashboard/MultiSelect'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
   PieChart, Pie,
@@ -356,7 +357,25 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
   const [section,      setSection]      = useState('resumen')
   const [div,          setDiv]          = useState('TOTAL')
-  const [cadenaFilter, setCadenaFilter] = useState('')
+  // Filtros globales (multi-select)
+  const [cadenasSel,    setCadenasSel]    = useState<string[]>([])
+  const [categoriaSel,  setCategoriaSel]  = useState<string[]>([])
+  const [subcatSel,     setSubcatSel]     = useState<string[]>([])
+  const [formatoSel,    setFormatoSel]    = useState<string[]>([])
+  const [puntoSel,      setPuntoSel]      = useState<string[]>([])
+  const [skuSel,        setSkuSel]        = useState<string[]>([])
+  const [filtrosOpts,   setFiltrosOpts]   = useState<{
+    cadenas:       { value: string; venta: number }[]
+    categorias:    { value: string; venta: number }[]
+    subcategorias: { value: string; venta: number }[]
+    formatos:      { value: string; venta: number }[]
+    puntos:        { value: string; cadena: string | null; venta: number }[]
+    skus:          { value: string; descripcion: string | null; subcategoria: string | null; venta: number }[]
+  } | null>(null)
+  const [showFiltros,   setShowFiltros]   = useState(false)
+  // Compat: cadenaFilter legacy = primer item si hay UNA sola cadena seleccionada
+  const cadenaFilter = cadenasSel.length === 1 ? cadenasSel[0] : ''
+
   const [topN,         setTopN]         = useState(15)
   const [loading,      setLoading]      = useState<Record<string, boolean>>({})
 
@@ -395,6 +414,50 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const isL  = (k: string) => !!loading[k]
   const saveFilter = (key: string, val: string) => localStorage.setItem(`${storageKey}-${key}`, val)
 
+  // Helper: querystring reusable con los filtros globales activos + país
+  const buildFilterQS = (extra?: Record<string, string>) => {
+    const q = new URLSearchParams({ pais })
+    if (cadenasSel.length)   q.set('cadenas',       cadenasSel.join(','))
+    if (categoriaSel.length) q.set('categorias',    categoriaSel.join(','))
+    if (subcatSel.length)    q.set('subcategorias', subcatSel.join(','))
+    if (formatoSel.length)   q.set('formatos',      formatoSel.join(','))
+    if (puntoSel.length)     q.set('puntos',        puntoSel.join(','))
+    if (skuSel.length)       q.set('skus',          skuSel.join(','))
+    if (extra) for (const [k, v] of Object.entries(extra)) if (v) q.set(k, v)
+    return q.toString()
+  }
+
+  const filterKey = useMemo(() =>
+    [cadenasSel, categoriaSel, subcatSel, formatoSel, puntoSel, skuSel]
+      .map(a => a.join('|')).join('::'),
+    [cadenasSel, categoriaSel, subcatSel, formatoSel, puntoSel, skuSel])
+
+  useEffect(() => { loadedRef.current = {} }, [filterKey])
+
+  // Cargar catálogo de opciones (una vez por país)
+  useEffect(() => {
+    fetch(`/api/comercial/ejecucion/walmart/filtros-opciones?pais=${pais}`)
+      .then(r => r.json())
+      .then(d => setFiltrosOpts({
+        cadenas:       d.cadenas       ?? [],
+        categorias:    d.categorias    ?? [],
+        subcategorias: d.subcategorias ?? [],
+        formatos:      d.formatos      ?? [],
+        puntos:        d.puntos        ?? [],
+        skus:          d.skus          ?? [],
+      }))
+      .catch(() => {})
+  }, [pais])
+
+  // Persistir toggle Filtros abierto/cerrado
+  useEffect(() => {
+    const saved = localStorage.getItem(`${storageKey}-showFiltros`)
+    if (saved === '1') setShowFiltros(true)
+  }, []) // eslint-disable-line
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}-showFiltros`, showFiltros ? '1' : '0')
+  }, [showFiltros])
+
   const currentCat = DIVS.find(d => d.key === div)?.cat ?? ''
 
   const goSection = (key: string) => {
@@ -415,8 +478,21 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     if (savedVista === 'mensual' || savedVista === 'diaria') setEvolVista(savedVista)
     const savedMedida = localStorage.getItem(`${storageKey}-medida`)
     if (savedMedida === 'valor' || savedMedida === 'unidades') setEvolMedida(savedMedida)
-    const savedCadena = localStorage.getItem(`${storageKey}-cadena`)
-    if (savedCadena !== null) setCadenaFilter(savedCadena)
+    // Restaurar filtros multi-select
+    const readArr = (k: string): string[] => {
+      const raw = localStorage.getItem(`${storageKey}-${k}`)
+      if (!raw) return []
+      try { const v = JSON.parse(raw); return Array.isArray(v) ? v : [] } catch { return [] }
+    }
+    setCadenasSel(readArr('cadenas'))
+    setCategoriaSel(readArr('categorias'))
+    setSubcatSel(readArr('subcategorias'))
+    setFormatoSel(readArr('formatos'))
+    setPuntoSel(readArr('puntos'))
+    setSkuSel(readArr('skus'))
+    // Compat: cadena legacy string
+    const savedCadenaLegacy = localStorage.getItem(`${storageKey}-cadena`)
+    if (savedCadenaLegacy && cadenasSel.length === 0) setCadenasSel([savedCadenaLegacy])
     const savedSubcat = localStorage.getItem(`${storageKey}-subcat`)
     if (savedSubcat) setEvolSubcat(savedSubcat)
     const savedTopN = localStorage.getItem(`${storageKey}-topn`)
@@ -436,41 +512,43 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   }, [div]) // eslint-disable-line
 
   useEffect(() => {
-    const catQ   = currentCat  ? `&categoria=${encodeURIComponent(currentCat)}`   : ''
-    const subcatQ = evolSubcat ? `&subcategoria=${encodeURIComponent(evolSubcat)}` : ''
-    const cadQ   = cadenaFilter ? `&cadena=${encodeURIComponent(cadenaFilter)}`    : ''
-    const baseQ  = `pais=${pais}${catQ}`
+    const extraCat: Record<string, string>    = currentCat  ? { categoria: currentCat }        : {}
+    const extraSubcat: Record<string, string> = evolSubcat  ? { subcategoria: evolSubcat }      : {}
+    const qs        = buildFilterQS(extraCat)
+    const qsWithSub = buildFilterQS({ ...extraCat, ...extraSubcat })
 
     const needsInventario = ['inventarios','perdida','recomendaciones'].includes(section)
 
     if (section === 'resumen') {
       setL('resumen', true)
       Promise.all([
-        fetch(`/api/comercial/ejecucion/walmart/kpis?${baseQ}`).then(r => r.json()),
-        fetch(`/api/comercial/sell-in/kpis?pais=${pais}&cliente=${clienteSellin}${catQ}`).then(r => r.json()),
-        fetch(`/api/comercial/ejecucion/walmart/inventario?${baseQ}`).then(r => r.json()).catch(() => null),
+        fetch(`/api/comercial/ejecucion/walmart/kpis?${qs}`).then(r => r.json()),
+        fetch(`/api/comercial/sell-in/kpis?pais=${pais}&cliente=${clienteSellin}${currentCat ? '&categoria=' + encodeURIComponent(currentCat) : ''}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/inventario?${qs}`).then(r => r.json()).catch(() => null),
       ]).then(([so, si, invData]) => { setSellout(so); setSellin(si); if (invData) setInv(invData) })
         .finally(() => setL('resumen', false))
 
     } else if (section === 'evolucion') {
       setL('evolucion', true)
+      const qsTop5 = buildFilterQS({ ...extraCat, ...extraSubcat, top: String(evolTopN > 5 ? 100 : 5) })
       Promise.all([
-        fetch(`/api/comercial/ejecucion/walmart/timeseries?pais=${pais}${catQ}${subcatQ}${cadQ}`).then(r => r.json()),
-        fetch(`/api/comercial/ejecucion/walmart/evo-top5?pais=${pais}${catQ}${subcatQ}&top=${evolTopN > 5 ? 100 : 5}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/timeseries?${qsWithSub}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/evo-top5?${qsTop5}`).then(r => r.json()),
         fetch(`/api/comercial/ejecucion/walmart/comparativo?pais=${pais}&cliente=${clienteSellin}`).then(r => r.json()),
       ]).then(([tsData, t5Data, cpData]) => { setTs(tsData); setEvoTop5(t5Data); setComparativo(cpData) })
         .finally(() => setL('evolucion', false))
 
     } else if (section === 'pareto') {
       setL('pareto', true)
-      fetch(`/api/comercial/ejecucion/walmart/top-skus?${baseQ}${cadQ}&top=${topN}`)
+      const qsp = buildFilterQS({ ...extraCat, top: String(topN) })
+      fetch(`/api/comercial/ejecucion/walmart/top-skus?${qsp}`)
         .then(r => r.json()).then(d => setTopSkus(d.rows ?? [])).finally(() => setL('pareto', false))
 
     } else if (section === 'cobertura') {
       setL('cobertura', true)
       Promise.all([
-        fetch(`/api/comercial/ejecucion/walmart/cobertura?${baseQ}`).then(r => r.json()),
-        fetch(`/api/comercial/ejecucion/walmart/inventario?${baseQ}`).then(r => r.json()).catch(() => null),
+        fetch(`/api/comercial/ejecucion/walmart/cobertura?${qs}`).then(r => r.json()),
+        fetch(`/api/comercial/ejecucion/walmart/inventario?${qs}`).then(r => r.json()).catch(() => null),
       ]).then(([cobData, invData]) => {
         setCob(cobData)
         if (invData) setInv(invData)
@@ -478,33 +556,42 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
     } else if (needsInventario) {
       setL(section, true)
-      fetch(`/api/comercial/ejecucion/walmart/inventario?${baseQ}`)
+      fetch(`/api/comercial/ejecucion/walmart/inventario?${qs}`)
         .then(r => r.json()).then(setInv).finally(() => setL(section, false))
 
     } else if (section === 'innovaciones') {
       setL('innovaciones', true)
-      fetch(`/api/comercial/ejecucion/walmart/innovaciones?${baseQ}`)
+      fetch(`/api/comercial/ejecucion/walmart/innovaciones?${qs}`)
         .then(r => r.json()).then(setInnov).finally(() => setL('innovaciones', false))
     }
-  }, [section, div, cadenaFilter, topN, evolTopN, evolSubcat]) // eslint-disable-line
+  }, [section, div, filterKey, topN, evolTopN, evolSubcat]) // eslint-disable-line
+
+  // Persistir filtros multi-select en localStorage
+  useEffect(() => {
+    localStorage.setItem(`${storageKey}-cadenas`,       JSON.stringify(cadenasSel))
+    localStorage.setItem(`${storageKey}-categorias`,    JSON.stringify(categoriaSel))
+    localStorage.setItem(`${storageKey}-subcategorias`, JSON.stringify(subcatSel))
+    localStorage.setItem(`${storageKey}-formatos`,      JSON.stringify(formatoSel))
+    localStorage.setItem(`${storageKey}-puntos`,        JSON.stringify(puntoSel))
+    localStorage.setItem(`${storageKey}-skus`,          JSON.stringify(skuSel))
+  }, [cadenasSel, categoriaSel, subcatSel, formatoSel, puntoSel, skuSel, storageKey])
 
   // Fetch daily data when vista=diaria or any filter changes
   useEffect(() => {
     if (section !== 'evolucion' || evolVista !== 'diaria') return
     const cat = DIVS.find(d => d.key === div)?.cat ?? ''
-    const p = new URLSearchParams({ pais, top: String(evolTopN > 5 ? 100 : 5) })
-    if (cat)           p.set('categoria',    cat)
-    if (evolSubcat)    p.set('subcategoria', evolSubcat)
-    if (cadenaFilter)  p.set('cadena',       cadenaFilter)
-    if (evolDesde) p.set('desde', evolDesde + '-01')
+    const extra: Record<string, string> = { top: String(evolTopN > 5 ? 100 : 5) }
+    if (cat)        extra.categoria    = cat
+    if (evolSubcat) extra.subcategoria = evolSubcat
+    if (evolDesde)  extra.desde        = evolDesde + '-01'
     if (evolHasta) {
       const [y, m] = evolHasta.split('-').map(Number)
       const lastDay = new Date(y, m, 0).getDate()
-      p.set('hasta', `${evolHasta}-${String(lastDay).padStart(2, '0')}`)
+      extra.hasta = `${evolHasta}-${String(lastDay).padStart(2, '0')}`
     }
-    fetch(`/api/comercial/ejecucion/walmart/daily?${p}`)
+    fetch(`/api/comercial/ejecucion/walmart/daily?${buildFilterQS(extra)}`)
       .then(r => r.json()).then(d => setEvolDiario(d))
-  }, [evolVista, div, evolSubcat, cadenaFilter, evolTopN, evolDesde, evolHasta, section]) // eslint-disable-line
+  }, [evolVista, div, evolSubcat, filterKey, evolTopN, evolDesde, evolHasta, section]) // eslint-disable-line
 
   // ── Resumen ──────────────────────────────────────────────────────────────
 
@@ -2013,7 +2100,76 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         </button>
       </div>
 
-      {/* ── Filtros globales ── */}
+      {/* ── Filtros globales (nuevos) ── */}
+      <div className="px-6 pt-4">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4"
+             style={{ ['--acc' as any]: '#0071CE', ['--bg' as any]: '#ffffff', ['--surface' as any]: '#ffffff',
+                      ['--border' as any]: '#e5e7eb', ['--t1' as any]: '#111827', ['--t2' as any]: '#374151', ['--t3' as any]: '#6b7280' }}>
+          <div className="flex items-center flex-wrap gap-3 justify-between">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setShowFiltros(v => !v)}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg">
+                <SlidersHorizontal size={12}/> Filtros {showFiltros ? '▲' : '▼'}
+              </button>
+              {[
+                { label: 'Cadena',       items: cadenasSel, onClear: () => setCadenasSel([]) },
+                { label: 'Categoría',    items: categoriaSel, onClear: () => setCategoriaSel([]) },
+                { label: 'Subcategoría', items: subcatSel,  onClear: () => setSubcatSel([])  },
+                { label: 'Formato',      items: formatoSel, onClear: () => setFormatoSel([]) },
+                { label: 'PDV',          items: puntoSel,   onClear: () => setPuntoSel([])   },
+                { label: 'SKU',          items: skuSel,     onClear: () => setSkuSel([])     },
+              ].filter(c => c.items.length > 0).map(c => (
+                <span key={c.label}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium bg-blue-50 text-blue-800 border border-blue-200 rounded-full px-2.5 py-1">
+                  <span className="text-blue-500">{c.label}:</span>
+                  <span>{c.items.length <= 2 ? c.items.join(', ') : `${c.items.length} sel.`}</span>
+                  <button onClick={c.onClear} className="ml-0.5 rounded-full hover:bg-blue-100 p-0.5" aria-label={`Limpiar ${c.label}`}>
+                    <X size={10}/>
+                  </button>
+                </span>
+              ))}
+            </div>
+            {(cadenasSel.length + categoriaSel.length + subcatSel.length + formatoSel.length + puntoSel.length + skuSel.length > 0) && (
+              <button
+                onClick={() => {
+                  setCadenasSel([]); setCategoriaSel([]); setSubcatSel([]); setFormatoSel([]); setPuntoSel([]); setSkuSel([])
+                }}
+                className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
+                ↺ Reset filtros
+              </button>
+            )}
+          </div>
+          {showFiltros && (
+            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+              <MultiSelect label="Cadena" placeholder="Todas" selectAllLabel="Todas las cadenas"
+                value={cadenasSel} onChange={setCadenasSel}
+                options={(filtrosOpts?.cadenas ?? []).map(o => ({ value: o.value, label: o.value }))} />
+              <MultiSelect label="Categoría" placeholder="Todas" selectAllLabel="Todas las categorías"
+                value={categoriaSel} onChange={setCategoriaSel}
+                options={(filtrosOpts?.categorias ?? []).map(o => ({ value: o.value, label: o.value }))} />
+              <MultiSelect label="Subcategoría" placeholder="Todas" selectAllLabel="Todas las subcategorías"
+                value={subcatSel} onChange={setSubcatSel}
+                options={(filtrosOpts?.subcategorias ?? []).map(o => ({ value: o.value, label: o.value }))} />
+              <MultiSelect label="Formato" placeholder="Todos" selectAllLabel="Todos los formatos"
+                value={formatoSel} onChange={setFormatoSel}
+                options={(filtrosOpts?.formatos ?? []).map(o => ({ value: o.value, label: o.value }))} />
+              <MultiSelect label="Punto de Venta" placeholder="Todos" selectAllLabel="Todos los PDVs"
+                value={puntoSel} onChange={setPuntoSel}
+                options={(filtrosOpts?.puntos ?? [])
+                  .filter(o => cadenasSel.length === 0 || (o.cadena && cadenasSel.includes(o.cadena)))
+                  .map(o => ({ value: o.value, label: o.value }))} />
+              <MultiSelect label="SKU / Producto" placeholder="Todos" selectAllLabel="Todos los SKUs"
+                value={skuSel} onChange={setSkuSel}
+                options={(filtrosOpts?.skus ?? [])
+                  .filter(o => subcatSel.length === 0 || (o.subcategoria && subcatSel.includes(o.subcategoria)))
+                  .map(o => ({ value: o.value, label: o.descripcion ? `${o.value} · ${o.descripcion.slice(0, 32)}` : o.value }))} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Filtros de sección (legacy) ── */}
       <div className="px-6 pt-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
           <div className="flex items-start gap-x-4 gap-y-3 flex-wrap text-xs">
@@ -2086,23 +2242,6 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               </div>
             </div>
 
-            {/* Cadena */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">Cadena</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden flex-wrap">
-                <button onClick={() => { setCadenaFilter(''); saveFilter('cadena', '') }}
-                  className={`px-3 py-1.5 font-medium transition-colors ${cadenaFilter === '' ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  Todas
-                </button>
-                {(CADENAS_POR_PAIS[pais] ?? []).map(name => (
-                  <button key={name} onClick={() => { setCadenaFilter(name); saveFilter('cadena', name) }}
-                    className={`px-3 py-1.5 font-medium transition-colors ${cadenaFilter === name ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             {/* Período */}
             <div className="flex flex-col gap-1">
               <span className="text-[10px] uppercase tracking-widest text-gray-400">Período</span>
@@ -2125,10 +2264,10 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               <button
                 onClick={() => {
                   setDiv('TOTAL'); setEvolVista('mensual'); setEvolMedida('valor')
-                  setEvolSubcat(''); setEvolTopN(5); setCadenaFilter('')
+                  setEvolSubcat(''); setEvolTopN(5)
                   setEvolDesde(''); setEvolHasta('')
                   setEvolYearFilter(''); setEvolCadenaLine(''); setEvolCpFilter(''); setEvolSkuFilter('')
-                  ;['div','vista','medida','subcat','topn','cadena','desde','hasta'].forEach(k => localStorage.removeItem(`${storageKey}-${k}`))
+                  ;['div','vista','medida','subcat','topn','desde','hasta'].forEach(k => localStorage.removeItem(`${storageKey}-${k}`))
                 }}
                 className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
                 ↺ Reset

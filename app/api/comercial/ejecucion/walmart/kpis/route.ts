@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { CADENA_NORM_SQL } from '@/lib/db/walmart-cadena'
+import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
 
 export const revalidate = 300
 
@@ -9,10 +10,11 @@ const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov'
 
 export async function GET(req: NextRequest) {
   try {
-    const pais     = req.nextUrl.searchParams.get('pais') ?? 'CR'
-    const categoria = req.nextUrl.searchParams.get('categoria') ?? ''
-    const catFilter = categoria ? `AND categoria = '${categoria.replace(/'/g,"''")}'` : ''
-    const paisSafe  = pais.replace(/'/g,"''")
+    const pais = req.nextUrl.searchParams.get('pais') ?? 'CR'
+    const f    = parseWalmartFilters(req)
+    const w    = buildWalmartWhere(f, { startAt: 2 })
+    // Vista "por cadena": queremos ver todas las cadenas aunque el usuario filtre por cadena
+    const wSinCad = buildWalmartWhere({ ...f, cadenas: [] }, { startAt: 2 })
 
     const [ytdR, cadenaR, catR, monthlyR] = await Promise.all([
       // YTD 2026 vs same-period 2025
@@ -24,19 +26,19 @@ export async function GET(req: NextRequest) {
             MAX(fecha)           AS ultima_fecha,
             MAX(EXTRACT(MONTH FROM fecha))::int AS ultimo_mes
           FROM fact_ventas_walmart
-          WHERE pais = '${paisSafe}'
+          WHERE pais = $1
             AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
-            ${catFilter}
+            AND ${w.where}
         ),
         prev AS (
           SELECT
             SUM(ventas_valor)    AS valor,
             SUM(ventas_unidades) AS unidades
           FROM fact_ventas_walmart
-          WHERE pais = '${paisSafe}'
+          WHERE pais = $1
             AND fecha >= '2025-01-01' AND fecha < '2026-01-01'
             AND EXTRACT(MONTH FROM fecha) <= (SELECT COALESCE(ultimo_mes, 12) FROM cur)
-            ${catFilter}
+            AND ${w.where}
         )
         SELECT
           COALESCE(cur.valor, 0)            AS ytd_2026,
@@ -49,30 +51,30 @@ export async function GET(req: NextRequest) {
                THEN ROUND(((cur.valor - prev.valor) / prev.valor * 100)::numeric, 1)
                ELSE NULL END                AS delta_ytd
         FROM cur, prev
-      `),
-      // By cadena
+      `, [pais, ...w.params]),
+      // By cadena (mostramos todas las cadenas, no filtramos por cadena aquí)
       pool.query(`
         SELECT ${CADENA_NORM_SQL} AS cadena,
           SUM(CASE WHEN fecha >= '2026-01-01' AND fecha < '2027-01-01' THEN ventas_valor    ELSE 0 END) AS valor_2026,
           SUM(CASE WHEN fecha >= '2026-01-01' AND fecha < '2027-01-01' THEN ventas_unidades ELSE 0 END) AS uni_2026,
           SUM(CASE WHEN fecha >= '2025-01-01' AND fecha < '2026-01-01' THEN ventas_valor    ELSE 0 END) AS valor_2025
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}' ${catFilter}
+        WHERE pais = $1 AND ${wSinCad.where}
           AND fecha >= '2025-01-01' AND fecha < '2027-01-01'
         GROUP BY ${CADENA_NORM_SQL}
         ORDER BY valor_2026 DESC
-      `),
+      `, [pais, ...wSinCad.params]),
       // By categoria
       pool.query(`
         SELECT categoria,
           SUM(ventas_valor)    AS valor_2026,
           SUM(ventas_unidades) AS uni_2026
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}' ${catFilter}
+        WHERE pais = $1 AND ${w.where}
           AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
         GROUP BY categoria
         ORDER BY valor_2026 DESC
-      `),
+      `, [pais, ...w.params]),
       // Monthly 2025 + 2026
       pool.query(`
         SELECT
@@ -80,11 +82,11 @@ export async function GET(req: NextRequest) {
           EXTRACT(MONTH FROM fecha)::int AS mes,
           ROUND(SUM(ventas_valor)::numeric, 2) AS valor
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}' ${catFilter}
+        WHERE pais = $1 AND ${w.where}
           AND fecha >= '2025-01-01' AND fecha < '2027-01-01'
         GROUP BY 1, 2
         ORDER BY 1, 2
-      `),
+      `, [pais, ...w.params]),
     ])
 
     const row = ytdR.rows[0] ?? {}

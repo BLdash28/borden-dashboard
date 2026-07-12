@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
 
 export const revalidate = 300
 
@@ -8,11 +9,16 @@ const MN = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', '
 
 export async function GET(req: NextRequest) {
   try {
-    const sp       = req.nextUrl.searchParams
-    const pais     = sp.get('pais')     ?? 'CR'
-    const cliente  = sp.get('cliente')  ?? 'WALMART'
-    const paisSafe    = pais.replace(/'/g, "''")
-    const clienteSafe = cliente.replace(/'/g, "''")
+    const sp      = req.nextUrl.searchParams
+    const pais    = sp.get('pais')    ?? 'CR'
+    const cliente = sp.get('cliente') ?? 'WALMART'
+    const f       = parseWalmartFilters(req)
+
+    // Sellout: se pueden aplicar todos los filtros contra fact_ventas_walmart
+    const wOut = buildWalmartWhere(f, { startAt: 3 })
+    // Sell-in (fact_sales_sellin) sólo tiene sku/categoria/subcategoria — no cadena/formato/punto_venta
+    const fSellin = { ...f, cadenas: [], formatos: [], puntos: [] }
+    const wIn  = buildWalmartWhere(fSellin, { startAt: 3 })
 
     const [selloutR, sellinR] = await Promise.all([
       pool.query(`
@@ -22,24 +28,26 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(ventas_valor)::numeric,    2) AS sellout_val,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS sellout_uni
         FROM fact_ventas_walmart
-        WHERE pais = '${paisSafe}'
+        WHERE pais = $1
           AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
           AND categoria IN ('Quesos', 'Leches', 'Helados')
+          AND ${wOut.where}
         GROUP BY EXTRACT(MONTH FROM fecha)::int, categoria
         ORDER BY mes, categoria
-      `),
+      `, [pais, cliente, ...wOut.params]),
       pool.query(`
         SELECT mes, categoria,
           ROUND(SUM(venta_neta)::numeric,     2) AS sellin_val,
           ROUND(SUM(cantidad_cajas)::numeric, 0) AS sellin_cajas
         FROM fact_sales_sellin
         WHERE ano = 2026
-          AND pais = '${paisSafe}'
-          AND cliente_nombre = '${clienteSafe}'
+          AND pais = $1
+          AND cliente_nombre = $2
           AND categoria IN ('Quesos', 'Leches', 'Helados')
+          AND ${wIn.where}
         GROUP BY mes, categoria
         ORDER BY mes, categoria
-      `),
+      `, [pais, cliente, ...wIn.params]),
     ])
 
     const selloutByKey: Record<string, number> = {}
