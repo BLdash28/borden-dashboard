@@ -399,17 +399,35 @@ function ProyeccionInner() {
             }
           </div>
         </div>
-        {/* 4. Facing */}
+        {/* 4. Facing — Esperado vs Actual en un mismo card */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
           <p className="text-xs font-semibold text-gray-500 mb-0.5 md:mb-1 leading-tight">Facing</p>
-          <p className="text-[10px] text-gray-400 mb-1 md:mb-2">
-            Proy. hasta {kpis.ultimoMes > 0 ? MES_LABELS[kpis.ultimoMes] : '—'} / total anual
+          <p className="text-[10px] text-gray-400 mb-2">
+            Hasta {kpis.ultimoMes > 0 ? MES_LABELS[kpis.ultimoMes] : '—'} / total anual
           </p>
-          <div className="text-lg md:text-2xl font-bold">
-            {kpis.facing !== null
-              ? <span className="text-blue-600">{kpis.facing}%</span>
-              : <span className="text-gray-400 text-xs">—</span>
-            }
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-gray-400 mb-0.5">Esperado</p>
+              <p className="text-lg md:text-xl font-bold">
+                {kpis.facing !== null
+                  ? <span className="text-blue-600">{kpis.facing}%</span>
+                  : <span className="text-gray-400 text-xs">—</span>
+                }
+              </p>
+            </div>
+            <div>
+              <p className="text-[9px] uppercase tracking-wider text-gray-400 mb-0.5">Actual</p>
+              <p className="text-lg md:text-xl font-bold">
+                {kpis.proy > 0
+                  ? (() => {
+                      const actual = Math.round(kpis.real / kpis.proy * 1000) / 10
+                      const cls = kpis.facing !== null && actual < kpis.facing ? 'text-red-600' : 'text-emerald-600'
+                      return <span className={cls}>{actual}%</span>
+                    })()
+                  : <span className="text-gray-400 text-xs">—</span>
+                }
+              </p>
+            </div>
           </div>
         </div>
         {/* 5. Proyección Inicial (antes "Total Proyectado 2026") — al final */}
