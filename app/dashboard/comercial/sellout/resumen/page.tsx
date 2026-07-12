@@ -360,7 +360,7 @@ export default function ResumenPage() {
             </span>
           )}
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>Ventas Totales USD</p>
+            <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>Ventas YTD</p>
             <DollarSign size={14} style={{ color: '#c8873a' }} />
           </div>
           <p className="text-2xl font-bold" style={{ color: 'var(--t1)' }}>
@@ -386,7 +386,7 @@ export default function ResumenPage() {
             </span>
           )}
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>Ventas Unidades</p>
+            <p className="text-[9px] tracking-[2px] uppercase font-semibold" style={{ color: 'var(--t3)' }}>Ventas UND YTD</p>
             <ShoppingCart size={14} style={{ color: '#3b82f6' }} />
           </div>
           <p className="text-2xl font-bold" style={{ color: 'var(--t1)' }}>
