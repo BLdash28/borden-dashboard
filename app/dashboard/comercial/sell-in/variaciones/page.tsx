@@ -200,10 +200,20 @@ export default function SellInVariaciones() {
     a.click()
   }
 
-  // Only show trimestres that have at least one active month
-  const visibleTrimestres = TRIMESTRES.filter(t => t.meses.some(m => meses.includes(m)))
+  // Cortar meses hasta el último con datos 2026 (así no aparecen meses vacíos futuros)
+  const ultimoMes2026 = Math.max(0, ...meses.filter(m => (totals.meses[m]?.y2026 ?? 0) > 0))
+  const mesesVisibles = ultimoMes2026 > 0 ? meses.filter(m => m <= ultimoMes2026) : meses
 
-  const mesLabel = '2025 vs 2026 · Año completo'
+  const visibleTrimestres = TRIMESTRES.filter(t => t.meses.some(m => mesesVisibles.includes(m)))
+
+  // Resumen YTD del período visible (mismos meses en ambos años)
+  const ytdTotal2025 = mesesVisibles.reduce((s, m) => s + (totals.meses[m]?.y2025 ?? 0), 0)
+  const ytdTotal2026 = mesesVisibles.reduce((s, m) => s + (totals.meses[m]?.y2026 ?? 0), 0)
+  const ytdVar       = ytdTotal2025 > 0 ? ((ytdTotal2026 - ytdTotal2025) / ytdTotal2025) * 100 : null
+
+  const mesLabel = ultimoMes2026 > 0
+    ? `2025 vs 2026 · Hasta ${MESES_LABEL[ultimoMes2026]}`
+    : '2025 vs 2026'
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-6">
@@ -264,10 +274,39 @@ export default function SellInVariaciones() {
         </div>
       ) : (
         <div className="space-y-4">
+          {/* Resumen YTD del período visible */}
+          <div className="bg-white rounded-xl border border-amber-100 shadow-sm p-4 md:p-5 ring-1 ring-amber-50">
+            <div className="flex items-baseline justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-widest">Resumen YTD</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {ultimoMes2026 > 0 ? `Ene → ${MESES_LABEL[ultimoMes2026]} · Mismo período en ambos años` : '—'}
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4 mt-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">YTD 2025</p>
+                <p className="text-lg md:text-2xl font-bold text-gray-700 break-all">{fmt(ytdTotal2025)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">YTD 2026</p>
+                <p className="text-lg md:text-2xl font-bold text-gray-900 break-all">{fmt(ytdTotal2026)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-0.5">Variación</p>
+                <p className={`text-lg md:text-2xl font-bold ${varColor(ytdVar)}`}>{fmtVar(ytdVar)}</p>
+                <p className="text-[10px] text-gray-400">
+                  Δ {ytdTotal2026 - ytdTotal2025 >= 0 ? '+' : '−'}{fmt(Math.abs(ytdTotal2026 - ytdTotal2025)).replace('$','$')}
+                </p>
+              </div>
+            </div>
+          </div>
+
           {visibleTrimestres.map((trim, ti) => {
             const isLast = ti === visibleTrimestres.length - 1
-            // Only include months that are actually in the YTD range
-            const trimMeses = trim.meses.filter(m => meses.includes(m))
+            // Only include months that are actually in the YTD range (con datos 2026)
+            const trimMeses = trim.meses.filter(m => mesesVisibles.includes(m))
             const colSpanSection = 1 + trimMeses.length * 2
 
             return (
