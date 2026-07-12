@@ -450,7 +450,7 @@ function ProyeccionInner() {
           </div>
           <div className="h-[240px] md:h-[340px]">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} margin={{ top: 24, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={8}>
+            <BarChart data={chartData} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={8}>
               <defs>
                 <linearGradient id="gradProyProy" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#3a6fa8" stopOpacity={1}/>
@@ -472,18 +472,20 @@ function ProyeccionInner() {
                 <LabelList
                   dataKey="proyectado"
                   position="top"
-                  offset={6}
+                  offset={12}
+                  angle={-45}
                   formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
-                  style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700 }}
+                  style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }}
                 />
               </Bar>
               <Bar dataKey="real" name="Real" fill="url(#gradProyReal)" radius={[6,6,0,0]} maxBarSize={28}>
                 <LabelList
                   dataKey="real"
                   position="top"
-                  offset={6}
+                  offset={12}
+                  angle={-45}
                   formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
-                  style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700 }}
+                  style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700, textAnchor: 'start' }}
                 />
               </Bar>
             </BarChart>
