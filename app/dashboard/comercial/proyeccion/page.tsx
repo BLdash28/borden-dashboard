@@ -119,6 +119,7 @@ function ProyeccionInner() {
   const [rows,        setRows]        = useState<Row[]>([])
   const [catRows,     setCatRows]     = useState<CatRow[]>([])  // filtrados por todos los filtros
   const [catRowsAll,  setCatRowsAll]  = useState<CatRow[]>([])  // sin sub-filtros, para opciones dropdown
+  const [otrasProy,   setOtrasProy]   = useState<{ tipo: string; total: number; meses: number }[]>([])
   const [expanded,    setExpanded]    = useState<Set<string>>(new Set())
   const [loading,     setLoading]     = useState(false)
   const [error,       setError]       = useState('')
@@ -154,6 +155,7 @@ function ProyeccionInner() {
       setRows(data.rows ?? [])
       setCatRowsAll(data.catRows ?? [])
       setCatRows(data.catRows ?? [])
+      setOtrasProy(data.otras_proyecciones ?? [])
       if (data.anos?.length) setAnos(data.anos)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al cargar datos')
@@ -183,6 +185,7 @@ function ProyeccionInner() {
       const data = await res.json()
       if (data.error) throw new Error(data.error)
       setCatRows(data.catRows ?? [])
+      setOtrasProy(data.otras_proyecciones ?? [])
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Error al cargar datos')
     }
@@ -350,11 +353,24 @@ function ProyeccionInner() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
           <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">Total Proyectado 2026</p>
+          <p className="text-[10px] text-gray-400 mb-1">Original</p>
           <p className="text-lg md:text-2xl font-bold text-gray-900 break-all">{fmt(kpis.proy)}</p>
         </div>
+        {/* Card por cada tipo adicional (Revisión, Forecast, etc.) */}
+        {otrasProy.map(o => {
+          const label = o.tipo.charAt(0) + o.tipo.slice(1).toLowerCase()
+          const dif   = o.total - kpis.proy
+          return (
+            <div key={o.tipo} className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50">
+              <p className="text-xs font-semibold text-blue-700 mb-1 md:mb-2 leading-tight">Proyectado — {label}</p>
+              <p className="text-[10px] text-gray-400 mb-1">vs original: {dif >= 0 ? '+' : '−'}{fmtK(Math.abs(dif))}</p>
+              <p className="text-lg md:text-2xl font-bold text-blue-700 break-all">{fmt(o.total)}</p>
+            </div>
+          )
+        })}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
           <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">Total Real YTD</p>
           <p className="text-lg md:text-2xl font-bold text-gray-900 break-all">{fmt(kpis.real)}</p>

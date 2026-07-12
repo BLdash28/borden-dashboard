@@ -20,8 +20,8 @@ export async function GET(req: NextRequest) {
 
     const inNums = (col: string, vals: number[]) => `${col} IN (${vals.join(',')})`
 
-    // ── Proyecciones nivel empresa ────────────────────────────────
-    const pWhere: string[] = ['categoria IS NULL']
+    // ── Proyecciones nivel empresa (tipo=ORIGINAL) ────────────────────────────────
+    const pWhere: string[] = ['categoria IS NULL', "tipo = 'ORIGINAL'"]
     const pParams: unknown[] = []
     let pi = 1
     if (empresas.length) {
@@ -74,8 +74,8 @@ export async function GET(req: NextRequest) {
     )
     const anos = anosRows.map(r => r.ano)
 
-    // ── Cat-rows — filtrados por todos los params incluyendo categoria/pais/cliente ──
-    const cWhere: string[] = ['categoria IS NOT NULL']
+    // ── Cat-rows — filtrados por todos los params (tipo=ORIGINAL) ──
+    const cWhere: string[] = ['categoria IS NOT NULL', "tipo = 'ORIGINAL'"]
     const cParams: unknown[] = []
     let ci = 1
     if (empresas.length) {
@@ -187,7 +187,50 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    return NextResponse.json({ anos, rows, catRows: allCatRows })
+    // ── Otras proyecciones (tipo != ORIGINAL) — totales por tipo ────────────────
+    // Aplica los mismos filtros de contexto (empresas/ano/mes/categoria/pais/cliente)
+    // para que el card sea comparable con la selección actual.
+    const oWhere: string[] = ["tipo <> 'ORIGINAL'"]
+    const oParams: unknown[] = []
+    let oi = 1
+    if (empresas.length) {
+      oWhere.push(`empresa IN (${empresas.map(() => `$${oi++}`).join(',')})`)
+      oParams.push(...empresas)
+    } else {
+      oWhere.push(`empresa IN ('LICENCIAMIENTO', 'BL FOODS')`)
+    }
+    if (anosParam.length)  oWhere.push(inNums('ano', anosParam))
+    if (mesesParam.length) oWhere.push(inNums('mes', mesesParam))
+    if (categorias.length) {
+      oWhere.push(`(categoria IS NULL OR categoria IN (${categorias.map(() => `$${oi++}`).join(',')}))`)
+      oParams.push(...categorias)
+    }
+    if (paises.length) {
+      oWhere.push(`(pais IS NULL OR pais IN (${paises.map(() => `$${oi++}`).join(',')}))`)
+      oParams.push(...paises)
+    }
+    if (clientes.length) {
+      oWhere.push(`(cliente IS NULL OR cliente IN (${clientes.map(() => `$${oi++}`).join(',')}))`)
+      oParams.push(...clientes)
+    }
+
+    const { rows: otrasRows } = await pool.query<{ tipo: string; total: string; meses: string }>(`
+      SELECT tipo,
+             SUM(valor_usd)::numeric AS total,
+             COUNT(DISTINCT mes)::int AS meses
+      FROM proyecciones
+      WHERE ${oWhere.join(' AND ')}
+      GROUP BY tipo
+      ORDER BY tipo
+    `, oParams)
+
+    const otras_proyecciones = otrasRows.map(r => ({
+      tipo:  r.tipo,
+      total: Number(r.total ?? 0),
+      meses: Number(r.meses ?? 0),
+    }))
+
+    return NextResponse.json({ anos, rows, catRows: allCatRows, otras_proyecciones })
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('proyeccion error:', msg)
