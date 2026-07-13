@@ -1291,9 +1291,27 @@ export default function ExitoEjecucion() {
               <h4 className="text-sm font-bold text-gray-800">
                 {ventasVista === 'mensual' ? 'Ventas mensuales' : 'Ventas diarias · 2026'}
               </h4>
-              <p className="text-[11px] text-gray-400">
-                {ventasVista === 'mensual' ? `Comparativo 2025 vs 2026 · ${monLabel}` : `Tendencia diaria · ${monLabel}`}
-              </p>
+              {(() => {
+                // Precio promedio por Und del período (2026 en la moneda actual)
+                const totV = ventasVista === 'diaria'
+                  ? ventasDiaria.reduce((s, r) => s + (isCop ? r.valor_cop : r.valor_usd), 0)
+                  : monthlyVal.reduce((s, m: any) => s + (m.val2026 ?? 0), 0)
+                const totU = ventasVista === 'diaria'
+                  ? ventasDiaria.reduce((s, r) => s + r.unidades, 0)
+                  : (kpis?.monthly ?? []).reduce((s, m: any) => s + (m.uds2026 ?? 0), 0)
+                const precioAvg = totU > 0 ? totV / totU : 0
+                return (
+                  <p className="text-[11px] text-gray-400">
+                    {ventasVista === 'mensual' ? `Comparativo 2025 vs 2026 · ${monLabel}` : `Tendencia diaria · ${monLabel}`}
+                    {precioAvg > 0 && (
+                      <>
+                        <span className="mx-1.5 text-gray-300">·</span>
+                        <span className="font-semibold text-emerald-600">Precio prom / Und: {tipVal(precioAvg)}</span>
+                      </>
+                    )}
+                  </p>
+                )
+              })()}
             </div>
             <div className="flex items-center gap-3 text-[11px]">
               <div className="flex rounded-lg border border-gray-200 overflow-hidden">
@@ -1307,9 +1325,10 @@ export default function ExitoEjecucion() {
               {ventasVista === 'mensual' ? (<>
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
-              </>) : (
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
-              )}
+              </>) : (<>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> Venta 2026</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> Precio / Und</span>
+              </>)}
             </div>
           </div>
           {ventasVista === 'mensual' ? (
@@ -1351,6 +1370,7 @@ export default function ExitoEjecucion() {
             const diariaSeries = ventasDiaria.map(r => ({
               dia_str: r.dia_str,
               valor: isCop ? r.valor_cop : r.valor_usd,
+              precio: r.unidades > 0 ? (isCop ? r.valor_cop : r.valor_usd) / r.unidades : 0,
             }))
             return (
               <div className="h-[300px] mt-3">
@@ -1360,7 +1380,7 @@ export default function ExitoEjecucion() {
                   <div className="h-full flex items-center justify-center text-xs text-gray-400">Sin datos diarios.</div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={diariaSeries} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                    <ComposedChart data={diariaSeries} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
                       <defs>
                         <linearGradient id="gradExitoEvoDia" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.35}/>
@@ -1371,15 +1391,20 @@ export default function ExitoEjecucion() {
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="dia_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
                         interval={Math.max(0, Math.floor(diariaSeries.length / 20) - 1)} />
-                      <YAxis tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="left" tickFormatter={yFmtVal}
+                        tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+                      <YAxis yAxisId="right" orientation="right" tickFormatter={yFmtVal}
+                        tick={{ fontSize: 10, fill: '#059669' }} width={70} axisLine={false} tickLine={false} />
                       <Tooltip
-                        formatter={(v: unknown) => [tipVal(v), `Venta (${monLabel})`]}
+                        formatter={(v: unknown, name: string) => [tipVal(v), name]}
                         contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                       />
-                      <Area type="monotone" dataKey="valor"
+                      <Area yAxisId="left" type="monotone" dataKey="valor" name={`Venta (${monLabel})`}
                         stroke="#c8873a" strokeWidth={2.5} fill="url(#gradExitoEvoDia)" dot={false}
                         activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
-                    </AreaChart>
+                      <Line yAxisId="right" type="monotone" dataKey="precio" name="Precio / Und"
+                        stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                    </ComposedChart>
                   </ResponsiveContainer>
                 )}
               </div>
