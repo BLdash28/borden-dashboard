@@ -305,7 +305,7 @@ export default function SellInResumen() {
           : (
             <div className="h-[240px] md:h-[280px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mensual} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%">
+              <BarChart data={mensual} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={3}>
                 <defs>
                   <linearGradient id="gradSellinResPrev" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%"   stopColor="#3b82f6" stopOpacity={1}/>
