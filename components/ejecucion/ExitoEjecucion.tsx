@@ -799,15 +799,26 @@ export default function ExitoEjecucion() {
             const devolUsd = devolCop !== null && kpis.ytd_2026_cop > 0
               ? (devolCop / kpis.ytd_2026_cop) * kpis.ytd_2026
               : null
+            const sellinVal = isCop ? (si?.cop_26 ?? null) : (si ? (si.cop_26 !== null && sellin.kpi.cop_26 > 0
+                        ? ((si.cop_26 as number) / sellin.kpi.cop_26) * sellin.kpi.usd_26
+                        : null) : null)
+            const devolVal = isCop ? devolCop : devolUsd
+            // % Devoluciones sobre Sell-In (las devoluciones vienen del sell-in, no del sell-out)
+            const pctDevol = sellinVal && sellinVal > 0 && devolVal !== null
+              ? (devolVal / sellinVal) * 100
+              : null
             return {
               mes_nombre: m.mes_nombre,
               sellout: isCop ? m.cop2026 : m.y2026,
-              sellin:  isCop ? (si?.cop_26 ?? null) : (si ? (si.cop_26 !== null && sellin.kpi.cop_26 > 0
-                        ? ((si.cop_26 as number) / sellin.kpi.cop_26) * sellin.kpi.usd_26
-                        : null) : null),
-              devoluciones: isCop ? devolCop : devolUsd,
+              sellin: sellinVal,
+              devoluciones: devolVal,
+              pctDevol,
             }
           }).filter(m => (m.sellout && m.sellout > 0) || (m.sellin && m.sellin > 0) || (m.devoluciones && m.devoluciones > 0))
+          // Totales YTD para el subtitle (% devoluciones/sell-in acumulado)
+          const totSellin = compare.reduce((s, m) => s + (m.sellin ?? 0), 0)
+          const totDevol  = compare.reduce((s, m) => s + (m.devoluciones ?? 0), 0)
+          const pctYTD    = totSellin > 0 ? (totDevol / totSellin) * 100 : null
           // Ticks fijos por pedido: 200, 300, 400 y 500 (en la unidad de moneda).
           // En COP asumimos que representan millones (200M, 300M, ..., 500M).
           // En USD son unidades directas (200, 300, ..., 500).
@@ -819,7 +830,15 @@ export default function ExitoEjecucion() {
               <div className="flex items-center justify-between mb-1">
                 <div>
                   <h3 className="text-sm font-bold text-gray-800">Sell-Out vs Sell-In vs Devoluciones</h3>
-                  <p className="text-[11px] text-gray-400">Comparativo mensual · 2026 ({moneda.toUpperCase()})</p>
+                  <p className="text-[11px] text-gray-400">
+                    Comparativo mensual · 2026 ({moneda.toUpperCase()})
+                    {pctYTD !== null && (
+                      <>
+                        <span className="mx-1.5 text-gray-300">·</span>
+                        <span className="font-semibold text-red-600">Devol. YTD: {pctYTD.toFixed(1)}% del Sell-In</span>
+                      </>
+                    )}
+                  </p>
                 </div>
                 <div className="flex items-center gap-3 text-[11px]">
                   <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"/> Sell-In</span>
@@ -849,9 +868,18 @@ export default function ExitoEjecucion() {
                     <YAxis tickFormatter={yTick} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}
                       domain={[0, compMax]} ticks={compTicks} />
                     <Tooltip
-                      formatter={(v: any, name: string) => [fmtVal(Number(v)), name]}
                       cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                      formatter={(v: any, name: string, item: any) => {
+                        if (name === 'Devoluciones') {
+                          const pct = item?.payload?.pctDevol as number | null
+                          return [
+                            `${fmtVal(Number(v))}${pct !== null && pct !== undefined ? ` (${pct.toFixed(1)}% Sell-In)` : ''}`,
+                            name,
+                          ]
+                        }
+                        return [fmtVal(Number(v)), name]
+                      }}
                     />
                     <Bar dataKey="sellin"       name="Sell-In"      fill="url(#gradBarSellin)"  radius={[8,8,0,0]} maxBarSize={28}>
                       <LabelList dataKey="sellin"       position="top" formatter={fmtBarLbl}
@@ -862,8 +890,22 @@ export default function ExitoEjecucion() {
                         style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                     </Bar>
                     <Bar dataKey="devoluciones" name="Devoluciones" fill="url(#gradBarDevol)"   radius={[8,8,0,0]} maxBarSize={28}>
-                      <LabelList dataKey="devoluciones" position="top" formatter={fmtBarLbl}
-                        style={{ fontSize: 9, fill: '#b91c1c', fontWeight: 700 }} />
+                      <LabelList
+                        position="top"
+                        content={(props: any) => {
+                          const { x, y, width, value, index } = props
+                          if (value === null || value === undefined || value === 0) return null
+                          const pct = compare[index]?.pctDevol
+                          const label = fmtBarLbl(value)
+                          const pctTxt = pct !== null && pct !== undefined ? ` (${pct.toFixed(1)}%)` : ''
+                          return (
+                            <text x={x + width / 2} y={y - 4} textAnchor="middle"
+                              style={{ fontSize: 9, fill: '#b91c1c', fontWeight: 700 }}>
+                              {label}{pctTxt}
+                            </text>
+                          )
+                        }}
+                      />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
