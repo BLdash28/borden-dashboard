@@ -1306,7 +1306,8 @@ export default function ExitoEjecucion() {
                   const last = withData[withData.length - 1]
                   if (last) {
                     const v = isCop ? (last.cop2026 ?? 0) : (last.y2026 ?? 0)
-                    precioUlt = last.uds2026 > 0 ? v / last.uds2026 : 0
+                    const u = last.uds2026 ?? 0
+                    precioUlt = u > 0 ? v / u : 0
                     refLabel = last.mes_nombre
                   }
                 }
