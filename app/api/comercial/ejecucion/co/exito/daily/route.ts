@@ -12,6 +12,16 @@ export async function GET(req: NextRequest) {
   try {
     const f = parseExitoFilters(req)
     const w = buildExitoWhere(f, { startAt: 1 })
+    // Rango opcional YYYY-MM (desde/hasta) para acotar el chart.
+    const sp     = req.nextUrl.searchParams
+    const desde  = sp.get('desde') || ''   // "2026-01"
+    const hasta  = sp.get('hasta') || ''   // "2026-07"
+    const [dY, dM] = desde ? desde.split('-').map(Number) : [null, null]
+    const [hY, hM] = hasta ? hasta.split('-').map(Number) : [null, null]
+    const rangeConds: string[] = []
+    if (dY && dM) rangeConds.push(`(ano * 100 + mes) >= ${dY * 100 + dM}`)
+    if (hY && hM) rangeConds.push(`(ano * 100 + mes) <= ${hY * 100 + hM}`)
+    const rangeSql = rangeConds.length ? 'AND ' + rangeConds.join(' AND ') : 'AND ano = 2026'
 
     const r = await pool.query(`
       SELECT ano, mes, dia,
@@ -19,7 +29,8 @@ export async function GET(req: NextRequest) {
         ROUND(SUM(venta_valorcop)::numeric,  0) AS valor_cop,
         ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
       FROM fact_ventas_exito
-      WHERE pais='CO' AND ano = 2026 AND dia > 0
+      WHERE pais='CO' AND dia > 0
+        ${rangeSql}
         AND ${w.where}
       GROUP BY ano, mes, dia
       ORDER BY ano, mes, dia
