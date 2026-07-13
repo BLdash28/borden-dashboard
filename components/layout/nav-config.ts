@@ -54,7 +54,7 @@ export const MENUS: Record<string, MenuSection[]> = {
         { icon: Globe2, label: 'CR', children: [
           { href: '/dashboard/comercial/ejecucion/cr/walmart',     label: 'Walmart' },
           { href: '/dashboard/comercial/ejecucion/cr/costa-dairy', label: 'Costa Dairy' },
-          { href: '/dashboard/comercial/ejecucion/cr/sensacion',   label: 'Sensación 🍦' },
+          { href: '/dashboard/comercial/ejecucion/cr/sensacion',   label: 'Sensación' },
         ]},
         { icon: Globe2, label: 'CO', children: [
           { href: '/dashboard/comercial/ejecucion/co/grupo-exito', label: 'Grupo Éxito' },

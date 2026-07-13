@@ -89,8 +89,8 @@ export default function SensacionEjecucion() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-widest">Ejecución CR</p>
-          <h1 className="text-xl md:text-2xl font-bold text-gray-800 flex items-center gap-2">
-            🍦 Sensación · Borden Helados
+          <h1 className="text-xl md:text-2xl font-bold text-gray-800">
+            Sensación · Borden Helados
           </h1>
           <p className="text-xs md:text-sm text-gray-400 mt-0.5">
             Distribuidor CR · Costa Rica{data ? ` · Datos hasta ${data.ultimo_mes_nombre || '—'} 2026` : ''}
