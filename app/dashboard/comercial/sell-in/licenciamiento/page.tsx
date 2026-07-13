@@ -164,9 +164,16 @@ export default function SellInLicenciamiento() {
       {tipo === 'colombia' && data && (() => {
         const { kpi, monthly, top_skus, ocs } = data
         const ventaCur = useUsd ? kpi.usd_26 : kpi.cop_26
+        // Tasa implícita 2026 (usd/cop) para derivar utilidad y costo en USD (no vienen del API).
+        const rate26 = kpi.cop_26 > 0 && kpi.usd_26 > 0 ? kpi.usd_26 / kpi.cop_26 : 0
+        const utCur    = useUsd ? kpi.ut_26 * rate26 : kpi.ut_26
+        const currLbl  = useUsd ? 'USD' : 'COP'
         const monthlyF = monthly.filter(m => (m.cop_25 || 0) > 0 || (m.cop_26 || 0) > 0)
         const monthlyPlus = monthlyF.map(m => ({
           ...m,
+          // Utilidad convertida a la moneda actual usando rate26
+          ut_25_cur: useUsd ? (m.ut_25 * rate26) : m.ut_25,
+          ut_26_cur: useUsd && m.ut_26 !== null ? (m.ut_26 * rate26) : m.ut_26,
           margen_26_pct: (m.cop_26 && m.cop_26 > 0 && m.ut_26 !== null) ? (m.ut_26 / m.cop_26) * 100 : null,
           margen_25_pct: (m.cop_25 > 0)                                 ? (m.ut_25 / m.cop_25) * 100 : null,
         }))
@@ -203,8 +210,8 @@ export default function SellInLicenciamiento() {
                 </p>
               </div>
               <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Utilidad Bruta (COP)</p>
-                <p className="text-xl font-bold text-gray-800">{fmtCOP(kpi.ut_26)}</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Utilidad Bruta ({currLbl})</p>
+                <p className="text-xl font-bold text-gray-800">{fmtVal(utCur)}</p>
                 <p className="text-[10px] text-gray-500 mt-0.5">
                   {kpi.delta_utilidad !== null ? `${kpi.delta_utilidad > 0 ? '+' : ''}${kpi.delta_utilidad.toFixed(1)}% vs 2025` : 'Sin comparativo'}
                 </p>
@@ -272,7 +279,7 @@ export default function SellInLicenciamiento() {
                 <div className="flex items-center justify-between mb-1">
                   <div>
                     <h3 className="text-sm font-bold text-gray-800">Utilidad Bruta Mensual</h3>
-                    <p className="text-[11px] text-gray-400">2025 vs 2026 · COP</p>
+                    <p className="text-[11px] text-gray-400">2025 vs 2026 · {currLbl}</p>
                   </div>
                   <div className="flex items-center gap-3 text-[11px]">
                     <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
@@ -294,20 +301,20 @@ export default function SellInLicenciamiento() {
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <YAxis tickFormatter={(v: any) => fmtCOP(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
+                      <YAxis tickFormatter={(v: any) => fmtVal(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                       <Tooltip
-                        formatter={(v: any) => fmtCOP(Number(v))}
+                        formatter={(v: any) => fmtVal(Number(v))}
                         cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                         contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                       />
-                      <Bar dataKey="ut_25" name="2025" fill="url(#gLicUt25)" radius={[8,8,0,0]} maxBarSize={36}>
-                        <LabelList dataKey="ut_25" position="top"
-                          formatter={fmtLblCop}
+                      <Bar dataKey="ut_25_cur" name="2025" fill="url(#gLicUt25)" radius={[8,8,0,0]} maxBarSize={36}>
+                        <LabelList dataKey="ut_25_cur" position="top"
+                          formatter={(v: any) => fmtLblSellin(v, useUsd)}
                           style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                       </Bar>
-                      <Bar dataKey="ut_26" name="2026" fill="url(#gLicUt26)" radius={[8,8,0,0]} maxBarSize={36}>
-                        <LabelList dataKey="ut_26" position="top"
-                          formatter={fmtLblCop}
+                      <Bar dataKey="ut_26_cur" name="2026" fill="url(#gLicUt26)" radius={[8,8,0,0]} maxBarSize={36}>
+                        <LabelList dataKey="ut_26_cur" position="top"
+                          formatter={(v: any) => fmtLblSellin(v, useUsd)}
                           style={{ fontSize: 9, fill: '#065f46', fontWeight: 700 }} />
                       </Bar>
                     </BarChart>
