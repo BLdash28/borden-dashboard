@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const buildWhere = (source: 'mv' | 'raw', extraConds: string[] = []) => {
-      // 'raw' = fact_sales_sellout (has dia), 'mv' = mv_sellout_mensual (no dia)
+      // 'raw' = v_ventas (has dia), 'mv' = mv_sellout_mensual (no dia)
       const baseCond = source === 'raw' ? ['dia > 0'] : []
       const conds: string[] = ['ano > 2000', ...baseCond, ...extraConds]
       const params: any[]   = []
@@ -52,27 +52,27 @@ export async function GET(req: NextRequest) {
       let rowsComp: any[] = []
 
       if (agrup === 'dia') {
-        // Daily needs dia column → fact_sales_sellout
+        // Daily needs dia column → v_ventas
         const { where, params } = buildWhere('raw')
         const r = await pool.query(
           `SELECT ano, mes, dia,
                   ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades,
                   COUNT(DISTINCT pais)                   AS n_paises
-           FROM fact_sales_sellout ${where}
+           FROM v_ventas ${where}
            GROUP BY ano, mes, dia ORDER BY ano, mes, dia`,
           params
         )
         rows = r.rows
 
       } else if (agrup === 'semana') {
-        // Weekly needs dia column → fact_sales_sellout
+        // Weekly needs dia column → v_ventas
         const { where, params } = buildWhere('raw')
         const r = await pool.query(
           `SELECT ano,
                   EXTRACT(WEEK FROM make_date(ano::int, mes::int, GREATEST(dia::int,1)))::int AS semana,
                   ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades,
                   COUNT(DISTINCT pais)                   AS n_paises
-           FROM fact_sales_sellout ${where}
+           FROM v_ventas ${where}
            GROUP BY ano, semana ORDER BY ano, semana`,
           params
         )

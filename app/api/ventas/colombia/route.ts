@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
       const where = 'WHERE ' + conds.join(' AND ')
 
       // mv_sellout_mensual doesn't have codigo_barras or precio_promedio.
-      // Use fact_sales_sellout (with JOIN to dim_producto) only for the row-level
+      // Use v_ventas (with JOIN to dim_producto) only for the row-level
       // detail query; KPI/cadenas/formatos come from the fast MV.
       const [rowsR, kpiR, cadenasR, formatosR] = await Promise.all([
         // Rows aggregated by month × cadena × formato × product (from MV, no precio_promedio)

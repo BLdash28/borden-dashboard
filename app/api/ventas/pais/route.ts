@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     const modo = mesQ ? 'mes' : anoQ ? 'ano' : 'todos'
 
     // mvConds: for mv_sellout_mensual (no dia column)
-    // rawConds: for fact_sales_sellout (has dia)
+    // rawConds: for v_ventas (has dia)
     const mvConds: string[]  = []
     const rawConds: string[] = ['dia > 0']
     const params: unknown[]  = []
@@ -80,13 +80,13 @@ export async function GET(req: NextRequest) {
     const cacheKey = `pais-v2:${new URL(req.url).searchParams.toString()}`
 
     const { data } = await withCache(cacheKey, async () => {
-      // SKU drill-down — needs codigo_barras and dia → fact_sales_sellout
+      // SKU drill-down — needs codigo_barras and dia → v_ventas
       if (tipo === 'skus') {
         const r = await pool.query(
           `SELECT descripcion, codigo_barras, sku,
                   ROUND(SUM(ventas_valor)::numeric, 2)    AS ventas_valor,
                   ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
-           FROM fact_sales_sellout ${rawWhere}
+           FROM v_ventas ${rawWhere}
            GROUP BY descripcion, codigo_barras, sku
            ORDER BY ventas_valor DESC LIMIT 15`,
           params
@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
       }
 
       // Time-series: mode='todos' → mv_sellout_mensual (no dia needed, fast)
-      // mode='ano'/'mes' → fact_sales_sellout (needs dia column)
+      // mode='ano'/'mes' → v_ventas (needs dia column)
       let r
       if (modo === 'todos') {
         r = await pool.query(
@@ -111,7 +111,7 @@ export async function GET(req: NextRequest) {
           `SELECT pais, mes, dia,
                   ROUND(SUM(ventas_valor)::numeric, 4)    AS ventas_valor,
                   ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
-           FROM fact_sales_sellout ${rawWhere}
+           FROM v_ventas ${rawWhere}
            GROUP BY pais, mes, dia ORDER BY pais, mes, dia`,
           params
         )
@@ -120,7 +120,7 @@ export async function GET(req: NextRequest) {
           `SELECT pais, dia,
                   ROUND(SUM(ventas_valor)::numeric, 4)    AS ventas_valor,
                   ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
-           FROM fact_sales_sellout ${rawWhere}
+           FROM v_ventas ${rawWhere}
            GROUP BY pais, dia ORDER BY pais, dia`,
           params
         )

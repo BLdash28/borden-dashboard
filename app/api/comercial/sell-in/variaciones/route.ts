@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
     const tipos      = sp.get('tipo_negocio') ? sp.get('tipo_negocio')!.split(',').filter(Boolean) : []
     const clientes   = sp.get('cliente')      ? sp.get('cliente')!.split(',').filter(Boolean)      : []
     const categorias = sp.get('categoria')    ? sp.get('categoria')!.split(',').filter(Boolean)    : []
+    const subcats    = sp.get('subcategoria') ? sp.get('subcategoria')!.split(',').filter(Boolean) : []
 
     // Año completo — 12 meses
     const meses    = Array.from({ length: 12 }, (_, i) => i + 1)
@@ -30,6 +31,7 @@ export async function GET(req: NextRequest) {
     const clienteNew = clientes.length   ? 'AND ' + inC('cliente_nombre', clientes) : ''
     const clienteOld = clientes.length   ? 'AND ' + inC('cliente',        clientes) : ''
     const catCond    = categorias.length ? 'AND ' + inC('categoria',      categorias) : ''
+    const subcatCond = subcats.length    ? 'AND ' + inC('subcategoria',   subcats)    : ''
 
     // Usa fact_sales_sellin para 2025 y 2026 (consistente con resumen ejecutivo)
     // Suplementa 2025 con ventas_sell_in solo para meses no cubiertos por fact_sales_sellin
@@ -38,13 +40,13 @@ export async function GET(req: NextRequest) {
       FROM (
         SELECT ${dimColNew} AS dim, ano, mes, venta_neta AS ingresos
         FROM fact_sales_sellin
-        WHERE ano IN (2025, 2026) AND ${mesSql} ${paisCond} ${tipoCond} ${clienteNew} ${catCond}
+        WHERE ano IN (2025, 2026) AND ${mesSql} ${paisCond} ${tipoCond} ${clienteNew} ${catCond} ${subcatCond}
 
         UNION ALL
 
         SELECT ${dimColOld} AS dim, 2025 AS ano, mes, ingresos
         FROM ventas_sell_in
-        WHERE ano = 2025 AND ${mesSql} ${paisCondOld} ${clienteOld} ${catCond}
+        WHERE ano = 2025 AND ${mesSql} ${paisCondOld} ${clienteOld} ${catCond} ${subcatCond}
           AND (ano, mes) NOT IN (
             SELECT DISTINCT ano, mes FROM fact_sales_sellin WHERE ano = 2025
           )

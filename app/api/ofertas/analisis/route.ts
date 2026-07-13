@@ -41,7 +41,7 @@ export async function GET(req: NextRequest) {
         ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades,
         ROUND(SUM(ventas_valor)::numeric, 2)    AS valor,
         ROUND(AVG(ventas_valor / NULLIF(ventas_unidades,0))::numeric, 4) AS precio_prom
-      FROM fact_sales_sellout
+      FROM v_ventas
       WHERE codigo_barras = $1
         AND ano = $2 AND mes = $3
         AND dia BETWEEN $4 AND $5
@@ -55,7 +55,7 @@ export async function GET(req: NextRequest) {
         ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades,
         ROUND(SUM(ventas_valor)::numeric, 2)    AS valor,
         ROUND(AVG(ventas_valor / NULLIF(ventas_unidades,0))::numeric, 4) AS precio_prom
-      FROM fact_sales_sellout
+      FROM v_ventas
       WHERE codigo_barras = $1
         AND ano = $2 AND mes = $3
         AND (dia < $4 OR dia > $5)
@@ -71,7 +71,7 @@ export async function GET(req: NextRequest) {
         ROUND(SUM(ventas_valor)::numeric, 2)     AS valor,
         ROUND(SUM(ventas_unidades)::numeric,0) / NULLIF(COUNT(DISTINCT dia), 0) AS uds_diario,
         ROUND(SUM(ventas_valor)::numeric,2)    / NULLIF(COUNT(DISTINCT dia), 0) AS valor_diario
-      FROM fact_sales_sellout
+      FROM v_ventas
       WHERE codigo_barras = $1
         AND (ano * 100 + mes) < $2
       GROUP BY ano, mes

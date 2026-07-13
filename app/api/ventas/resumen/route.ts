@@ -153,7 +153,7 @@ export async function GET(req: NextRequest) {
       async () => {
         // mv_ventas_agg: pre-aggregated (3.5K rows, ~100ms) vs mv_sellout_mensual (773K rows, 43s)
         const MV = 'mv_ventas_agg'
-        // For modo='mes': single query on fact_sales_sellout gets both dia and semana breakdowns
+        // For modo='mes': single query on v_ventas gets both dia and semana breakdowns
         const diaSemanasPromise = modo === 'mes'
           ? pool.query(
               `SELECT dia,

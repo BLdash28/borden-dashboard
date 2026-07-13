@@ -264,8 +264,17 @@ export default function EstadoResultadosPage() {
           {/* Tendencia */}
           {!loading && tendencia.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-              <h3 className="font-semibold text-gray-700 mb-1">Tendencia mensual</h3>
-              <p className="text-xs text-gray-400 mb-4">Ingresos, Margen Bruto y EBITDA por período</p>
+              <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
+                <div>
+                  <h3 className="font-semibold text-gray-700">Tendencia mensual</h3>
+                  <p className="text-xs text-gray-400 mt-0.5">Ingresos, Margen Bruto y EBITDA por período</p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#2a7a58' }}/> Ingresos</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#3a6fa8' }}/> Margen Bruto</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#c8873a' }}/> EBITDA</span>
+                </div>
+              </div>
               <BarChartPro
                 data={tendencia}
                 nameKey="label"

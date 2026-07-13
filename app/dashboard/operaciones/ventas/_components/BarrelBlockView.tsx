@@ -341,12 +341,20 @@ export default function BarrelBlockView({ categoria }: { categoria: 'barrel' | '
           {/* Tendencia */}
           {!loading && tendencia.length > 0 && (
             <div className="card p-5">
-              <div className="font-semibold text-[13px] mb-0.5" style={{ color: 'var(--t1)' }}>
-                Inversión mensual — {title}
+              <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
+                <div>
+                  <div className="font-semibold text-[13px]" style={{ color: 'var(--t1)' }}>
+                    Inversión mensual — {title}
+                  </div>
+                  <p className="text-[11px] mt-0.5" style={{ color: 'var(--t3)' }}>
+                    Evolución del gasto en Dairy Farmers of America por período
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS[0] }}/> Inversión $</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS[1] }}/> Volumen</span>
+                </div>
               </div>
-              <p className="text-[11px] mb-4" style={{ color: 'var(--t3)' }}>
-                Evolución del gasto en Dairy Farmers of America por período
-              </p>
               <BarChartPro
                 data={tendencia}
                 nameKey="label"

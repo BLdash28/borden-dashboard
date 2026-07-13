@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const inC = (col: string, vals: string[]) =>
       `${col} IN (${vals.map(v => `'${v.replace(/'/g, "''")}'`).join(',')})`
 
-    // fact_sales_sellout guarda formato en MAYÚSCULAS (HIPERMERCADO, SUPERMERCADO).
+    // v_ventas guarda formato en MAYÚSCULAS (HIPERMERCADO, SUPERMERCADO).
     // Los nombres de display usan mixed case y plural ("Supermercados") — normalizar antes de filtrar.
     const normFmt = (f: string): string => {
       const m: Record<string, string> = {
@@ -50,7 +50,7 @@ export async function GET(req: NextRequest) {
         WHERE dp.is_active = true
           AND dp.sku IS NOT NULL
           ${pais && useSalesFilter ? `AND EXISTS (
-            SELECT 1 FROM fact_sales_sellout fs
+            SELECT 1 FROM v_ventas fs
             WHERE fs.sku = dp.sku
               AND fs.pais = '${paisQ}'
               AND fs.ano >= 2024
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
                  THEN SUM(fss.ventas_valor) / SUM(fss.ventas_unidades)
                  ELSE 0 END::numeric, 4
           )                                           AS precio_hist
-        FROM fact_sales_sellout fss
+        FROM v_ventas fss
         WHERE fss.sku = '${skuQ}' ${paisFilter} ${fmtFilter}
           AND fss.ano IN (2025, 2026)
         GROUP BY fss.sku
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
           SELECT ano, mes,
             SUM(ventas_unidades) AS uds,
             SUM(ventas_valor)    AS val
-          FROM fact_sales_sellout
+          FROM v_ventas
           WHERE sku = '${skuQ}' ${paisFilter} ${fmtFilter}
             AND dia > 0
           GROUP BY ano, mes
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
       // Ventas últimos 8 días
       pool.query(`
         SELECT COALESCE(SUM(ventas_unidades), 0) AS ventas_8d
-        FROM fact_sales_sellout
+        FROM v_ventas
         WHERE sku = '${skuQ}' ${paisFilter} ${fmtFilter}
           AND MAKE_DATE(ano::int, mes::int, dia::int) >= CURRENT_DATE - INTERVAL '8 days'
       `),
@@ -168,12 +168,12 @@ export async function GET(req: NextRequest) {
           SUM(CASE WHEN ano = 2026 THEN ventas_unidades ELSE 0 END) AS u2026,
           SUM(CASE WHEN ano = 2025 THEN ventas_valor    ELSE 0 END) AS v2025,
           SUM(CASE WHEN ano = 2026 THEN ventas_valor    ELSE 0 END) AS v2026
-        FROM fact_sales_sellout
+        FROM v_ventas
         WHERE sku = '${skuQ}' ${paisFilter} ${fmtFilter}
           AND ano IN (2025, 2026)
           AND mes <= (SELECT EXTRACT(MONTH FROM MAX(
                 MAKE_DATE(ano::int, mes::int, GREATEST(dia::int,1))
-              )) FROM fact_sales_sellout WHERE sku = '${skuQ}' AND ano = 2026)
+              )) FROM v_ventas WHERE sku = '${skuQ}' AND ano = 2026)
       `),
     ])
 
@@ -187,7 +187,7 @@ export async function GET(req: NextRequest) {
     const soProm    = parseFloat(so?.so_prom_mes)  || 0
     const valProm   = parseFloat(so?.val_prom_mes) || 0
     const tcFactor  = TC[pais] ?? 1
-    // fact_sales_sellout almacena ventas_valor en USD (RetailLink). Multiplicar por TC → moneda local.
+    // v_ventas almacena ventas_valor en USD (RetailLink). Multiplicar por TC → moneda local.
     const pvpUsd    = valProm > 0 && soProm > 0 ? valProm / soProm : parseFloat(meta?.precio_hist) || 0
     const pvpSellout = pvpUsd * tcFactor
     // PVP real = ListPrice del monitoreo (ya en moneda local). Fallback: promedio de sellout.
@@ -215,7 +215,7 @@ export async function GET(req: NextRequest) {
             ano, mes, dia,
             SUM(ventas_valor)::float    AS val,
             SUM(ventas_unidades)::float AS uds
-          FROM fact_sales_sellout
+          FROM v_ventas
           WHERE sku = '${skuQ}' ${paisFilter} ${fmtFilter}
             AND dia > 0 AND dia <= 31
             AND ventas_unidades > 0

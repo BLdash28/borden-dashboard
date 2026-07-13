@@ -4,7 +4,7 @@ import { handleApiError } from '@/lib/api/errors'
 
 export const revalidate = 0
 
-// fact_sales_sellout almacena ventas_valor en USD (RetailLink). TC para convertir a moneda local.
+// v_ventas almacena ventas_valor en USD (RetailLink). TC para convertir a moneda local.
 const TC: Record<string, number> = { CR: 510, GT: 7.75, HN: 25, NI: 37, SV: 1 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
@@ -127,7 +127,7 @@ export async function GET(req: NextRequest) {
           ROUND(
             SUM(fs.ventas_valor) / NULLIF(SUM(fs.ventas_unidades), 0) * ${tcFactor}::numeric, 2
           ) AS precio_pvp
-        FROM fact_sales_sellout fs
+        FROM v_ventas fs
         WHERE TRUE ${pais ? `AND fs.pais = '${pais.replace(/'/g, "''")}'` : ''} ${periodoFilter}
         GROUP BY fs.sku, fs.pais
       )
@@ -204,7 +204,7 @@ export async function POST(req: NextRequest) {
                ELSE 0 END::numeric, 2
         ) AS pvp
       FROM dim_producto dp
-      LEFT JOIN fact_sales_sellout fs
+      LEFT JOIN v_ventas fs
         ON fs.sku = dp.sku AND fs.pais = $1 ${periodoFilter}
       WHERE dp.is_active = true AND dp.sku IS NOT NULL
         ${singleSku ? `AND dp.sku = '${singleSku.replace(/'/g, "''")}'` : ''}

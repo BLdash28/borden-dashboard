@@ -11,15 +11,18 @@ export async function GET(req: NextRequest) {
   try {
     const sp       = req.nextUrl.searchParams
     const dim      = sp.get('dim') || 'cliente'
-    const paises   = sp.get('pais')     ? sp.get('pais')!.split(',').filter(Boolean)     : []
-    const cadenas  = sp.get('cadena')   ? sp.get('cadena')!.split(',').filter(Boolean)   : []
-    const clientes = sp.get('cliente')  ? sp.get('cliente')!.split(',').filter(Boolean)  : []
+    const paises   = sp.get('pais')          ? sp.get('pais')!.split(',').filter(Boolean)          : []
+    const clientes = sp.get('cliente')       ? sp.get('cliente')!.split(',').filter(Boolean)       : []
+    const cats     = sp.get('categoria')     ? sp.get('categoria')!.split(',').filter(Boolean)     : []
+    const subcats  = sp.get('subcategoria')  ? sp.get('subcategoria')!.split(',').filter(Boolean)  : []
 
     // Año completo — 12 meses
     const meses   = Array.from({ length: 12 }, (_, i) => i + 1)
     const mesSql  = `mes IN (${meses.join(',')})`
-    const paisCond    = paises.length   ? 'AND ' + inC('pais',    paises)   : ''
-    const clienteCond = clientes.length ? 'AND ' + inC('cliente', clientes) : ''
+    const paisCond    = paises.length   ? 'AND ' + inC('pais',         paises)   : ''
+    const clienteCond = clientes.length ? 'AND ' + inC('cliente',      clientes) : ''
+    const catCond     = cats.length     ? 'AND ' + inC('categoria',    cats)     : ''
+    const subcatCond  = subcats.length  ? 'AND ' + inC('subcategoria', subcats)  : ''
 
     const dimCol = dim === 'categoria' ? 'categoria' : 'cliente'
 
@@ -33,7 +36,7 @@ export async function GET(req: NextRequest) {
         ROUND(SUM(ventas_valor)::numeric, 2) AS valor
       FROM v_ventas
       WHERE ano IN (2025, 2026) AND ${mesSql}
-        ${paisCond} ${clienteCond}
+        ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
         AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''
       GROUP BY ${dimExpr}, ano, mes
       ORDER BY ${dimExpr}, ano, mes

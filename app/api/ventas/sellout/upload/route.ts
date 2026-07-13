@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
     // Borrar todo si se pide reemplazar
     let eliminados = 0
     if (reemplazar) {
-      const del = await pool.query('DELETE FROM fact_sales_sellout')
+      const del = await pool.query('DELETE FROM v_ventas')
       eliminados = del.rowCount ?? 0
     }
 
@@ -134,7 +134,7 @@ export async function POST(req: NextRequest) {
       const flat = batch.flatMap(r => cols.map(c => (r as any)[c]))
 
       const result = await pool.query(
-        `INSERT INTO fact_sales_sellout (${cols.join(',')})
+        `INSERT INTO v_ventas (${cols.join(',')})
          VALUES ${vals}
          ON CONFLICT DO NOTHING`,
         flat

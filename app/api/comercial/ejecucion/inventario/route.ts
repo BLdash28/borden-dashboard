@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       SELECT
         fs.sku,
         ROUND((SUM(fs.ventas_unidades) / 90.0)::numeric, 4) AS venta_dia
-      FROM fact_sales_sellout fs
+      FROM v_ventas fs
       WHERE MAKE_DATE(fs.ano::int, fs.mes::int, fs.dia::int) >= CURRENT_DATE - INTERVAL '90 days'
         ${catSubquery}
       GROUP BY fs.sku

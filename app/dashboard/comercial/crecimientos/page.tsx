@@ -3,7 +3,7 @@ import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { RefreshCw, Download, TrendingUp, TrendingDown, Minus, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts'
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
@@ -406,22 +406,50 @@ export default function CrecimientosPage() {
       {/* Chart mensual */}
       {chartData.length > 0 && !loading && (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="font-semibold text-gray-700 mb-4">Comparativa mensual USD</h3>
+          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
+            <div>
+              <h3 className="font-semibold text-gray-700">Comparativa mensual USD</h3>
+              <p className="text-xs text-gray-400 mt-0.5">{anoAnterior} vs {anoActual}</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#d1d5db' }}/> {anoAnterior}</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#f59e0b' }}/> {anoActual}</span>
+            </div>
+          </div>
           <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={chartData} barCategoryGap="20%">
-              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} />
-              <YAxis tick={{ fontSize: 11, fill: '#9ca3af' }} tickFormatter={v => {
+            <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%">
+              <defs>
+                <linearGradient id="gradCrecPrev" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stopColor="#d1d5db" stopOpacity={1}/>
+                  <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.85}/>
+                </linearGradient>
+                <linearGradient id="gradCrecActual" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stopColor="#f59e0b" stopOpacity={1}/>
+                  <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} tickFormatter={v => {
                 if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M'
                 if (v >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K'
                 return '$' + v
               }} />
               <Tooltip
                 formatter={(val: number, name: string) => [fmt(val), name]}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e5e7eb' }}
+                cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
               />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey={String(anoAnterior)} fill="#d1d5db" radius={[4, 4, 0, 0]} />
-              <Bar dataKey={String(anoActual)} fill="#f59e0b" radius={[4, 4, 0, 0]} />
+              <Bar dataKey={String(anoAnterior)} fill="url(#gradCrecPrev)" radius={[8, 8, 0, 0]} maxBarSize={34}>
+                <LabelList dataKey={String(anoAnterior)} position="top"
+                  formatter={(v: any) => { const n = Number(v); if (!isFinite(n) || n === 0) return ''; if (Math.abs(n) >= 1e9) return '$'+(n/1e9).toFixed(1)+'MM'; if (Math.abs(n) >= 1e6) return '$'+(n/1e6).toFixed(0)+'M'; if (Math.abs(n) >= 1e3) return '$'+(n/1e3).toFixed(0)+'K'; return '$'+Math.round(n) }}
+                  style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
+              </Bar>
+              <Bar dataKey={String(anoActual)} fill="url(#gradCrecActual)" radius={[8, 8, 0, 0]} maxBarSize={34}>
+                <LabelList dataKey={String(anoActual)} position="top"
+                  formatter={(v: any) => { const n = Number(v); if (!isFinite(n) || n === 0) return ''; if (Math.abs(n) >= 1e9) return '$'+(n/1e9).toFixed(1)+'MM'; if (Math.abs(n) >= 1e6) return '$'+(n/1e6).toFixed(0)+'M'; if (Math.abs(n) >= 1e3) return '$'+(n/1e3).toFixed(0)+'K'; return '$'+Math.round(n) }}
+                  style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>

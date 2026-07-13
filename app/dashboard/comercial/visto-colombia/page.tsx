@@ -3,7 +3,7 @@ import { showError } from '@/lib/toast'
 import { useState, useMemo, useCallback } from 'react'
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, ComposedChart,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, LabelList,
   ResponsiveContainer, Cell, PieChart, Pie, ReferenceLine,
 } from 'recharts'
 import { useEffect } from 'react'
@@ -311,13 +311,16 @@ function ModSellIn({ data, fil, overrides, onEdit }: {
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
         <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={chartData} margin={{ top: 4, right: 16, left: 4, bottom: 24 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#94a3b8' }} angle={-20} textAnchor="end" height={44} />
-            <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} width={56} />
-            <Tooltip content={<ChartTip />} />
-            <Bar dataKey="Sell In" fill={C.violet} radius={[4, 4, 0, 0]}>
+          <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 24 }} barCategoryGap="20%">
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} angle={-20} textAnchor="end" height={44} />
+            <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+            <Tooltip content={<ChartTip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+            <Bar dataKey="Sell In" fill={C.violet} radius={[8, 8, 0, 0]} maxBarSize={40}>
               {chartData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+              <LabelList dataKey="Sell In" position="top"
+                formatter={(v: any) => { const n = Number(v); if (!isFinite(n) || n === 0) return ''; if (Math.abs(n) >= 1e9) return '$'+(n/1e9).toFixed(1)+'MM'; if (Math.abs(n) >= 1e6) return '$'+(n/1e6).toFixed(0)+'M'; if (Math.abs(n) >= 1e3) return '$'+(n/1e3).toFixed(0)+'K'; return '$'+Math.round(n) }}
+                style={{ fontSize: 9, fill: '#475569', fontWeight: 700 }} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -522,19 +525,38 @@ function ModSellOut({ data, fil, bm, overrides, onEdit }: {
 
       {/* Sell In vs Sell Out comparativo */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-        <h3 className="font-bold text-slate-700 text-sm mb-4">Sell Out Mensual — Tendencia</h3>
+        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
+          <div>
+            <h3 className="font-bold text-slate-700 text-sm">Sell Out Mensual — Tendencia</h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">Comparativo con cobertura</p>
+          </div>
+          <div className="flex items-center gap-3 text-[11px]">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: C.violet }}/> Sell In</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: C.blue }}/> Sell Out</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: C.green }}/> Cobertura %</span>
+          </div>
+        </div>
         <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={bySemana} margin={{ top: 4, right: 16, left: 4, bottom: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-            <YAxis yAxisId="val" tick={{ fontSize: 10, fill: '#94a3b8' }} width={52} />
-            <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 10, fill: '#94a3b8' }} width={40} unit="%" />
-            <Tooltip content={<ChartTip />} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar yAxisId="val" dataKey="Sell In"  fill={C.violet} radius={[3, 3, 0, 0]} />
-            <Bar yAxisId="val" dataKey="Sell Out" fill={C.blue}   radius={[3, 3, 0, 0]} />
+          <ComposedChart data={bySemana} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%">
+            <defs>
+              <linearGradient id="gradVCViolet" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={C.violet} stopOpacity={1}/>
+                <stop offset="100%" stopColor="#a78bfa" stopOpacity={0.85}/>
+              </linearGradient>
+              <linearGradient id="gradVCBlue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={C.blue} stopOpacity={1}/>
+                <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="semana" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="val" tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="pct" orientation="right" tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} axisLine={false} tickLine={false} unit="%" />
+            <Tooltip content={<ChartTip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+            <Bar yAxisId="val" dataKey="Sell In"  fill="url(#gradVCViolet)" radius={[8, 8, 0, 0]} maxBarSize={32} />
+            <Bar yAxisId="val" dataKey="Sell Out" fill="url(#gradVCBlue)"   radius={[8, 8, 0, 0]} maxBarSize={32} />
             <Line yAxisId="pct" type="monotone" dataKey="Cobertura" stroke={C.green} strokeWidth={2} dot={false} name="Cobertura %" />
-          </BarChart>
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
 
@@ -1155,20 +1177,40 @@ function ModPrecios({ data, fil }: { data: Row[]; fil: Filtros }) {
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-bold text-slate-700 text-sm">Base de Precios: Compra vs Comparable vs Venta</h3>
-          <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">{moneda}</span>
+        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
+          <div>
+            <h3 className="font-bold text-slate-700 text-sm">Base de Precios: Compra vs Comparable vs Venta</h3>
+            <span className="text-xs font-semibold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md mt-1 inline-block">{moneda}</span>
+          </div>
+          <div className="flex items-center gap-3 text-[11px]">
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: C.violet }}/> Compra</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: C.slate }}/> Comparable</span>
+            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: C.blue }}/> Venta</span>
+          </div>
         </div>
         <ResponsiveContainer width="100%" height={250}>
-          <BarChart data={chartData} margin={{ top: 4, right: 16, left: 4, bottom: 48 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="name" tick={{ fontSize: 9, fill: '#94a3b8' }} angle={-30} textAnchor="end" height={56} />
-            <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} width={62} />
-            <Tooltip content={<ChartTip />} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="Compra"     fill={C.violet} radius={[3,3,0,0]} />
-            <Bar dataKey="Comparable" fill={C.slate}  radius={[3,3,0,0]} />
-            <Bar dataKey="Venta"      fill={C.blue}   radius={[3,3,0,0]} />
+          <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 48 }} barCategoryGap="25%">
+            <defs>
+              <linearGradient id="gradPreciosViolet" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={C.violet} stopOpacity={1}/>
+                <stop offset="100%" stopColor="#a78bfa" stopOpacity={0.85}/>
+              </linearGradient>
+              <linearGradient id="gradPreciosSlate" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={C.slate} stopOpacity={1}/>
+                <stop offset="100%" stopColor="#94a3b8" stopOpacity={0.85}/>
+              </linearGradient>
+              <linearGradient id="gradPreciosBlue" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={C.blue} stopOpacity={1}/>
+                <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} angle={-30} textAnchor="end" height={56} />
+            <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} width={62} axisLine={false} tickLine={false} />
+            <Tooltip content={<ChartTip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+            <Bar dataKey="Compra"     fill="url(#gradPreciosViolet)" radius={[8,8,0,0]} maxBarSize={28} />
+            <Bar dataKey="Comparable" fill="url(#gradPreciosSlate)"  radius={[8,8,0,0]} maxBarSize={28} />
+            <Bar dataKey="Venta"      fill="url(#gradPreciosBlue)"   radius={[8,8,0,0]} maxBarSize={28} />
           </BarChart>
         </ResponsiveContainer>
       </div>

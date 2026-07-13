@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
       fetchAll(buildQ),
       fetchAll(() =>
         supabase
-          .from('fact_sales_sellout')
+          .from('v_ventas')
           .select('codigo_barras, ventas_unidades')
           .eq('pais', 'CO')
           .gte('ano', cutoffAno)

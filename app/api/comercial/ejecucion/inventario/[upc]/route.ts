@@ -36,7 +36,7 @@ export async function GET(
         SELECT
           fs.punto_venta,
           ROUND((SUM(fs.ventas_unidades) / 90.0)::numeric, 4) AS vta_dia
-        FROM fact_sales_sellout fs
+        FROM v_ventas fs
         JOIN prod p ON fs.sku = p.sku
         WHERE MAKE_DATE(fs.ano::int, fs.mes::int, fs.dia::int)
               >= CURRENT_DATE - INTERVAL '90 days'
