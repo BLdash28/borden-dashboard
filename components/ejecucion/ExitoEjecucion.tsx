@@ -1387,6 +1387,11 @@ export default function ExitoEjecucion() {
                           <stop offset="60%"  stopColor="#c8873a" stopOpacity={0.08}/>
                           <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
                         </linearGradient>
+                        <linearGradient id="gradExitoEvoPrecio" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%"   stopColor="#10b981" stopOpacity={0.35}/>
+                          <stop offset="60%"  stopColor="#10b981" stopOpacity={0.08}/>
+                          <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
+                        </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                       <XAxis dataKey="dia_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
@@ -1402,8 +1407,9 @@ export default function ExitoEjecucion() {
                       <Area yAxisId="left" type="monotone" dataKey="valor" name={`Venta (${monLabel})`}
                         stroke="#c8873a" strokeWidth={2.5} fill="url(#gradExitoEvoDia)" dot={false}
                         activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
-                      <Line yAxisId="right" type="monotone" dataKey="precio" name="Precio / Und"
-                        stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                      <Area yAxisId="right" type="monotone" dataKey="precio" name="Precio / Und"
+                        stroke="#10b981" strokeWidth={2.5} fill="url(#gradExitoEvoPrecio)" dot={false}
+                        activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#10b981' }} connectNulls />
                     </ComposedChart>
                   </ResponsiveContainer>
                 )}
