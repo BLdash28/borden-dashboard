@@ -33,20 +33,35 @@ export async function GET(req: NextRequest) {
     const catCond    = categorias.length ? 'AND ' + inC('categoria',      categorias) : ''
     const subcatCond = subcats.length    ? 'AND ' + inC('subcategoria',   subcats)    : ''
 
-    // Usa fact_sales_sellin para 2025 y 2026 (consistente con resumen ejecutivo)
+    // Usa fact_sales_sellin para 2025 y 2026 (consistente con resumen ejecutivo).
+    // Cutoff same-period: si 2026 tiene data hasta Jul 11, 2025 se corta también
+    // en Jul 11 para no castigar el mes en curso.
+    const cutoffQ = await pool.query(`
+      SELECT MAX(mes * 100 + dia) AS cut_num
+      FROM fact_sales_sellin
+      WHERE ano = 2026 AND ${mesSql} ${paisCond} ${tipoCond} ${clienteNew} ${catCond} ${subcatCond}
+        AND venta_neta > 0
+    `)
+    const cutNum = parseInt(cutoffQ.rows[0]?.cut_num ?? '0') || 1231
+    const cutMes = Math.floor(cutNum / 100)   // mes hasta donde comparar (ej 7)
     // Suplementa 2025 con ventas_sell_in solo para meses no cubiertos por fact_sales_sellin
     const r = await pool.query(`
       SELECT dim, ano, mes, ROUND(SUM(ingresos)::numeric, 2) AS ingresos
       FROM (
         SELECT ${dimColNew} AS dim, ano, mes, venta_neta AS ingresos
         FROM fact_sales_sellin
-        WHERE ano IN (2025, 2026) AND ${mesSql} ${paisCond} ${tipoCond} ${clienteNew} ${catCond} ${subcatCond}
+        WHERE ${mesSql} ${paisCond} ${tipoCond} ${clienteNew} ${catCond} ${subcatCond}
+          AND (
+            ano = 2026
+            OR (ano = 2025 AND mes * 100 + dia <= ${cutNum})
+          )
 
         UNION ALL
 
         SELECT ${dimColOld} AS dim, 2025 AS ano, mes, ingresos
         FROM ventas_sell_in
-        WHERE ano = 2025 AND ${mesSql} ${paisCondOld} ${clienteOld} ${catCond} ${subcatCond}
+        WHERE ano = 2025 AND mes <= ${cutMes}
+          AND ${mesSql} ${paisCondOld} ${clienteOld} ${catCond} ${subcatCond}
           AND (ano, mes) NOT IN (
             SELECT DISTINCT ano, mes FROM fact_sales_sellin WHERE ano = 2025
           )

@@ -31,11 +31,26 @@ export async function GET(req: NextRequest) {
       ? `CASE WHEN UPPER(cliente) IN ('GRUPO EXITO','GRUPO ÉXITO') THEN 'GRUPO ÉXITO' ELSE cliente END`
       : 'categoria'
 
+    // El cutoff garantiza comparación same-period: si 2026 tiene data hasta Jul 11,
+    // 2025 se corta también en Jul 11. Evita "castigar" al mes en curso porque
+    // 2025 tendría el mes completo y 2026 solo días parciales.
     const r = await pool.query(`
+      WITH cutoff AS (
+        SELECT COALESCE(MAX(mes * 100 + dia), 1231) AS cut_num
+        FROM v_ventas
+        WHERE ano = 2026 AND ${mesSql}
+          ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
+          AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''
+          AND ventas_valor > 0
+      )
       SELECT ${dimExpr} AS dim, ano, mes,
         ROUND(SUM(ventas_valor)::numeric, 2) AS valor
-      FROM v_ventas
-      WHERE ano IN (2025, 2026) AND ${mesSql}
+      FROM v_ventas, cutoff
+      WHERE ${mesSql}
+        AND (
+          (ano = 2026)
+          OR (ano = 2025 AND mes * 100 + dia <= cutoff.cut_num)
+        )
         ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
         AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''
       GROUP BY ${dimExpr}, ano, mes
@@ -86,7 +101,21 @@ export async function GET(req: NextRequest) {
       return t
     }, { total2025: 0, total2026: 0, meses: {} as Record<number, { y2025: number; y2026: number }> })
 
-    return NextResponse.json({ rows, totals, meses, dim })
+    // Exponer el cutoff exacto (mes/dia hasta donde se compara) para que el
+    // frontend muestre "Ene → 11 Jul · Mismo período" en vez de solo el mes.
+    const cutoffQ = await pool.query(`
+      SELECT MAX(mes * 100 + dia) AS cut_num
+      FROM v_ventas
+      WHERE ano = 2026 AND ${mesSql}
+        ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
+        AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''
+        AND ventas_valor > 0
+    `)
+    const cutNum = parseInt(cutoffQ.rows[0]?.cut_num ?? '0') || 0
+    const ultimoMes = Math.floor(cutNum / 100) || null
+    const ultimoDia = cutNum % 100 || null
+
+    return NextResponse.json({ rows, totals, meses, dim, ultimoMes, ultimoDia })
   } catch (err) {
     return handleApiError(err)
   }

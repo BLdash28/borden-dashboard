@@ -67,6 +67,7 @@ export default function SellOutYTD() {
   const initDone = useRef(false)
   const [rows,   setRows]   = useState<VarRow[]>([])
   const [totals, setTotals] = useState<Totals>({ total2025: 0, total2026: 0, meses: {} })
+  const [ultimoDia, setUltimoDia] = useState<number | null>(null)
   const [loading,setLoading]= useState(true)
 
   const [clienteOpts,   setClienteOpts]   = useState<{ value: string }[]>([])
@@ -97,6 +98,7 @@ export default function SellOutYTD() {
       const j = await res.json()
       setRows(j.rows ?? [])
       setTotals(j.totals ?? { total2025: 0, total2026: 0, meses: {} })
+      setUltimoDia(typeof j.ultimoDia === 'number' ? j.ultimoDia : null)
     } catch {
       setRows([])
     } finally { setLoading(false) }
@@ -193,8 +195,9 @@ export default function SellOutYTD() {
   const ytdTotal2026 = mesesVisibles.reduce((s, m) => s + (totals.meses[m]?.y2026 ?? 0), 0)
   const ytdVar       = ytdTotal2025 > 0 ? ((ytdTotal2026 - ytdTotal2025) / ytdTotal2025) * 100 : null
 
+  const diaSuffix = ultimoDia ? ` ${ultimoDia}` : ''
   const mesLabel = ultimoMes2026 > 0
-    ? `2025 vs 2026 · Hasta ${MESES_LABEL[ultimoMes2026]}`
+    ? `2025 vs 2026 · Hasta ${MESES_LABEL[ultimoMes2026]}${diaSuffix}`
     : '2025 vs 2026'
 
   const descargarCSV = () => {
@@ -284,7 +287,7 @@ export default function SellOutYTD() {
               <div>
                 <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-widest">Resumen YTD</p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  {ultimoMes2026 > 0 ? `Ene → ${MESES_LABEL[ultimoMes2026]} · Mismo período en ambos años` : '—'}
+                  {ultimoMes2026 > 0 ? `Ene → ${MESES_LABEL[ultimoMes2026]}${diaSuffix} · Mismo período en ambos años` : '—'}
                 </p>
               </div>
             </div>
