@@ -220,14 +220,19 @@ export default function SellInResumen() {
         <div className="flex items-center gap-3 flex-wrap">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Año</p>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {[2025, 2026].map(a => (
-                <button key={a} onClick={() => { setAno(a); saveStorage(a, paises, cats, tipos) }}
-                  className={`px-4 py-1.5 text-sm font-medium transition-colors ${ano===a?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {a}
-                </button>
+            <select
+              value={ano}
+              onChange={e => {
+                const v = Number(e.target.value)
+                setAno(v)
+                saveStorage(v, paises, cats, tipos)
+              }}
+              className="px-3 py-1.5 pr-8 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-[110px] cursor-pointer"
+            >
+              {[2024, 2025, 2026].map(a => (
+                <option key={a} value={a}>{a}</option>
               ))}
-            </div>
+            </select>
           </div>
           <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={handlePaisChange} placeholder="Todos" />
           <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT} value={tipos} onChange={ts => {
@@ -300,7 +305,7 @@ export default function SellInResumen() {
           : (
             <div className="h-[240px] md:h-[280px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mensual} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%">
+              <BarChart data={mensual} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={6}>
                 <defs>
                   <linearGradient id="gradSellinResPrev" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%"   stopColor="#3b82f6" stopOpacity={1}/>
@@ -324,15 +329,15 @@ export default function SellInResumen() {
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey={prevKey}     name={prevKey}             fill="url(#gradSellinResPrev)"  radius={[8,8,0,0]} maxBarSize={28}>
+                <Bar dataKey={prevKey}     name={prevKey}             fill="url(#gradSellinResPrev)"  radius={[8,8,0,0]} maxBarSize={22}>
                   <LabelList dataKey={prevKey} position="top" formatter={fmtLblK}
                     style={{ fontSize: 9, fill: '#1e40af', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey="proyeccion"  name={`Proyección ${ano}`} fill="url(#gradSellinResProy)"  radius={[8,8,0,0]} maxBarSize={28}>
+                <Bar dataKey="proyeccion"  name={`Proyección ${ano}`} fill="url(#gradSellinResProy)"  radius={[8,8,0,0]} maxBarSize={22}>
                   <LabelList dataKey="proyeccion" position="top" formatter={fmtLblK}
                     style={{ fontSize: 9, fill: '#475569', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey={currKey}     name={currKey}             fill="url(#gradSellinResCurr)"  radius={[8,8,0,0]} maxBarSize={28}>
+                <Bar dataKey={currKey}     name={currKey}             fill="url(#gradSellinResCurr)"  radius={[8,8,0,0]} maxBarSize={22}>
                   <LabelList dataKey={currKey} position="top" formatter={fmtLblK}
                     style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                 </Bar>
