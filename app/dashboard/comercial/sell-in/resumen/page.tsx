@@ -305,7 +305,7 @@ export default function SellInResumen() {
           : (
             <div className="h-[240px] md:h-[280px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mensual} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={6}>
+              <BarChart data={mensual} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%">
                 <defs>
                   <linearGradient id="gradSellinResPrev" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%"   stopColor="#3b82f6" stopOpacity={1}/>
@@ -329,15 +329,15 @@ export default function SellInResumen() {
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey={prevKey}     name={prevKey}             fill="url(#gradSellinResPrev)"  radius={[8,8,0,0]} maxBarSize={22}>
+                <Bar dataKey={prevKey}     name={prevKey}             fill="url(#gradSellinResPrev)"  radius={[8,8,0,0]} maxBarSize={28}>
                   <LabelList dataKey={prevKey} position="top" formatter={fmtLblK}
                     style={{ fontSize: 9, fill: '#1e40af', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey="proyeccion"  name={`Proyección ${ano}`} fill="url(#gradSellinResProy)"  radius={[8,8,0,0]} maxBarSize={22}>
+                <Bar dataKey="proyeccion"  name={`Proyección ${ano}`} fill="url(#gradSellinResProy)"  radius={[8,8,0,0]} maxBarSize={28}>
                   <LabelList dataKey="proyeccion" position="top" formatter={fmtLblK}
                     style={{ fontSize: 9, fill: '#475569', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey={currKey}     name={currKey}             fill="url(#gradSellinResCurr)"  radius={[8,8,0,0]} maxBarSize={22}>
+                <Bar dataKey={currKey}     name={currKey}             fill="url(#gradSellinResCurr)"  radius={[8,8,0,0]} maxBarSize={28}>
                   <LabelList dataKey={currKey} position="top" formatter={fmtLblK}
                     style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                 </Bar>
