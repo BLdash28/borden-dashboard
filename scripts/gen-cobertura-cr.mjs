@@ -187,18 +187,7 @@ function writeResumen(wb, tiendas, cedi, paisRows, paisCode, paisName, dateStr) 
   )
 
   let rowNum = 4
-  let prevCat = ''
   for (const g of sorted) {
-    // Separador de categoría
-    if (g.cat !== prevCat) {
-      const cr = ws.getRow(rowNum)
-      ws.mergeCells(`A${rowNum}:L${rowNum}`)
-      cr.getCell(1).value = `── ${g.cat.toUpperCase()} ──`
-      cr.getCell(1).fill = S.subFill; cr.getCell(1).font = S.subFont
-      cr.getCell(1).alignment = { horizontal: 'center' }
-      rowNum++; prevCat = g.cat
-    }
-
     const pct = g.total > 0 ? g.conStock / g.total : 0
     const cediKey = `${paisCode}|${g.upc}`
     const cediInfo = cedi[cediKey] ?? null
@@ -267,25 +256,12 @@ function writeCadena(wb, rows, cadena, paisCode, paisName, cedi, dateStr) {
   )
 
   let rowNum = 4
-  let prevStore = ''
   for (const r of sorted) {
-    // Separador de tienda
-    if (r.store !== prevStore) {
-      if (prevStore !== '') rowNum++ // espacio entre tiendas
-      const cr = ws.getRow(rowNum)
-      ws.mergeCells(`A${rowNum}:I${rowNum}`)
-      cr.getCell(1).value = `${r.store} (Tienda #${r.storeN})`
-      cr.getCell(1).fill = S.subFill; cr.getCell(1).font = S.subFont
-      cr.getCell(1).alignment = { horizontal: 'left', indent: 1 }
-      rowNum++; prevStore = r.store
-    }
-
     const cediKey = `${paisCode}|${r.upc}`
     const cediCajas = cedi[cediKey]?.cajas ?? null
 
     const cr = ws.getRow(rowNum)
-    cr.values = ['', r.store, r.cat, r.upc, r.desc, r.mano, r.orden, r.transit, cediCajas ?? '—']
-    cr.getCell(2).font = { color: { argb: 'FF595959' }, size: 9 }
+    cr.values = [r.storeN, r.store, r.cat, r.upc, r.desc, r.mano, r.orden, r.transit, cediCajas ?? '—']
 
     // Color según inventario
     const invCell = cr.getCell(6)
