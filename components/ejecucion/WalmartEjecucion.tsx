@@ -806,7 +806,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             </div>
             <div className="h-[240px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthly} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
+                <BarChart data={monthly} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
                   <defs>
                     <linearGradient id="wmGradSO2026" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
@@ -826,15 +826,15 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                     cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Bar dataKey="y2025" name="2025" fill="url(#wmGradSO2025)" radius={[6,6,0,0]} maxBarSize={38}>
-                    <LabelList dataKey="y2025" position="top" offset={12} angle={-45}
+                  <Bar dataKey="y2025" name="2025" fill="url(#wmGradSO2025)" radius={[8,8,0,0]} maxBarSize={36}>
+                    <LabelList dataKey="y2025" position="top"
                       formatter={fmtLblUsd}
-                      style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                      style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                   </Bar>
-                  <Bar dataKey="y2026" name="2026" fill="url(#wmGradSO2026)" radius={[6,6,0,0]} maxBarSize={38}>
-                    <LabelList dataKey="y2026" position="top" offset={12} angle={-45}
+                  <Bar dataKey="y2026" name="2026" fill="url(#wmGradSO2026)" radius={[8,8,0,0]} maxBarSize={36}>
+                    <LabelList dataKey="y2026" position="top"
                       formatter={fmtLblUsd}
-                      style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                      style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -1055,7 +1055,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               )}
 
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={series} margin={{ top: 40, right: 16, left: 8, bottom: 4 }} barCategoryGap="35%" barGap={4}>
+                <BarChart data={series} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="22%" barGap={10}>
                   <defs>
                     <linearGradient id="gradWmEvol2024" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#d1d5db" stopOpacity={1}/>
@@ -1083,29 +1083,29 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2024') && (
                     <Bar dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
-                      fill="url(#gradWmEvol2024)" radius={[6,6,0,0]} maxBarSize={30}
+                      fill="url(#gradWmEvol2024)" radius={[8,8,0,0]} maxBarSize={28}
                       onClick={() => toggleYear('y2024')} style={{ cursor: 'pointer' }}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} position="top" offset={12} angle={-45}
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} position="top"
                         formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
-                        style={{ fontSize: 10, fill: '#6b7280', fontWeight: 700, textAnchor: 'start' }} />
+                        style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
                     </Bar>
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2025') && (
                     <Bar dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
-                      fill="url(#gradWmEvol2025)" radius={[6,6,0,0]} maxBarSize={30}
+                      fill="url(#gradWmEvol2025)" radius={[8,8,0,0]} maxBarSize={28}
                       onClick={() => toggleYear('y2025')} style={{ cursor: 'pointer' }}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} position="top" offset={12} angle={-45}
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} position="top"
                         formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
-                        style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                        style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                     </Bar>
                   )}
                   {(!evolYearFilter || evolYearFilter === 'y2026') && (
                     <Bar dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
-                      fill="url(#gradWmEvol2026)" radius={[6,6,0,0]} maxBarSize={30}
+                      fill="url(#gradWmEvol2026)" radius={[8,8,0,0]} maxBarSize={28}
                       onClick={() => toggleYear('y2026')} style={{ cursor: 'pointer' }}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} position="top" offset={12} angle={-45}
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} position="top"
                         formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
-                        style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                        style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                     </Bar>
                   )}
                 </BarChart>
@@ -1477,9 +1477,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   actual:  g.cob_actual_avg,
                   maxima:  g.cob_max_avg,
                 }))}
-                margin={{ top: 40, right: 16, left: 8, bottom: 40 }}
-                barCategoryGap="35%"
-                barGap={6}
+                margin={{ top: 10, right: 16, left: 8, bottom: 40 }}
+                barCategoryGap="22%"
+                barGap={10}
               >
                 <defs>
                   <linearGradient id="gradWmCobMax" x1="0" y1="0" x2="0" y2="1">
@@ -1500,15 +1500,15 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
                 <Legend formatter={(n: string) => n === 'maxima' ? 'Máx Histórica' : 'Actual 2026'} />
-                <Bar dataKey="maxima" name="maxima" fill="url(#gradWmCobMax)" radius={[6, 6, 0, 0]}>
-                  <LabelList dataKey="maxima" position="top" offset={12} angle={-45}
+                <Bar dataKey="maxima" name="maxima" fill="url(#gradWmCobMax)" radius={[8, 8, 0, 0]} maxBarSize={36}>
+                  <LabelList dataKey="maxima" position="top"
                     formatter={(v: any) => v > 0 ? Number(v).toFixed(0) + '%' : ''}
-                    style={{ fontSize: 10, fill: '#6b7280', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey="actual" name="actual" fill="url(#gradWmCobAct)" radius={[6, 6, 0, 0]}>
-                  <LabelList dataKey="actual" position="top" offset={12} angle={-45}
+                <Bar dataKey="actual" name="actual" fill="url(#gradWmCobAct)" radius={[8, 8, 0, 0]} maxBarSize={36}>
+                  <LabelList dataKey="actual" position="top"
                     formatter={(v: any) => v > 0 ? Number(v).toFixed(0) + '%' : ''}
-                    style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#065f46', fontWeight: 700 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -2258,90 +2258,6 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           )}
         </div>
       </div>
-
-      {/* ── Controles específicos de Evolución (Vista/Medida/SKUs/Período) ── */}
-      {section === 'evolucion' && (
-      <div className="px-6 pt-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-          <div className="flex items-start gap-x-4 gap-y-3 flex-wrap text-xs">
-
-            {/* Vista */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">Vista</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {(['mensual', 'diaria'] as const).map(v => (
-                  <button key={v} onClick={() => { setEvolVista(v); saveFilter('vista', v) }}
-                    className={`px-3 py-1.5 font-medium transition-colors ${evolVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {v.charAt(0).toUpperCase() + v.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Medida */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">Medida</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {([['valor', 'Valor $'], ['unidades', 'Unidades']] as const).map(([k, l]) => (
-                  <button key={k} onClick={() => { setEvolMedida(k); saveFilter('medida', k) }}
-                    className={`px-3 py-1.5 font-medium transition-colors ${evolMedida === k ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {l}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* SKUs */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">SKUs</span>
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                <button onClick={() => { setEvolTopN(5); setEvolSkuFilter(''); saveFilter('topn', '5') }}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolTopN === 5 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  Top 5
-                </button>
-                <button onClick={() => { setEvolTopN(100); setEvolSkuFilter(''); saveFilter('topn', '100') }}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolTopN !== 5 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  Todos
-                </button>
-              </div>
-            </div>
-
-            {/* Período */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400">Período</span>
-              <div className="flex items-center gap-2">
-                <input type="month" value={evolDesde} min="2024-01" max="2026-12"
-                  onChange={e => { setEvolDesde(e.target.value); saveFilter('desde', e.target.value) }}
-                  className="border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 text-xs"
-                />
-                <span className="text-gray-400">–</span>
-                <input type="month" value={evolHasta} min="2024-01" max="2026-12"
-                  onChange={e => { setEvolHasta(e.target.value); saveFilter('hasta', e.target.value) }}
-                  className="border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 text-xs"
-                />
-              </div>
-            </div>
-
-            {/* Reset */}
-            <div className="flex flex-col gap-1">
-              <span className="text-[10px] uppercase tracking-widest text-gray-400 invisible">x</span>
-              <button
-                onClick={() => {
-                  setDiv('TOTAL'); setEvolVista('mensual'); setEvolMedida('valor')
-                  setEvolSubcat(''); setEvolTopN(5)
-                  setEvolDesde(''); setEvolHasta('')
-                  setEvolYearFilter(''); setEvolCadenaLine(''); setEvolCpFilter(''); setEvolSkuFilter('')
-                  ;['div','vista','medida','subcat','topn','desde','hasta'].forEach(k => localStorage.removeItem(`${storageKey}-${k}`))
-                }}
-                className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
-                ↺ Reset
-              </button>
-            </div>
-
-          </div>
-        </div>
-      </div>
-      )}
 
       {/* ── Section nav ── */}
       <div className="px-6 pt-4">
