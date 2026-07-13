@@ -1280,60 +1280,47 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               </div>
             )}
             <div className="space-y-4 mt-4">
-              {[{ label: '🧀 Quesos', data: cpQuesos }, { label: '🥛 Leches', data: cpLeches }, { label: '🍦 Helados', data: cpHelados }]
+              {[{ label: '🧀 Quesos', data: cpQuesos, id: 'quesos' }, { label: '🥛 Leches', data: cpLeches, id: 'leches' }, { label: '🍦 Helados', data: cpHelados, id: 'helados' }]
                 .filter(g => g.data.length > 0)
                 .map(g => (
                   <div key={g.label}>
-                    <p className="text-xs font-semibold text-gray-600 mb-2">{g.label}</p>
-                    <ResponsiveContainer width="100%" height={180}>
-                      <AreaChart data={g.data} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                    <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
+                      <p className="text-xs font-semibold text-gray-600">{g.label}</p>
+                      <div className="flex items-center gap-3 text-[11px]">
+                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"/> Sell-In</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> Sell-Out</span>
+                      </div>
+                    </div>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <BarChart data={g.data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%">
                         <defs>
-                          <linearGradient id={`gradWmCp_${g.label}_si`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.25}/>
-                            <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                          <linearGradient id={`gradWmCp_${g.id}_si`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="#3b82f6" stopOpacity={1}/>
+                            <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
                           </linearGradient>
-                          <linearGradient id={`gradWmCp_${g.label}_so`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.4}/>
-                            <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
+                          <linearGradient id={`gradWmCp_${g.id}_so`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="#f59e0b" stopOpacity={1}/>
+                            <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
                           </linearGradient>
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                         <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                        <YAxis tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
+                        <YAxis tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                         <Tooltip formatter={(v: number, name: string) => [fmtFull(v), name]}
+                          cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                           contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
-                        {(!evolCpFilter || evolCpFilter === 'sellin') && (
-                          <Area type="monotone" dataKey="sellin" name="Sell-In"
-                            stroke="#94a3b8" strokeWidth={evolCpFilter === 'sellin' ? 2.5 : 2}
-                            fill={`url(#gradWmCp_${g.label}_si)`} dot={false}
-                            activeDot={{ r: 4 }} connectNulls
-                            onClick={() => toggleCpFilter('sellin')}
-                            style={{ cursor: 'pointer' }} />
-                        )}
-                        {(!evolCpFilter || evolCpFilter === 'sellout') && (
-                          <Area type="monotone" dataKey="sellout" name="Sell-Out"
-                            stroke="#c8873a" strokeWidth={evolCpFilter === 'sellout' ? 2.5 : 2}
-                            fill={`url(#gradWmCp_${g.label}_so)`} dot={false}
-                            activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls
-                            onClick={() => toggleCpFilter('sellout')}
-                            style={{ cursor: 'pointer' }} />
-                        )}
-                      </AreaChart>
+                        <Bar dataKey="sellin"  name="Sell-In"  fill={`url(#gradWmCp_${g.id}_si)`} radius={[8,8,0,0]} maxBarSize={28}>
+                          <LabelList dataKey="sellin"  position="top"
+                            formatter={(v: any) => { const n = Number(v); return n > 0 ? (Math.abs(n) >= 1e6 ? '$'+(n/1e6).toFixed(0)+'M' : Math.abs(n) >= 1e3 ? '$'+(n/1e3).toFixed(0)+'K' : '$'+Math.round(n)) : '' }}
+                            style={{ fontSize: 9, fill: '#1e40af', fontWeight: 700 }} />
+                        </Bar>
+                        <Bar dataKey="sellout" name="Sell-Out" fill={`url(#gradWmCp_${g.id}_so)`} radius={[8,8,0,0]} maxBarSize={28}>
+                          <LabelList dataKey="sellout" position="top"
+                            formatter={(v: any) => { const n = Number(v); return n > 0 ? (Math.abs(n) >= 1e6 ? '$'+(n/1e6).toFixed(0)+'M' : Math.abs(n) >= 1e3 ? '$'+(n/1e3).toFixed(0)+'K' : '$'+Math.round(n)) : '' }}
+                            style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
+                        </Bar>
+                      </BarChart>
                     </ResponsiveContainer>
-                    <div className="flex gap-2 mt-2">
-                      {[{ key: 'sellin', label: 'Sell-In', color: '#94a3b8' }, { key: 'sellout', label: 'Sell-Out', color: '#c8873a' }].map(({ key, label, color }) => {
-                        const active = !evolCpFilter || evolCpFilter === key
-                        return (
-                          <button key={key} onClick={() => toggleCpFilter(key)}
-                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-opacity select-none ${
-                              active ? 'border-gray-200 text-gray-700 bg-white' : 'border-gray-100 text-gray-300 bg-gray-50'
-                            }`}>
-                            <span className="w-2.5 h-2.5 rounded-full" style={{ background: active ? color : '#d1d5db' }} />
-                            {label}
-                          </button>
-                        )
-                      })}
-                    </div>
                   </div>
                 ))}
             </div>
