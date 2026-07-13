@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
     const { rows } = await pool.query(`
       WITH top_skus AS (
         SELECT codigo_barras, SUM(ventas_valor) AS total
-        FROM mv_selectos_mensual
-        WHERE ano = 2026 ${catFilter} ${subcatFilter}
+        FROM fact_ventas_selectos
+        WHERE fecha >= '2026-01-01' AND fecha < '2027-01-01' ${catFilter} ${subcatFilter}
         GROUP BY codigo_barras
         ORDER BY total DESC
         LIMIT ${topN}
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         EXTRACT(MONTH FROM f.fecha)::int   AS mes,
         ROUND(SUM(f.ventas_valor)::numeric,    2) AS valor,
         ROUND(SUM(f.ventas_unidades)::numeric, 0) AS unidades
-      FROM mv_selectos_mensual f
+      FROM fact_ventas_selectos f
       JOIN top_skus t ON t.codigo_barras = f.codigo_barras
       WHERE EXTRACT(YEAR FROM f.fecha) = 2026 ${catFilter} ${subcatFilter}
       GROUP BY f.codigo_barras, EXTRACT(MONTH FROM f.fecha)

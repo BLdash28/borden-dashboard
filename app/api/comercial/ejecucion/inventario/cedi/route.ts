@@ -13,9 +13,10 @@ export async function GET(req: NextRequest) {
     const inC = (col: string, vals: string[]) =>
       `${col} IN (${vals.map(v => `'${v.replace(/'/g, "''")}'`).join(',')})`
 
+    // El WHERE aplica sobre la CTE `base` (los alias c/dp solo existen dentro).
     const filters: string[] = []
-    if (paises.length) filters.push(inC('c.pais', paises))
-    if (cats.length)   filters.push(inC('dp.categoria', cats))
+    if (paises.length) filters.push(inC('pais', paises))
+    if (cats.length)   filters.push(inC('categoria', cats))
     const where = filters.length ? 'WHERE ' + filters.join(' AND ') : ''
 
     const result = await pool.query(`

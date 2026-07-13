@@ -16,8 +16,8 @@ export async function GET(req: NextRequest) {
           MAX(descripcion)          AS descripcion,
           MAX(categoria)            AS categoria,
           SUM(ventas_valor)         AS valor
-        FROM mv_selectos_mensual
-        WHERE ano = ${ano}
+        FROM fact_ventas_selectos
+        WHERE fecha >= '${ano}-01-01' AND fecha < '${ano + 1}-01-01'
         GROUP BY codigo_barras
       ),
       total AS (SELECT NULLIF(SUM(valor), 0) AS total FROM ventas),

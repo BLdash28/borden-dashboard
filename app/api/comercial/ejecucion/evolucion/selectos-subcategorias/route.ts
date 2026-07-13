@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
     const { rows } = await pool.query(`
       SELECT DISTINCT subcategoria FROM (
-        SELECT subcategoria FROM mv_selectos_mensual
+        SELECT subcategoria FROM fact_ventas_selectos
         WHERE subcategoria IS NOT NULL AND subcategoria <> ''
         ${catFilterFvs}
         UNION
