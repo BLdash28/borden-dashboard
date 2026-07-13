@@ -293,8 +293,9 @@ export default function EjecucionSelectos() {
         fetch('/api/comercial/ejecucion/inventario/selectos-kpis').then(r => r.json()),
         fetch('/api/comercial/ejecucion/inventario/selectos-insights').then(r => r.json()),
       ]).then(([invR, cediR, reoR, slR, slQ, slL, proyR, invSR, soR, ikR, insR]) => {
-        if (invR.rows?.length) { setInv(invR.rows); setInvDate(invR.rows[0]?.fecha ?? null) }
-        else setInv([])
+        if (invR.rows?.length) setInv(invR.rows); else setInv([])
+        // Fecha del inventario Selectos (fact_selectos_inventario), no el Walmart genérico
+        setInvDate(invSR?.fecha ?? invR.rows?.[0]?.fecha ?? null)
         setCedi(cediR.rows ?? [])
         if (reoR.rows) setReorden(reoR)
         if (slR.kpis)  setSellin(slR.kpis)
