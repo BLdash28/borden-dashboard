@@ -1300,13 +1300,17 @@ export default function ExitoEjecucion() {
                   ? ventasDiaria.reduce((s, r) => s + r.unidades, 0)
                   : (kpis?.monthly ?? []).reduce((s, m: any) => s + (m.uds2026 ?? 0), 0)
                 const precioAvg = totU > 0 ? totV / totU : 0
+                // Precio unitario: mostrar decimales (USD $2.35) o separador de miles (COP $8.050).
+                const precioFmt = isCop
+                  ? '$ ' + Math.round(precioAvg).toLocaleString('es-CO')
+                  : '$' + precioAvg.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 return (
                   <p className="text-[11px] text-gray-400">
                     {ventasVista === 'mensual' ? `Comparativo 2025 vs 2026 · ${monLabel}` : `Tendencia diaria · ${monLabel}`}
                     {precioAvg > 0 && (
                       <>
                         <span className="mx-1.5 text-gray-300">·</span>
-                        <span className="font-semibold text-emerald-600">Precio prom / Und: {tipVal(precioAvg)}</span>
+                        <span className="font-semibold text-emerald-600">Precio prom / Und: {precioFmt}</span>
                       </>
                     )}
                   </p>
@@ -1401,7 +1405,16 @@ export default function ExitoEjecucion() {
                       <YAxis yAxisId="right" orientation="right" tickFormatter={yFmtVal}
                         tick={{ fontSize: 10, fill: '#059669' }} width={70} axisLine={false} tickLine={false} />
                       <Tooltip
-                        formatter={(v: unknown, name: string) => [tipVal(v), name]}
+                        formatter={(v: unknown, name: string) => {
+                          if (name === 'Precio / Und') {
+                            const n = Number(v)
+                            const fmt = isCop
+                              ? '$ ' + Math.round(n).toLocaleString('es-CO')
+                              : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                            return [fmt, name]
+                          }
+                          return [tipVal(v), name]
+                        }}
                         contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                       />
                       <Area yAxisId="left" type="monotone" dataKey="valor" name={`Venta (${monLabel})`}
