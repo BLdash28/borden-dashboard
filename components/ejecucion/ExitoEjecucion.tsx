@@ -1292,25 +1292,34 @@ export default function ExitoEjecucion() {
                 {ventasVista === 'mensual' ? 'Ventas mensuales' : 'Ventas diarias · 2026'}
               </h4>
               {(() => {
-                // Precio promedio por Und del período (2026 en la moneda actual)
-                const totV = ventasVista === 'diaria'
-                  ? ventasDiaria.reduce((s, r) => s + (isCop ? r.valor_cop : r.valor_usd), 0)
-                  : monthlyVal.reduce((s, m: any) => s + (m.val2026 ?? 0), 0)
-                const totU = ventasVista === 'diaria'
-                  ? ventasDiaria.reduce((s, r) => s + r.unidades, 0)
-                  : (kpis?.monthly ?? []).reduce((s, m: any) => s + (m.uds2026 ?? 0), 0)
-                const precioAvg = totU > 0 ? totV / totU : 0
-                // Precio unitario: mostrar decimales (USD $2.35) o separador de miles (COP $8.050).
+                // Último precio promedio por Und (último día en diaria, último mes en mensual)
+                let precioUlt = 0
+                let refLabel  = ''
+                if (ventasVista === 'diaria' && ventasDiaria.length > 0) {
+                  const last = ventasDiaria[ventasDiaria.length - 1]
+                  precioUlt = last.unidades > 0
+                    ? (isCop ? last.valor_cop : last.valor_usd) / last.unidades
+                    : 0
+                  refLabel = last.dia_str
+                } else if (ventasVista === 'mensual' && kpis?.monthly) {
+                  const withData = kpis.monthly.filter((m: any) => (m.uds2026 ?? 0) > 0)
+                  const last = withData[withData.length - 1]
+                  if (last) {
+                    const v = isCop ? (last.cop2026 ?? 0) : (last.y2026 ?? 0)
+                    precioUlt = last.uds2026 > 0 ? v / last.uds2026 : 0
+                    refLabel = last.mes_nombre
+                  }
+                }
                 const precioFmt = isCop
-                  ? '$ ' + Math.round(precioAvg).toLocaleString('es-CO')
-                  : '$' + precioAvg.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  ? '$ ' + Math.round(precioUlt).toLocaleString('es-CO')
+                  : '$' + precioUlt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 return (
                   <p className="text-[11px] text-gray-400">
                     {ventasVista === 'mensual' ? `Comparativo 2025 vs 2026 · ${monLabel}` : `Tendencia diaria · ${monLabel}`}
-                    {precioAvg > 0 && (
+                    {precioUlt > 0 && (
                       <>
                         <span className="mx-1.5 text-gray-300">·</span>
-                        <span className="font-semibold text-emerald-600">Precio prom / Und: {precioFmt}</span>
+                        <span className="font-semibold text-emerald-600">Último precio prom / Und ({refLabel}): {precioFmt}</span>
                       </>
                     )}
                   </p>
