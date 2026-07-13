@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
     const { rows } = await pool.query(`
       WITH top_skus AS (
         SELECT codigo_barras, SUM(ventas_valor) AS total
-        FROM fact_ventas_walmart
-        WHERE pais = $1 AND EXTRACT(YEAR FROM fecha) = 2026 AND ${w.where}
+        FROM mv_walmart_mensual
+        WHERE pais = $1 AND ano = 2026 AND ${w.where}
         GROUP BY codigo_barras
         ORDER BY total DESC
         LIMIT ${topN}
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
         EXTRACT(MONTH FROM f.fecha)::int   AS mes,
         ROUND(SUM(f.ventas_valor)::numeric,    2) AS valor,
         ROUND(SUM(f.ventas_unidades)::numeric, 0) AS unidades
-      FROM fact_ventas_walmart f
+      FROM mv_walmart_mensual f
       JOIN top_skus t ON t.codigo_barras = f.codigo_barras
       WHERE f.pais = $1 AND EXTRACT(YEAR FROM f.fecha) = 2026 AND ${wF.where}
       GROUP BY f.codigo_barras, EXTRACT(MONTH FROM f.fecha)

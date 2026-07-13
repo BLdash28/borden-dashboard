@@ -232,7 +232,7 @@ export default function SellInLicenciamiento() {
               </div>
               <div className="h-[260px] mt-3">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyPlus} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
+                  <BarChart data={monthlyPlus} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
                     <defs>
                       <linearGradient id="gLicSellin25" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
@@ -251,15 +251,15 @@ export default function SellInLicenciamiento() {
                       cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     />
-                    <Bar dataKey="cop_25" name="2025" fill="url(#gLicSellin25)" radius={[6,6,0,0]} maxBarSize={38}>
-                      <LabelList dataKey="cop_25" position="top" offset={12} angle={-45}
+                    <Bar dataKey="cop_25" name="2025" fill="url(#gLicSellin25)" radius={[8,8,0,0]} maxBarSize={36}>
+                      <LabelList dataKey="cop_25" position="top"
                         formatter={(v: any) => fmtLblSellin(v, useUsd)}
-                        style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                        style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                     </Bar>
-                    <Bar dataKey="cop_26" name="2026" fill="url(#gLicSellin26)" radius={[6,6,0,0]} maxBarSize={38}>
-                      <LabelList dataKey="cop_26" position="top" offset={12} angle={-45}
+                    <Bar dataKey="cop_26" name="2026" fill="url(#gLicSellin26)" radius={[8,8,0,0]} maxBarSize={36}>
+                      <LabelList dataKey="cop_26" position="top"
                         formatter={(v: any) => fmtLblSellin(v, useUsd)}
-                        style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                        style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -281,7 +281,7 @@ export default function SellInLicenciamiento() {
                 </div>
                 <div className="h-[220px] mt-3">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyPlus} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
+                    <BarChart data={monthlyPlus} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
                       <defs>
                         <linearGradient id="gLicUt25" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
@@ -300,15 +300,15 @@ export default function SellInLicenciamiento() {
                         cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                         contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                       />
-                      <Bar dataKey="ut_25" name="2025" fill="url(#gLicUt25)" radius={[6,6,0,0]} maxBarSize={32}>
-                        <LabelList dataKey="ut_25" position="top" offset={12} angle={-45}
+                      <Bar dataKey="ut_25" name="2025" fill="url(#gLicUt25)" radius={[8,8,0,0]} maxBarSize={36}>
+                        <LabelList dataKey="ut_25" position="top"
                           formatter={fmtLblCop}
-                          style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                          style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                       </Bar>
-                      <Bar dataKey="ut_26" name="2026" fill="url(#gLicUt26)" radius={[6,6,0,0]} maxBarSize={32}>
-                        <LabelList dataKey="ut_26" position="top" offset={12} angle={-45}
+                      <Bar dataKey="ut_26" name="2026" fill="url(#gLicUt26)" radius={[8,8,0,0]} maxBarSize={36}>
+                        <LabelList dataKey="ut_26" position="top"
                           formatter={fmtLblCop}
-                          style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700, textAnchor: 'start' }} />
+                          style={{ fontSize: 9, fill: '#065f46', fontWeight: 700 }} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>

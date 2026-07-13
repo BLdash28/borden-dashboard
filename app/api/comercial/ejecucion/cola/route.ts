@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
       WITH ventas AS (
         SELECT sku, MAX(descripcion) AS descripcion, MAX(categoria) AS categoria,
                SUM(ventas_valor) AS valor
-        FROM mv_sellout_mensual ${where}
+        FROM mv_sellout_agg ${where}
         GROUP BY sku
       ),
       total AS (SELECT SUM(valor) AS total FROM ventas),

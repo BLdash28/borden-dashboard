@@ -20,62 +20,47 @@ export async function GET(req: NextRequest) {
     const wSinCat = buildWalmartWhere({ ...f, categoria: '', categorias: [] }, { startAt: 2 })
 
     const [monthlyR, byCadenaR, byCatR, baselineR] = await Promise.all([
+      // mv_walmart_mensual: 2.6K filas terminales (vs 306K en fact) → 100× más rápido.
       // Overall monthly 2024/2025/2026
       pool.query(`
-        SELECT
-          EXTRACT(YEAR  FROM fecha)::int  AS ano,
-          EXTRACT(MONTH FROM fecha)::int  AS mes,
-          ROUND(SUM(ventas_valor)::numeric,    2) AS valor,
-          ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
-        FROM fact_ventas_walmart
-        WHERE pais = $1 AND ${w.where}
-          AND fecha >= '2024-01-01' AND fecha < '2027-01-01'
-        GROUP BY 1, 2
-        ORDER BY 1, 2
+        SELECT ano, mes,
+               ROUND(SUM(ventas_valor)::numeric,    2) AS valor,
+               ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
+        FROM mv_walmart_mensual
+        WHERE pais = $1 AND ${w.where} AND ano BETWEEN 2024 AND 2026
+        GROUP BY 1, 2 ORDER BY 1, 2
       `, [pais, ...w.params]),
-      // Monthly by cadena (2026 only) — no filtramos por cadena aquí
+      // Monthly by cadena (2026 only)
       pool.query(`
-        SELECT
-          ${CADENA_NORM_SQL} AS cadena,
-          EXTRACT(MONTH FROM fecha)::int AS mes,
-          ROUND(SUM(ventas_valor)::numeric, 2) AS valor
-        FROM fact_ventas_walmart
-        WHERE pais = $1
-          AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
-          AND ${wSinCad.where}
-        GROUP BY ${CADENA_NORM_SQL}, mes
-        ORDER BY ${CADENA_NORM_SQL}, mes
+        SELECT ${CADENA_NORM_SQL} AS cadena, mes,
+               ROUND(SUM(ventas_valor)::numeric, 2) AS valor
+        FROM mv_walmart_mensual
+        WHERE pais = $1 AND ano = 2026 AND ${wSinCad.where}
+        GROUP BY ${CADENA_NORM_SQL}, mes ORDER BY ${CADENA_NORM_SQL}, mes
       `, [pais, ...wSinCad.params]),
-      // Monthly by categoria (2026 only) — no filtramos por categoria aquí
+      // Monthly by categoria (2026 only)
       pool.query(`
-        SELECT
-          categoria,
-          EXTRACT(MONTH FROM fecha)::int AS mes,
-          ROUND(SUM(ventas_valor)::numeric, 2) AS valor
-        FROM fact_ventas_walmart
-        WHERE pais = $1
-          AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
-          AND ${wSinCat.where}
-        GROUP BY categoria, mes
-        ORDER BY categoria, mes
+        SELECT categoria, mes,
+               ROUND(SUM(ventas_valor)::numeric, 2) AS valor
+        FROM mv_walmart_mensual
+        WHERE pais = $1 AND ano = 2026 AND ${wSinCat.where}
+        GROUP BY categoria, mes ORDER BY categoria, mes
       `, [pais, ...wSinCat.params]),
       // Baseline: avg monthly value for months ≥$5K from Oct 2025 onwards
       pool.query(`
         WITH monthly AS (
-          SELECT
-            EXTRACT(MONTH FROM fecha)::int AS mes,
-            SUM(ventas_valor)    AS valor_mes,
-            SUM(ventas_unidades) AS uni_mes
-          FROM fact_ventas_walmart
+          SELECT mes,
+                 SUM(ventas_valor)    AS valor_mes,
+                 SUM(ventas_unidades) AS uni_mes
+          FROM mv_walmart_mensual
           WHERE pais = $1
-            AND fecha >= '2025-10-01' AND fecha < '2027-01-01'
+            AND ((ano = 2025 AND mes >= 10) OR ano = 2026)
             AND ${w.where}
-          GROUP BY 1
+          GROUP BY mes
           HAVING SUM(ventas_valor) >= 5000
         )
-        SELECT
-          COALESCE(AVG(valor_mes), 0) AS avg_val,
-          COALESCE(AVG(uni_mes),   0) AS avg_uni
+        SELECT COALESCE(AVG(valor_mes), 0) AS avg_val,
+               COALESCE(AVG(uni_mes),   0) AS avg_uni
         FROM monthly
       `, [pais, ...w.params]),
     ])

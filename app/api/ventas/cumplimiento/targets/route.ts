@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { requireAuth } from '@/lib/api/auth'
 
+export const revalidate = 300
+
 // GET /api/ventas/cumplimiento/targets?ano=2026&mes=1
 export async function GET(req: NextRequest) {
   try {

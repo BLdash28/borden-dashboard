@@ -218,7 +218,7 @@ type SellInKpi = {
   ultimo_mes: number
   uds_26: number; cop_26: number; usd_26: number; costo_26: number; ut_26: number
   margen_pct: number | null
-  uds_25: number; cop_25: number; ut_25: number
+  uds_25: number; cop_25: number; usd_25: number; ut_25: number
   margen_pct_25: number | null
   delta_venta: number | null
   delta_unidades: number | null
@@ -645,12 +645,17 @@ export default function ExitoEjecucion() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {(() => {
                 const k = sellin.kpi
-                const cop = moneda === 'usd' ? k.usd_26 : k.cop_26
-                const copFmt = moneda === 'usd' ? fmtFull(cop) : fmtCOP(cop)
+                const isUsd = moneda === 'usd'
+                const cur = isUsd ? k.usd_26 : k.cop_26
+                const curFmt = isUsd ? fmtFull(cur) : fmtCOP(cur)
+                const rate = k.cop_26 > 0 && k.usd_26 > 0 ? k.usd_26 / k.cop_26 : 0
+                const utCur = isUsd ? k.ut_26 * rate : k.ut_26
+                const utFmt = isUsd ? fmtFull(utCur) : fmtCOP(utCur)
+                const cLbl = moneda.toUpperCase()
                 return [
-                  { label: `Sell-In YTD 2026 (${moneda.toUpperCase()})`, value: copFmt, sub: `hasta mes ${k.ultimo_mes || '—'}`, icon: '🧾' },
+                  { label: `Sell-In YTD 2026 (${cLbl})`, value: curFmt, sub: `hasta mes ${k.ultimo_mes || '—'}`, icon: '🧾' },
                   { label: 'Unidades Sell-In',     value: fmtNum(k.uds_26), sub: `${fmtNum(k.uds_25)} en 2025`, icon: '📦' },
-                  { label: 'Utilidad Bruta (COP)', value: fmtCOP(k.ut_26), sub: k.margen_pct !== null ? `Margen ${k.margen_pct.toFixed(1)}%` : '—', icon: '💰' },
+                  { label: `Utilidad Bruta (${cLbl})`, value: utFmt, sub: k.margen_pct !== null ? `Margen ${k.margen_pct.toFixed(1)}%` : '—', icon: '💰' },
                   { label: 'Margen Bruto %',       value: k.margen_pct !== null ? `${k.margen_pct.toFixed(1)}%` : '—', sub: k.margen_pct_25 !== null ? `2025: ${k.margen_pct_25.toFixed(1)}%` : 'Sin dato 2025', icon: '📈' },
                 ]
               })().map(c => (
@@ -1233,7 +1238,7 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[300px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyVal} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
+              <BarChart data={monthlyVal} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
                 <defs>
                   <linearGradient id="gradExitoEvoVent25" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
@@ -1252,15 +1257,15 @@ export default function ExitoEjecucion() {
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="val2025" name={`2025 ${monLabel}`} fill="url(#gradExitoEvoVent25)" radius={[6,6,0,0]} maxBarSize={38}>
-                  <LabelList dataKey="val2025" position="top" offset={12} angle={-45}
+                <Bar dataKey="val2025" name={`2025 ${monLabel}`} fill="url(#gradExitoEvoVent25)" radius={[8,8,0,0]} maxBarSize={36}>
+                  <LabelList dataKey="val2025" position="top"
                     formatter={fmtLblVal}
-                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey="val2026" name={`2026 ${monLabel}`} fill="url(#gradExitoEvoVent26)" radius={[6,6,0,0]} maxBarSize={38}>
-                  <LabelList dataKey="val2026" position="top" offset={12} angle={-45}
+                <Bar dataKey="val2026" name={`2026 ${monLabel}`} fill="url(#gradExitoEvoVent26)" radius={[8,8,0,0]} maxBarSize={36}>
+                  <LabelList dataKey="val2026" position="top"
                     formatter={fmtLblVal}
-                    style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -1281,7 +1286,7 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[300px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthly} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
+              <BarChart data={monthly} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
                 <defs>
                   <linearGradient id="gradExitoEvoUds25" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
@@ -1300,15 +1305,15 @@ export default function ExitoEjecucion() {
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="uds2025" name="2025 Und" fill="url(#gradExitoEvoUds25)" radius={[6,6,0,0]} maxBarSize={38}>
-                  <LabelList dataKey="uds2025" position="top" offset={12} angle={-45}
+                <Bar dataKey="uds2025" name="2025 Und" fill="url(#gradExitoEvoUds25)" radius={[8,8,0,0]} maxBarSize={36}>
+                  <LabelList dataKey="uds2025" position="top"
                     formatter={fmtLblUds}
-                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey="uds2026" name="2026 Und" fill="url(#gradExitoEvoUds26)" radius={[6,6,0,0]} maxBarSize={38}>
-                  <LabelList dataKey="uds2026" position="top" offset={12} angle={-45}
+                <Bar dataKey="uds2026" name="2026 Und" fill="url(#gradExitoEvoUds26)" radius={[8,8,0,0]} maxBarSize={36}>
+                  <LabelList dataKey="uds2026" position="top"
                     formatter={fmtLblUds}
-                    style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -1329,7 +1334,7 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[260px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={growthMoM} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%">
+              <BarChart data={growthMoM} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="20%">
                 <defs>
                   <linearGradient id="gradExitoGrowthPos" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
@@ -1348,13 +1353,13 @@ export default function ExitoEjecucion() {
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="growth" radius={[6,6,0,0]} maxBarSize={40}>
+                <Bar dataKey="growth" radius={[8,8,0,0]} maxBarSize={40}>
                   {growthMoM.map((r, i) => (
                     <Cell key={i} fill={r.growth === null ? '#e2e8f0' : r.growth >= 0 ? 'url(#gradExitoGrowthPos)' : 'url(#gradExitoGrowthNeg)'} />
                   ))}
-                  <LabelList dataKey="growth" position="top" offset={12} angle={-45}
+                  <LabelList dataKey="growth" position="top"
                     formatter={(v: any) => v === null || v === undefined ? '' : Number(v).toFixed(1) + '%'}
-                    style={{ fontSize: 10, fill: '#475569', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -1375,7 +1380,7 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[280px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={acumuladoVal} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
+              <BarChart data={acumuladoVal} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
                 <defs>
                   <linearGradient id="gradExitoAcum25" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
@@ -1394,15 +1399,15 @@ export default function ExitoEjecucion() {
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="acum2025" name="Acum 2025" fill="url(#gradExitoAcum25)" radius={[6,6,0,0]} maxBarSize={38}>
-                  <LabelList dataKey="acum2025" position="top" offset={12} angle={-45}
+                <Bar dataKey="acum2025" name="Acum 2025" fill="url(#gradExitoAcum25)" radius={[8,8,0,0]} maxBarSize={36}>
+                  <LabelList dataKey="acum2025" position="top"
                     formatter={fmtLblVal}
-                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey="acum2026" name="Acum 2026" fill="url(#gradExitoAcum26)" radius={[6,6,0,0]} maxBarSize={38}>
-                  <LabelList dataKey="acum2026" position="top" offset={12} angle={-45}
+                <Bar dataKey="acum2026" name="Acum 2026" fill="url(#gradExitoAcum26)" radius={[8,8,0,0]} maxBarSize={36}>
+                  <LabelList dataKey="acum2026" position="top"
                     formatter={fmtLblVal}
-                    style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#065f46', fontWeight: 700 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -2825,7 +2830,14 @@ export default function ExitoEjecucion() {
 
     // KPIs
     const ventaCur = useUsd ? kpi.usd_26 : kpi.cop_26
-    const venta25  = kpi.cop_25 // 2025 solo en COP; para USD se muestra delta % solamente
+    const venta25  = useUsd ? (kpi.usd_25 ?? 0) : kpi.cop_25
+    // Tasa implícita 2026 / 2025 para derivar utilidad y costo en USD (no vienen del API).
+    const rate26 = kpi.cop_26 > 0 && kpi.usd_26 > 0 ? kpi.usd_26 / kpi.cop_26 : 0
+    const rate25 = kpi.cop_25 > 0 && (kpi.usd_25 ?? 0) > 0 ? (kpi.usd_25 ?? 0) / kpi.cop_25 : rate26
+    const utCur    = useUsd ? kpi.ut_26 * rate26 : kpi.ut_26
+    const ut25Cur  = useUsd ? kpi.ut_25 * rate25 : kpi.ut_25
+    const costoCur = useUsd ? kpi.costo_26 * rate26 : kpi.costo_26
+    const currLabel = useUsd ? 'USD' : 'COP'
 
     // Monthly filtrado a los meses cargados
     const monthlyF = monthly.filter(m => (m.cop_25 || 0) > 0 || (m.cop_26 || 0) > 0)
@@ -2881,8 +2893,8 @@ export default function ExitoEjecucion() {
             sub={kpi.delta_unidades !== null ? `${kpi.delta_unidades > 0 ? '+' : ''}${kpi.delta_unidades.toFixed(1)}% vs 2025` : 'Sin comparativo'}
           />
           <KpiCard
-            label="Utilidad Bruta (COP)"
-            value={fmtCOP(kpi.ut_26)}
+            label={`Utilidad Bruta (${currLabel})`}
+            value={fmtVal(utCur)}
             sub={kpi.delta_utilidad !== null ? `${kpi.delta_utilidad > 0 ? '+' : ''}${kpi.delta_utilidad.toFixed(1)}% vs 2025` : 'Sin comparativo'}
           />
           <KpiCard
@@ -2895,24 +2907,24 @@ export default function ExitoEjecucion() {
         {/* Comparativos vs 2025 */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Venta 2026 vs 2025 (COP)</p>
-            <p className="text-2xl font-bold text-gray-800">{fmtCOP(kpi.cop_26)}</p>
-            <p className="text-xs text-gray-500 mt-0.5">2025 mismo período: {fmtCOP(venta25)}</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Venta 2026 vs 2025 ({currLabel})</p>
+            <p className="text-2xl font-bold text-gray-800">{fmtVal(ventaCur)}</p>
+            <p className="text-xs text-gray-500 mt-0.5">2025 mismo período: {fmtVal(venta25)}</p>
             <div className="mt-2">
               {kpi.delta_venta !== null ? <Delta d={kpi.delta_venta} /> : <span className="text-xs text-gray-400">Sin comparativo</span>}
             </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Utilidad 2026 vs 2025</p>
-            <p className="text-2xl font-bold text-gray-800">{fmtCOP(kpi.ut_26)}</p>
-            <p className="text-xs text-gray-500 mt-0.5">2025 mismo período: {fmtCOP(kpi.ut_25)}</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Utilidad 2026 vs 2025 ({currLabel})</p>
+            <p className="text-2xl font-bold text-gray-800">{fmtVal(utCur)}</p>
+            <p className="text-xs text-gray-500 mt-0.5">2025 mismo período: {fmtVal(ut25Cur)}</p>
             <div className="mt-2">
               {kpi.delta_utilidad !== null ? <Delta d={kpi.delta_utilidad} /> : <span className="text-xs text-gray-400">Sin comparativo</span>}
             </div>
           </div>
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Costo Venta 2026 (COP)</p>
-            <p className="text-2xl font-bold text-gray-800">{fmtCOP(kpi.costo_26)}</p>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Costo Venta 2026 ({currLabel})</p>
+            <p className="text-2xl font-bold text-gray-800">{fmtVal(costoCur)}</p>
             <p className="text-xs text-gray-500 mt-0.5">Ratio costo/venta: {kpi.cop_26 > 0 ? ((kpi.costo_26 / kpi.cop_26) * 100).toFixed(1) : '—'}%</p>
           </div>
         </div>
@@ -2931,7 +2943,7 @@ export default function ExitoEjecucion() {
           </div>
           <div className="h-[260px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyPlus} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
+              <BarChart data={monthlyPlus} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
                 <defs>
                   <linearGradient id="gradExitoSellIn25" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
@@ -2950,15 +2962,15 @@ export default function ExitoEjecucion() {
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="cop_25" name="2025" fill="url(#gradExitoSellIn25)" radius={[6,6,0,0]} maxBarSize={38}>
-                  <LabelList dataKey="cop_25" position="top" offset={12} angle={-45}
+                <Bar dataKey="cop_25" name="2025" fill="url(#gradExitoSellIn25)" radius={[8,8,0,0]} maxBarSize={36}>
+                  <LabelList dataKey="cop_25" position="top"
                     formatter={fmtLblSellin}
-                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey="cop_26" name="2026" fill="url(#gradExitoSellIn26)" radius={[6,6,0,0]} maxBarSize={38}>
-                  <LabelList dataKey="cop_26" position="top" offset={12} angle={-45}
+                <Bar dataKey="cop_26" name="2026" fill="url(#gradExitoSellIn26)" radius={[8,8,0,0]} maxBarSize={36}>
+                  <LabelList dataKey="cop_26" position="top"
                     formatter={fmtLblSellin}
-                    style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -2980,7 +2992,7 @@ export default function ExitoEjecucion() {
             </div>
             <div className="h-[220px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyPlus} margin={{ top: 40, right: 16, left: 8, bottom: 0 }} barCategoryGap="35%" barGap={6}>
+                <BarChart data={monthlyPlus} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
                   <defs>
                     <linearGradient id="gradExitoUt25" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
@@ -2999,15 +3011,15 @@ export default function ExitoEjecucion() {
                     cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Bar dataKey="ut_25" name="2025" fill="url(#gradExitoUt25)" radius={[6,6,0,0]} maxBarSize={32}>
-                    <LabelList dataKey="ut_25" position="top" offset={12} angle={-45}
+                  <Bar dataKey="ut_25" name="2025" fill="url(#gradExitoUt25)" radius={[8,8,0,0]} maxBarSize={36}>
+                    <LabelList dataKey="ut_25" position="top"
                       formatter={fmtLblCop}
-                      style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                      style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                   </Bar>
-                  <Bar dataKey="ut_26" name="2026" fill="url(#gradExitoUt26)" radius={[6,6,0,0]} maxBarSize={32}>
-                    <LabelList dataKey="ut_26" position="top" offset={12} angle={-45}
+                  <Bar dataKey="ut_26" name="2026" fill="url(#gradExitoUt26)" radius={[8,8,0,0]} maxBarSize={36}>
+                    <LabelList dataKey="ut_26" position="top"
                       formatter={fmtLblCop}
-                      style={{ fontSize: 10, fill: '#2a7a58', fontWeight: 700, textAnchor: 'start' }} />
+                      style={{ fontSize: 9, fill: '#065f46', fontWeight: 700 }} />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>

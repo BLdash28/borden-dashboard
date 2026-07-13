@@ -19,9 +19,9 @@ export async function GET(req: NextRequest) {
           descripcion, sku, categoria, subcategoria,
           ROUND(SUM(ventas_valor)::numeric,    2) AS valor_2026,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS uni_2026
-        FROM fact_ventas_walmart
+        FROM mv_walmart_mensual
         WHERE pais = $1
-          AND EXTRACT(YEAR FROM fecha) = 2026
+          AND ano = 2026
           AND ${w.where}
         GROUP BY descripcion, sku, categoria, subcategoria
       ),
@@ -29,13 +29,13 @@ export async function GET(req: NextRequest) {
         SELECT
           descripcion,
           ROUND(SUM(ventas_valor)::numeric, 2) AS valor_2025
-        FROM fact_ventas_walmart
+        FROM mv_walmart_mensual
         WHERE pais = $1
-          AND EXTRACT(YEAR FROM fecha) = 2025
-          AND EXTRACT(MONTH FROM fecha) <= (
-            SELECT COALESCE(MAX(EXTRACT(MONTH FROM fecha)), 12)
-            FROM fact_ventas_walmart
-            WHERE pais = $1 AND EXTRACT(YEAR FROM fecha) = 2026
+          AND ano = 2025
+          AND mes <= (
+            SELECT COALESCE(MAX(mes), 12)
+            FROM mv_walmart_mensual
+            WHERE pais = $1 AND ano = 2026
               AND ${w.where}
           )
           AND ${w.where}

@@ -6,6 +6,8 @@ import { getUserRestrictions } from '@/lib/auth/restrictions'
 import { AnalyticsQuerySchema, buildAnalyticsWhere } from '@/lib/validation/analytics'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 export async function GET(req: NextRequest) {
   try {
     await requireAuth()
@@ -48,7 +50,7 @@ export async function GET(req: NextRequest) {
              COUNT(DISTINCT pais)                                                   AS n_paises,
              COUNT(DISTINCT sku)                                                    AS n_skus,
              COUNT(DISTINCT cliente)                                                AS n_clientes
-           FROM mv_sellout_mensual
+           FROM mv_sellout_agg
            WHERE ${where}`,
           vals
         ),
@@ -58,7 +60,7 @@ export async function GET(req: NextRequest) {
               `SELECT
                  ROUND(SUM(ventas_valor)::numeric, 2)    AS total_valor,
                  ROUND(SUM(ventas_unidades)::numeric, 0) AS total_unidades
-               FROM mv_sellout_mensual
+               FROM mv_sellout_agg
                WHERE ${where} AND ano = ANY($${vals.length + 1})`,
               [...vals, priorAnos]
             )

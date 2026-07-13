@@ -6,6 +6,8 @@ import { getUserRestrictions } from '@/lib/auth/restrictions'
 import { AnalyticsQuerySchema, buildAnalyticsWhere } from '@/lib/validation/analytics'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 export async function GET(req: NextRequest) {
   try {
     await requireAuth()
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
              MAX(categoria)   AS categoria,
              ROUND(SUM(ventas_valor)::numeric,    2) AS valor,
              ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
-           FROM mv_sellout_mensual
+           FROM mv_sellout_agg
            WHERE ${where} AND sku IS NOT NULL AND sku <> ''
            GROUP BY sku
            ORDER BY valor DESC
@@ -47,7 +49,7 @@ export async function GET(req: NextRequest) {
          ),
          total AS (
            SELECT ROUND(SUM(ventas_valor)::numeric, 2) AS total_valor
-           FROM mv_sellout_mensual WHERE ${where}
+           FROM mv_sellout_agg WHERE ${where}
          )
          SELECT r.*, t.total_valor FROM ranked r CROSS JOIN total t`,
         vals
@@ -69,7 +71,7 @@ export async function GET(req: NextRequest) {
         valor: string
       }>(
         `SELECT sku, ano, mes, ROUND(SUM(ventas_valor)::numeric, 2) AS valor
-         FROM mv_sellout_mensual
+         FROM mv_sellout_agg
          WHERE ${where} AND sku = ANY($${vals.length + 1})
          GROUP BY sku, ano, mes
          ORDER BY sku, ano, mes`,

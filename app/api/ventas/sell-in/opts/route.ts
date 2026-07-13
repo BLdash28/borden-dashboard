@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
+export const revalidate = 300
+
 export const dynamic = 'force-dynamic'
 
 const DIM_MAP: Record<string, string> = {

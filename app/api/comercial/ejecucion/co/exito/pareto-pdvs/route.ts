@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
         SUM(ventas_valorusd) AS valor_usd,
         SUM(venta_valorcop)  AS valor_cop,
         SUM(ventas_unidades) AS uds
-      FROM fact_ventas_exito
+      FROM mv_exito_mensual
       WHERE pais='CO' AND ano=2026
         AND punto_venta IS NOT NULL AND punto_venta <> ''
         AND ${w.where}

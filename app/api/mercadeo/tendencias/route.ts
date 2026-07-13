@@ -5,6 +5,8 @@ import { pool } from '@/lib/db/pool'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const agrup    = searchParams.get('agrup')    || 'mes'   // mes | semana | dia

@@ -1166,7 +1166,7 @@ export default function EjecucionSelectos() {
 
               {ts ? (
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={displayedSeries} margin={{ top: 40, right: 16, left: 8, bottom: 4 }} barCategoryGap="35%" barGap={4}>
+                  <BarChart data={displayedSeries} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="22%" barGap={10}>
                     <defs>
                       <linearGradient id="gradSelEvo2024" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#d1d5db" stopOpacity={1}/>
@@ -1198,14 +1198,13 @@ export default function EjecucionSelectos() {
                       cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     />
-                    <Legend />
                     {ts.baseline_val > 0 && evolMedida === 'valor' && (
                       <ReferenceLine y={ts.baseline_val} stroke="#f59e0b" strokeDasharray="4 4"
                         label={{ value: 'Baseline', fontSize: 9, fill: '#f59e0b', position: 'insideTopRight' }} />
                     )}
                     <Bar dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
-                      fill="url(#gradSelEvo2024)" radius={[6, 6, 0, 0]}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} position="top" offset={12} angle={-45}
+                      fill="url(#gradSelEvo2024)" radius={[8, 8, 0, 0]} maxBarSize={28}>
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} position="top"
                         formatter={(v: any) => {
                           const n = Number(v); if (!isFinite(n) || n === 0) return ''
                           if (evolMedida === 'valor') {
@@ -1217,11 +1216,11 @@ export default function EjecucionSelectos() {
                           if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K'
                           return String(Math.round(n))
                         }}
-                        style={{ fontSize: 10, fill: '#6b7280', fontWeight: 700, textAnchor: 'start' }} />
+                        style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
                     </Bar>
                     <Bar dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
-                      fill="url(#gradSelEvo2025)" radius={[6, 6, 0, 0]}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} position="top" offset={12} angle={-45}
+                      fill="url(#gradSelEvo2025)" radius={[8, 8, 0, 0]} maxBarSize={28}>
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} position="top"
                         formatter={(v: any) => {
                           const n = Number(v); if (!isFinite(n) || n === 0) return ''
                           if (evolMedida === 'valor') {
@@ -1233,11 +1232,11 @@ export default function EjecucionSelectos() {
                           if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K'
                           return String(Math.round(n))
                         }}
-                        style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                        style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                     </Bar>
                     <Bar dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
-                      fill="url(#gradSelEvo2026)" radius={[6, 6, 0, 0]}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} position="top" offset={12} angle={-45}
+                      fill="url(#gradSelEvo2026)" radius={[8, 8, 0, 0]} maxBarSize={28}>
+                      <LabelList dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} position="top"
                         formatter={(v: any) => {
                           const n = Number(v); if (!isFinite(n) || n === 0) return ''
                           if (evolMedida === 'valor') {
@@ -1249,7 +1248,7 @@ export default function EjecucionSelectos() {
                           if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K'
                           return String(Math.round(n))
                         }}
-                        style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                        style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
@@ -1724,10 +1723,18 @@ export default function EjecucionSelectos() {
 
         {/* ── Panel 2: NSE Bar Chart ── */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-800 mb-1">📊 Por NSE — ¿Dónde están las brechas?</h3>
-          <p className="text-xs text-gray-400 mb-4">
-            Comparativa entre cobertura actual y máxima histórica por nivel socioeconómico de tienda.
-          </p>
+          <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800">📊 Por NSE — ¿Dónde están las brechas?</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Comparativa entre cobertura actual y máxima histórica por nivel socioeconómico de tienda.
+              </p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#d1d5db' }}/> Máxima Histórica</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{ background: '#1b3b5f' }}/> Cobertura Actual</span>
+            </div>
+          </div>
           {cobNse?.groups?.length > 0 ? (
             <ResponsiveContainer width="100%" height={280}>
               <BarChart
@@ -1736,20 +1743,30 @@ export default function EjecucionSelectos() {
                   actual: parseFloat(g.cob_actual_avg.toFixed(1)),
                   maxima: parseFloat(Math.max(g.cob_actual_avg, g.cob_max_avg).toFixed(1)),
                 }))}
-                margin={{ top: 24, right: 20, left: 0, bottom: 10 }}
-                barCategoryGap="30%"
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                barCategoryGap="25%"
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="nse" tick={{ fontSize: 11 }} />
-                <YAxis domain={[0, 100]} tickFormatter={v => v + '%'} tick={{ fontSize: 11 }} width={42}
-                  label={{ value: '% promedio cobertura SKUs Borden', angle: -90, position: 'insideLeft', fontSize: 9, fill: '#9ca3af', dx: -10 }} />
-                <Tooltip formatter={(v: number, n: string) => [v.toFixed(1) + '%', n === 'maxima' ? 'Máxima Histórica' : 'Cobertura Actual']} />
-                <Legend formatter={(n: string) => n === 'maxima' ? 'Máxima Histórica' : 'Cobertura Actual'} />
-                <Bar dataKey="maxima" name="maxima" fill="#d1d5db" radius={[3, 3, 0, 0]}>
-                  <LabelList dataKey="maxima" position="top" formatter={(v: number) => v.toFixed(0) + '%'} style={{ fontSize: 10, fill: '#9ca3af' }} />
+                <defs>
+                  <linearGradient id="gradNseMax" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="#d1d5db" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradNseActual" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="#1b3b5f" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#3a6fa8" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="nse" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 100]} tickFormatter={v => v + '%'} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(v: number, n: string) => [v.toFixed(1) + '%', n === 'maxima' ? 'Máxima Histórica' : 'Cobertura Actual']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
+                <Bar dataKey="maxima" name="maxima" fill="url(#gradNseMax)" radius={[8, 8, 0, 0]} maxBarSize={34}>
+                  <LabelList dataKey="maxima" position="top" formatter={(v: number) => v.toFixed(0) + '%'} style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey="actual" name="actual" fill="#1b3b5f" radius={[3, 3, 0, 0]}>
-                  <LabelList dataKey="actual" position="top" formatter={(v: number) => v.toFixed(0) + '%'} style={{ fontSize: 10, fill: '#1b3b5f' }} />
+                <Bar dataKey="actual" name="actual" fill="url(#gradNseActual)" radius={[8, 8, 0, 0]} maxBarSize={34}>
+                  <LabelList dataKey="actual" position="top" formatter={(v: number) => v.toFixed(0) + '%'} style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -2582,7 +2599,7 @@ export default function EjecucionSelectos() {
             <h3 className="text-sm font-semibold text-gray-800 mb-1">📦 Sell-In Mensual (Calleja SV)</h3>
             <p className="text-xs text-gray-400 mb-4">Valor facturado a Calleja por mes</p>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={siChart} margin={{top:40,right:16,left:8,bottom:4}} barCategoryGap="35%">
+              <BarChart data={siChart} margin={{top:10,right:16,left:8,bottom:4}} barCategoryGap="20%">
                 <defs>
                   <linearGradient id="gradSelSellin" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#3a6fa8" stopOpacity={1}/>
@@ -2597,15 +2614,15 @@ export default function EjecucionSelectos() {
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="sellin" fill="url(#gradSelSellin)" radius={[6,6,0,0]}>
-                  <LabelList dataKey="sellin" position="top" offset={12} angle={-45}
+                <Bar dataKey="sellin" fill="url(#gradSelSellin)" radius={[8,8,0,0]} maxBarSize={40}>
+                  <LabelList dataKey="sellin" position="top"
                     formatter={(v: any) => {
                       const n = Number(v); if (!isFinite(n) || n === 0) return ''
                       if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
                       if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
                       return '$' + Math.round(n)
                     }}
-                    style={{ fontSize: 10, fill: '#3a6fa8', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
@@ -2618,7 +2635,7 @@ export default function EjecucionSelectos() {
             <h3 className="text-sm font-semibold text-gray-800 mb-1">🛒 Sell-Out Mensual (Selectos)</h3>
             <p className="text-xs text-gray-400 mb-4">Venta real en tiendas (fact_ventas_selectos)</p>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={soChart} margin={{top:40,right:16,left:8,bottom:4}} barCategoryGap="35%">
+              <BarChart data={soChart} margin={{top:10,right:16,left:8,bottom:4}} barCategoryGap="20%">
                 <defs>
                   <linearGradient id="gradSelSelloutFull" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
@@ -2637,16 +2654,16 @@ export default function EjecucionSelectos() {
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="sellout" radius={[6,6,0,0]}>
+                <Bar dataKey="sellout" radius={[8,8,0,0]} maxBarSize={40}>
                   {soChart.map((_: any, i: number) => <Cell key={i} fill={i === soChart.length-1 ? 'url(#gradSelSelloutPart)' : 'url(#gradSelSelloutFull)'}/>)}
-                  <LabelList dataKey="sellout" position="top" offset={12} angle={-45}
+                  <LabelList dataKey="sellout" position="top"
                     formatter={(v: any) => {
                       const n = Number(v); if (!isFinite(n) || n === 0) return ''
                       if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
                       if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
                       return '$' + Math.round(n)
                     }}
-                    style={{ fontSize: 10, fill: '#c8873a', fontWeight: 700, textAnchor: 'start' }} />
+                    style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

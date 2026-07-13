@@ -9,7 +9,7 @@ export async function GET() {
     // Último mes con datos en 2026 para SELECTOS
     const { rows: cutR } = await pool.query(`
       SELECT COALESCE(MAX(mes), 0) AS ultimo_mes
-      FROM mv_sellout_mensual
+      FROM mv_sellout_agg
       WHERE cadena = 'SELECTOS' AND ano = 2026 AND ventas_valor > 0
     `)
     const ultimoMes = parseInt(cutR[0].ultimo_mes) || 0
@@ -23,7 +23,7 @@ export async function GET() {
           COALESCE(SUM(ventas_valor) FILTER (WHERE categoria = 'Leches'), 0)      AS leches,
           COALESCE(SUM(ventas_unidades), 0)                                        AS unidades,
           MAX(mes)                                                                 AS ultimo_mes
-        FROM mv_sellout_mensual
+        FROM mv_sellout_agg
         WHERE cadena = 'SELECTOS' AND ano = 2026 AND mes <= ${ultimoMes}
       `),
       // YTD 2025 — mismo período
@@ -32,7 +32,7 @@ export async function GET() {
           COALESCE(SUM(ventas_valor), 0)                                          AS total,
           COALESCE(SUM(ventas_valor) FILTER (WHERE categoria = 'Quesos'), 0)      AS quesos,
           COALESCE(SUM(ventas_valor) FILTER (WHERE categoria = 'Leches'), 0)      AS leches
-        FROM mv_sellout_mensual
+        FROM mv_sellout_agg
         WHERE cadena = 'SELECTOS' AND ano = 2025 AND mes <= ${ultimoMes}
       `),
       // FY 2025 completo
@@ -41,7 +41,7 @@ export async function GET() {
           COALESCE(SUM(ventas_valor), 0)                                          AS total,
           COALESCE(SUM(ventas_valor) FILTER (WHERE categoria = 'Quesos'), 0)      AS quesos,
           COALESCE(SUM(ventas_valor) FILTER (WHERE categoria = 'Leches'), 0)      AS leches
-        FROM mv_sellout_mensual
+        FROM mv_sellout_agg
         WHERE cadena = 'SELECTOS' AND ano = 2025
       `),
     ])

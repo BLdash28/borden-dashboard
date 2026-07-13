@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { Pool } from 'pg'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
 
+export const revalidate = 300
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },

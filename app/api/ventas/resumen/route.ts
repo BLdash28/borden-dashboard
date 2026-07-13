@@ -5,6 +5,8 @@ import { VentasResumenQuerySchema, parsePaisList } from '@/lib/validation/ventas
 import { getUserRestrictions } from '@/lib/auth/restrictions'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {

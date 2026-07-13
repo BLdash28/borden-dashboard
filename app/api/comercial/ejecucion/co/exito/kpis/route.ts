@@ -21,24 +21,25 @@ export async function GET(req: NextRequest) {
     const wcad = buildExitoWhere(fSinCadena, { startAt: 1 })
 
     const [ytdR, cadenaR, catR, monthlyR, devolR] = await Promise.all([
-      // YTD 2026 vs 2025 (con todos los filtros aplicados)
+      // YTD 2026 vs 2025 — mv_exito_mensual (12K filas terminales)
       pool.query(`
         WITH cur AS (
-          SELECT
-            SUM(ventas_valorusd) AS valor,
-            SUM(venta_valorcop)  AS valor_cop,
-            SUM(ventas_unidades) AS unidades,
-            MAX(ano*10000 + mes*100 + dia) AS ultima_fecha_n,
-            MAX(mes) AS ultimo_mes
-          FROM fact_ventas_exito
+          SELECT SUM(ventas_valorusd) AS valor,
+                 SUM(venta_valorcop)  AS valor_cop,
+                 SUM(ventas_unidades) AS unidades,
+                 MAX(mes) AS ultimo_mes
+          FROM mv_exito_mensual
           WHERE pais='CO' AND ano=2026 AND ${wa.where}
         ),
+        ultf AS (
+          SELECT MAX(ano*10000 + mes*100 + dia) AS ultima_fecha_n
+          FROM fact_ventas_exito WHERE pais='CO' AND ano=2026
+        ),
         prev AS (
-          SELECT
-            SUM(ventas_valorusd) AS valor,
-            SUM(venta_valorcop)  AS valor_cop,
-            SUM(ventas_unidades) AS unidades
-          FROM fact_ventas_exito
+          SELECT SUM(ventas_valorusd) AS valor,
+                 SUM(venta_valorcop)  AS valor_cop,
+                 SUM(ventas_unidades) AS unidades
+          FROM mv_exito_mensual
           WHERE pais='CO' AND ano=2025
             AND mes <= (SELECT COALESCE(ultimo_mes, 12) FROM cur)
             AND ${wa.where}
@@ -50,12 +51,12 @@ export async function GET(req: NextRequest) {
           COALESCE(prev.valor, 0)     AS ytd_2025,
           COALESCE(prev.valor_cop, 0) AS ytd_2025_cop,
           COALESCE(prev.unidades, 0)  AS uni_2025,
-          cur.ultima_fecha_n,
+          ultf.ultima_fecha_n,
           cur.ultimo_mes,
           CASE WHEN COALESCE(prev.valor, 0) > 0
                THEN ROUND(((cur.valor - prev.valor) / prev.valor * 100)::numeric, 1)
                ELSE NULL END AS delta_ytd
-        FROM cur, prev
+        FROM cur, prev, ultf
       `, wa.params),
 
       // por cadena — ignoramos el filtro de cadena para mostrar todas
@@ -66,7 +67,7 @@ export async function GET(req: NextRequest) {
           SUM(CASE WHEN ano = 2026 THEN ventas_unidades ELSE 0 END) AS uni_2026,
           SUM(CASE WHEN ano = 2025 THEN ventas_valorusd ELSE 0 END) AS valor_2025,
           SUM(CASE WHEN ano = 2025 THEN venta_valorcop  ELSE 0 END) AS valor_2025_cop
-        FROM fact_ventas_exito
+        FROM mv_exito_mensual
         WHERE pais='CO' AND ano IN (2025, 2026)
           AND cadena IS NOT NULL AND cadena <> ''
           AND ${wcad.where}
@@ -80,7 +81,7 @@ export async function GET(req: NextRequest) {
           SUM(ventas_valorusd) AS valor_2026,
           SUM(venta_valorcop)  AS valor_2026_cop,
           SUM(ventas_unidades) AS uni_2026
-        FROM fact_ventas_exito
+        FROM mv_exito_mensual
         WHERE pais='CO' AND ano=2026
           AND categoria IS NOT NULL AND categoria <> ''
           AND ${wb.where}
@@ -94,7 +95,7 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(ventas_valorusd)::numeric, 2) AS valor,
           ROUND(SUM(venta_valorcop)::numeric, 0)  AS valor_cop,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
-        FROM fact_ventas_exito
+        FROM mv_exito_mensual
         WHERE pais='CO' AND ano IN (2025, 2026) AND ${wa.where}
         GROUP BY ano, mes
         ORDER BY ano, mes

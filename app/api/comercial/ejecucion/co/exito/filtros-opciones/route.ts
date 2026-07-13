@@ -18,14 +18,14 @@ export async function GET() {
   try {
     // Año de referencia: el mayor con ventas registradas
     const anoR = await pool.query(
-      `SELECT MAX(ano)::int AS ano FROM fact_ventas_exito WHERE pais='CO'`,
+      `SELECT MAX(ano)::int AS ano FROM mv_exito_mensual WHERE pais='CO'`,
     )
     const ano = anoR.rows[0]?.ano ?? 2026
 
     const [cadR, subR, deptR, ciuR, skuR] = await Promise.all([
       pool.query(
         `SELECT cadena, SUM(venta_valorcop)::float AS venta
-           FROM fact_ventas_exito
+           FROM mv_exito_mensual
           WHERE pais='CO' AND ano=$1 AND cadena IS NOT NULL AND cadena <> ''
           GROUP BY cadena
           ORDER BY venta DESC NULLS LAST`,
@@ -33,7 +33,7 @@ export async function GET() {
       ),
       pool.query(
         `SELECT subcategoria, SUM(venta_valorcop)::float AS venta
-           FROM fact_ventas_exito
+           FROM mv_exito_mensual
           WHERE pais='CO' AND ano=$1 AND subcategoria IS NOT NULL AND subcategoria <> ''
           GROUP BY subcategoria
           ORDER BY venta DESC NULLS LAST`,
@@ -41,7 +41,7 @@ export async function GET() {
       ),
       pool.query(
         `SELECT departamento, SUM(venta_valorcop)::float AS venta
-           FROM fact_ventas_exito
+           FROM mv_exito_mensual
           WHERE pais='CO' AND ano=$1 AND departamento IS NOT NULL AND departamento <> ''
           GROUP BY departamento
           ORDER BY venta DESC NULLS LAST`,
@@ -50,7 +50,7 @@ export async function GET() {
       pool.query(
         `SELECT ciudad, MAX(departamento) AS departamento,
                 SUM(venta_valorcop)::float AS venta
-           FROM fact_ventas_exito
+           FROM mv_exito_mensual
           WHERE pais='CO' AND ano=$1 AND ciudad IS NOT NULL AND ciudad <> ''
           GROUP BY ciudad
           ORDER BY venta DESC NULLS LAST`,
@@ -59,7 +59,7 @@ export async function GET() {
       pool.query(
         `SELECT sku, MAX(descripcion) AS descripcion, MAX(subcategoria) AS subcategoria,
                 SUM(venta_valorcop)::float AS venta
-           FROM fact_ventas_exito
+           FROM mv_exito_mensual
           WHERE pais='CO' AND ano=$1 AND sku IS NOT NULL AND sku <> ''
           GROUP BY sku
           ORDER BY venta DESC NULLS LAST`,

@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
     let i = 1
     if (canal)    { conds.push(`canal_ul    = $${i++}`); params.push(canal) }
     if (subcanal) { conds.push(`subcanal_ul = $${i++}`); params.push(subcanal) }
-    conds.push(`EXTRACT(YEAR FROM fecha) = $${i++}`); params.push(ano)
+    conds.push(`ano = $${i++}`); params.push(ano)
     const where = conds.join(' AND ')
 
     const r = await pool.query(
@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
               ROUND(SUM(ventas_bultos)::numeric, 0)   AS bultos,
               COUNT(DISTINCT cod_cliente)             AS n_clientes,
               COUNT(*) FILTER (WHERE ventas_colones < 0) AS notas_credito
-       FROM fact_ventas_costa_dairy WHERE ${where} AND cod_articulo IS NOT NULL
+       FROM mv_costadairy_mensual WHERE ${where} AND cod_articulo IS NOT NULL
        GROUP BY cod_articulo
        ORDER BY crc DESC`, params)
 

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { unstable_cache } from 'next/cache'
 
+export const revalidate = 300
+
 export const dynamic = 'force-dynamic'
 
 const supabase = createClient(

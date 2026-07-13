@@ -17,11 +17,11 @@ export async function GET(req: NextRequest) {
 
     const { rows } = await pool.query(`
       SELECT DISTINCT subcategoria
-      FROM fact_ventas_walmart
+      FROM mv_walmart_mensual
       WHERE pais = $1
         AND subcategoria IS NOT NULL AND subcategoria <> ''
         AND ${w.where}
-        AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
+        AND ano = 2026
       ORDER BY subcategoria
     `, [pais, ...w.params])
 

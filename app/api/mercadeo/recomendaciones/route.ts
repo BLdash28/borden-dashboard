@@ -8,6 +8,8 @@ import { pool } from '@/lib/db/pool'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 const MESES_LABEL = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
 function parseMV(s: string | null): string[] {
@@ -74,7 +76,7 @@ export async function GET(req: NextRequest) {
 
       // ── Períodos disponibles en el rango filtrado ───────────
       const perQ = await pool.query(
-        `SELECT ano, mes FROM mv_sellout_mensual
+        `SELECT ano, mes FROM mv_sellout_agg
          WHERE ${baseConds.join(' AND ')}
          GROUP BY ano, mes HAVING COUNT(*) > 50
          ORDER BY ano DESC, mes DESC`,
@@ -121,7 +123,7 @@ export async function GET(req: NextRequest) {
            mes,
            ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades,
            ARRAY_AGG(DISTINCT pais ORDER BY pais)   AS paises_mes
-         FROM mv_sellout_mensual
+         FROM mv_sellout_agg
          WHERE ${dConds.join(' AND ')}
          GROUP BY sku, ano, mes
          ORDER BY sku, ano, mes`,

@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const r = await pool.query(`
       WITH ult AS (
         SELECT COALESCE(MAX(mes), 12) AS m
-        FROM fact_ventas_exito f
+        FROM mv_exito_mensual f
         WHERE f.pais='CO' AND f.ano=2026 AND ${w.where}
       ),
       agg AS (

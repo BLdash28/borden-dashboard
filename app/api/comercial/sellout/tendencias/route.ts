@@ -3,6 +3,8 @@ import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 export const dynamic = 'force-dynamic'
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -82,7 +84,7 @@ export async function GET(req: NextRequest) {
                  ROUND(SUM(CASE WHEN m.ano=2026 THEN m.ventas_unidades ELSE 0 END)::numeric,0) AS uds_2026,
                  ROUND(SUM(CASE WHEN m.ano=2025 THEN m.ventas_unidades ELSE 0 END)::numeric,0) AS uds_2025
           FROM (SELECT codigo_barras, sku, descripcion, categoria, ano, ventas_valor, ventas_unidades
-                FROM mv_sellout_mensual
+                FROM mv_sellout_agg
                 WHERE ${where} AND ano IN (2025,2026)
                   AND codigo_barras IS NOT NULL AND codigo_barras != '') m
           GROUP BY m.codigo_barras

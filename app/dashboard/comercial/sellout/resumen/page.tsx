@@ -11,7 +11,7 @@ import DonutChartPro from '@/components/dashboard/DonutChartPro'
 import { useDashboardFilters, MESES_LABEL } from '@/lib/context/DashboardFilters'
 import GlobalFilterBar from '@/components/dashboard/GlobalFilterBar'
 import {
-  LineChart, Line, BarChart, Bar, Cell,
+  LineChart, Line, BarChart, Bar, Cell, LabelList,
   ComposedChart, Area, ReferenceLine,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -971,17 +971,27 @@ export default function ResumenPage() {
               <div className="flex-1 overflow-auto px-6 py-4">
                 {modalTab === 'chart' ? (
                   <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={chartData} margin={{ top: 4, right: 16, left: 4, bottom: chartData.length > 10 ? 56 : 4 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                      <XAxis dataKey={chartKey} tick={{ fontSize: 10, fill: 'var(--t3)' }}
+                    <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: chartData.length > 10 ? 56 : 0 }} barCategoryGap="20%">
+                      <defs>
+                        <linearGradient id="gradModalSkuBar" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%"   stopColor="#3b82f6" stopOpacity={1}/>
+                          <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                      <XAxis dataKey={chartKey} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}
                         angle={chartData.length > 10 ? -40 : 0}
                         textAnchor={chartData.length > 10 ? 'end' : 'middle'}
                         height={chartData.length > 10 ? 56 : 30}
                         interval={Math.max(Math.ceil(chartData.length / 12) - 1, 0)}
                         tickFormatter={chartXFmt} />
-                      <YAxis tick={{ fontSize: 10, fill: 'var(--t3)' }} tickFormatter={v => v >= 1000 ? (v/1000).toFixed(0)+'K' : v} width={56} />
-                      <Tooltip content={<ModalTooltip />} />
-                      <Bar dataKey="ventas_unidades" name="Unidades" fill="#3b82f6" radius={[3,3,0,0]} animationDuration={600} />
+                      <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => v >= 1000 ? (v/1000).toFixed(0)+'K' : v} width={60} />
+                      <Tooltip content={<ModalTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+                      <Bar dataKey="ventas_unidades" name="Unidades" fill="url(#gradModalSkuBar)" radius={[8,8,0,0]} maxBarSize={40} animationDuration={600}>
+                        <LabelList dataKey="ventas_unidades" position="top"
+                          formatter={(v: any) => { const n = Number(v); if (!isFinite(n) || n === 0) return ''; if (Math.abs(n) >= 1e9) return (n/1e9).toFixed(1)+'MM'; if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(0)+'M'; if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0)+'K'; return Math.round(n) }}
+                          style={{ fontSize: 9, fill: '#1e40af', fontWeight: 700 }} />
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -1227,18 +1237,24 @@ export default function ResumenPage() {
                   ) : (
                     // Bar chart para muchos períodos (todos mode)
                     <ResponsiveContainer width="100%" height={280}>
-                      <BarChart data={metrics.cells} margin={{ top: 4, right: 16, left: 4, bottom: metrics.cells.length > 20 ? 56 : 4 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-                        <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--t3)' }}
+                      <BarChart data={metrics.cells} margin={{ top: 10, right: 10, left: 0, bottom: metrics.cells.length > 20 ? 56 : 0 }} barCategoryGap="20%">
+                        <defs>
+                          <linearGradient id="gradStreakViolet" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor={VIOLET} stopOpacity={1}/>
+                            <stop offset="100%" stopColor="#a78bfa" stopOpacity={0.85}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="label" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}
                           angle={metrics.cells.length > 20 ? -40 : 0}
                           textAnchor={metrics.cells.length > 20 ? 'end' : 'middle'}
                           height={metrics.cells.length > 20 ? 56 : 30}
                           interval={Math.max(Math.ceil(metrics.cells.length / 16) - 1, 0)} />
-                        <YAxis tick={{ fontSize: 10, fill: 'var(--t3)' }} tickFormatter={v => fmt(v)} width={60} />
-                        <Tooltip content={<ModalTooltip />} />
-                        <Bar dataKey="valor" name="Ventas" radius={[3, 3, 0, 0]}>
+                        <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} tickFormatter={v => fmt(v)} width={60} />
+                        <Tooltip content={<ModalTooltip />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
+                        <Bar dataKey="valor" name="Ventas" radius={[8, 8, 0, 0]} maxBarSize={40}>
                           {metrics.cells.map((entry, idx) => (
-                            <Cell key={idx} fill={entry.hasData ? VIOLET : 'var(--border)'} />
+                            <Cell key={idx} fill={entry.hasData ? 'url(#gradStreakViolet)' : 'var(--border)'} />
                           ))}
                         </Bar>
                       </BarChart>

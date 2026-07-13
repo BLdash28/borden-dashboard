@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
         SELECT pais, categoria,
                SUM(ventas_valor)    AS valor,
                SUM(ventas_unidades) AS unidades
-        FROM mv_sellout_mensual ${where}
+        FROM mv_sellout_agg ${where}
         GROUP BY pais, categoria
       ),
       total_pais AS (

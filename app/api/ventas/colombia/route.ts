@@ -3,6 +3,8 @@ import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)

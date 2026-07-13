@@ -3,6 +3,8 @@ import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { requireAuth } from '@/lib/api/auth'
 
+export const revalidate = 300
+
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {

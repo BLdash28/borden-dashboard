@@ -17,50 +17,46 @@ export async function GET(req: NextRequest) {
     const wSinCad = buildWalmartWhere({ ...f, cadenas: [] }, { startAt: 2 })
 
     const [ytdR, cadenaR, catR, monthlyR] = await Promise.all([
-      // YTD 2026 vs same-period 2025
+      // YTD 2026 vs same-period 2025 — usa mv_walmart_mensual (2.6K filas)
       pool.query(`
         WITH cur AS (
-          SELECT
-            SUM(ventas_valor)    AS valor,
-            SUM(ventas_unidades) AS unidades,
-            MAX(fecha)           AS ultima_fecha,
-            MAX(EXTRACT(MONTH FROM fecha))::int AS ultimo_mes
-          FROM fact_ventas_walmart
-          WHERE pais = $1
-            AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
-            AND ${w.where}
+          SELECT SUM(ventas_valor)    AS valor,
+                 SUM(ventas_unidades) AS unidades,
+                 MAX(mes)::int        AS ultimo_mes
+          FROM mv_walmart_mensual
+          WHERE pais = $1 AND ano = 2026 AND ${w.where}
         ),
         prev AS (
-          SELECT
-            SUM(ventas_valor)    AS valor,
-            SUM(ventas_unidades) AS unidades
-          FROM fact_ventas_walmart
-          WHERE pais = $1
-            AND fecha >= '2025-01-01' AND fecha < '2026-01-01'
-            AND EXTRACT(MONTH FROM fecha) <= (SELECT COALESCE(ultimo_mes, 12) FROM cur)
+          SELECT SUM(ventas_valor)    AS valor,
+                 SUM(ventas_unidades) AS unidades
+          FROM mv_walmart_mensual
+          WHERE pais = $1 AND ano = 2025
+            AND mes <= (SELECT COALESCE(ultimo_mes, 12) FROM cur)
             AND ${w.where}
+        ),
+        ultf AS (
+          SELECT MAX(fecha) ultima_fecha FROM fact_ventas_walmart
+          WHERE pais = $1 AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
         )
-        SELECT
-          COALESCE(cur.valor, 0)            AS ytd_2026,
-          COALESCE(cur.unidades, 0)         AS uni_2026,
-          COALESCE(prev.valor, 0)           AS ytd_2025,
-          COALESCE(prev.unidades, 0)        AS uni_2025,
-          cur.ultima_fecha,
-          cur.ultimo_mes,
-          CASE WHEN COALESCE(prev.valor,0) > 0
-               THEN ROUND(((cur.valor - prev.valor) / prev.valor * 100)::numeric, 1)
-               ELSE NULL END                AS delta_ytd
-        FROM cur, prev
+        SELECT COALESCE(cur.valor, 0)     AS ytd_2026,
+               COALESCE(cur.unidades, 0)  AS uni_2026,
+               COALESCE(prev.valor, 0)    AS ytd_2025,
+               COALESCE(prev.unidades, 0) AS uni_2025,
+               ultf.ultima_fecha,
+               cur.ultimo_mes,
+               CASE WHEN COALESCE(prev.valor,0) > 0
+                    THEN ROUND(((cur.valor - prev.valor) / prev.valor * 100)::numeric, 1)
+                    ELSE NULL END AS delta_ytd
+        FROM cur, prev, ultf
       `, [pais, ...w.params]),
-      // By cadena (mostramos todas las cadenas, no filtramos por cadena aquí)
+      // By cadena — mostrar todas
       pool.query(`
         SELECT ${CADENA_NORM_SQL} AS cadena,
-          SUM(CASE WHEN fecha >= '2026-01-01' AND fecha < '2027-01-01' THEN ventas_valor    ELSE 0 END) AS valor_2026,
-          SUM(CASE WHEN fecha >= '2026-01-01' AND fecha < '2027-01-01' THEN ventas_unidades ELSE 0 END) AS uni_2026,
-          SUM(CASE WHEN fecha >= '2025-01-01' AND fecha < '2026-01-01' THEN ventas_valor    ELSE 0 END) AS valor_2025
-        FROM fact_ventas_walmart
-        WHERE pais = $1 AND ${wSinCad.where}
-          AND fecha >= '2025-01-01' AND fecha < '2027-01-01'
+          SUM(CASE WHEN ano = 2026 THEN ventas_valor    ELSE 0 END) AS valor_2026,
+          SUM(CASE WHEN ano = 2026 THEN ventas_unidades ELSE 0 END) AS uni_2026,
+          SUM(CASE WHEN ano = 2025 THEN ventas_valor    ELSE 0 END) AS valor_2025
+        FROM mv_walmart_mensual
+        WHERE pais = $1 AND ano IN (2025, 2026) AND ${wSinCad.where}
         GROUP BY ${CADENA_NORM_SQL}
         ORDER BY valor_2026 DESC
       `, [pais, ...wSinCad.params]),
@@ -69,23 +65,17 @@ export async function GET(req: NextRequest) {
         SELECT categoria,
           SUM(ventas_valor)    AS valor_2026,
           SUM(ventas_unidades) AS uni_2026
-        FROM fact_ventas_walmart
-        WHERE pais = $1 AND ${w.where}
-          AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
-        GROUP BY categoria
-        ORDER BY valor_2026 DESC
+        FROM mv_walmart_mensual
+        WHERE pais = $1 AND ano = 2026 AND ${w.where}
+        GROUP BY categoria ORDER BY valor_2026 DESC
       `, [pais, ...w.params]),
       // Monthly 2025 + 2026
       pool.query(`
-        SELECT
-          EXTRACT(YEAR FROM fecha)::int  AS ano,
-          EXTRACT(MONTH FROM fecha)::int AS mes,
-          ROUND(SUM(ventas_valor)::numeric, 2) AS valor
-        FROM fact_ventas_walmart
-        WHERE pais = $1 AND ${w.where}
-          AND fecha >= '2025-01-01' AND fecha < '2027-01-01'
-        GROUP BY 1, 2
-        ORDER BY 1, 2
+        SELECT ano, mes,
+               ROUND(SUM(ventas_valor)::numeric, 2) AS valor
+        FROM mv_walmart_mensual
+        WHERE pais = $1 AND ano IN (2025, 2026) AND ${w.where}
+        GROUP BY 1, 2 ORDER BY 1, 2
       `, [pais, ...w.params]),
     ])
 

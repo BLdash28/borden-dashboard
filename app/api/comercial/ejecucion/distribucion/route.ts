@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
           MAX(descripcion) AS descripcion,
           MAX(categoria)   AS categoria,
           SUM(ventas_valor) AS valor
-        FROM mv_sellout_mensual ${where}
+        FROM mv_sellout_agg ${where}
         GROUP BY sku
         ORDER BY valor DESC
       ),

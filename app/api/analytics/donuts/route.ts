@@ -6,6 +6,8 @@ import { getUserRestrictions } from '@/lib/auth/restrictions'
 import { AnalyticsQuerySchema, buildAnalyticsWhere } from '@/lib/validation/analytics'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 const TOP_N = { categoria: 6, pais: 8, subcategoria: 6, cliente: 10 }
 
 function topNWithOthers(
@@ -38,7 +40,7 @@ export async function GET(req: NextRequest) {
       const donutQ = (dim: string, metric: string) =>
         pool.query<{ label: string; value: string }>(
           `SELECT ${dim} AS label, ROUND(${metric}::numeric, 2) AS value
-           FROM mv_sellout_mensual
+           FROM mv_sellout_agg
            WHERE ${where} AND ${dim} IS NOT NULL AND ${dim} <> ''
            GROUP BY ${dim}
            ORDER BY value DESC`,

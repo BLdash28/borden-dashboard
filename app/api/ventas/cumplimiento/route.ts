@@ -3,6 +3,8 @@ import { pool } from '@/lib/db/pool'
 import { requireAuth } from '@/lib/api/auth'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 export async function GET(req: NextRequest) {
   try {
     await requireAuth()
@@ -29,7 +31,7 @@ export async function GET(req: NextRequest) {
         mesActual = mesP
       } else {
         const best = await pool.query(
-          'SELECT ano, mes FROM mv_sellout_mensual WHERE ano > 2000 ' +
+          'SELECT ano, mes FROM mv_sellout_agg WHERE ano > 2000 ' +
           'GROUP BY ano, mes HAVING COUNT(*) > 10 ORDER BY ano DESC, mes DESC LIMIT 1'
         )
         anoActual = Number(best.rows[0]?.ano ?? new Date().getFullYear())
@@ -75,7 +77,7 @@ export async function GET(req: NextRequest) {
             pais, cliente, categoria,
             SUM(ventas_unidades)::numeric                    AS unidades_actual,
             ROUND(SUM(ventas_valor)::numeric, 2)             AS valor_actual
-          FROM mv_sellout_mensual
+          FROM mv_sellout_agg
           WHERE ${where}
           GROUP BY pais, cliente, categoria
           ORDER BY valor_actual DESC
@@ -86,7 +88,7 @@ export async function GET(req: NextRequest) {
             pais,
             SUM(ventas_unidades)::numeric                    AS unidades_actual,
             ROUND(SUM(ventas_valor)::numeric, 2)             AS valor_actual
-          FROM mv_sellout_mensual
+          FROM mv_sellout_agg
           WHERE ${where}
           GROUP BY pais
           ORDER BY valor_actual DESC

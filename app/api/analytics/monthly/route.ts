@@ -6,6 +6,8 @@ import { getUserRestrictions } from '@/lib/auth/restrictions'
 import { AnalyticsQuerySchema, buildAnalyticsWhere } from '@/lib/validation/analytics'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const GROWTH_TARGET = parseFloat(process.env.ANALYTICS_GROWTH_TARGET ?? '1.10')
 
@@ -37,7 +39,7 @@ export async function GET(req: NextRequest) {
           `SELECT ano, mes,
              ROUND(SUM(ventas_valor)::numeric,    2) AS valor,
              ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
-           FROM mv_sellout_mensual
+           FROM mv_sellout_agg
            WHERE ${where}
            GROUP BY ano, mes
            ORDER BY ano, mes`,
@@ -46,7 +48,7 @@ export async function GET(req: NextRequest) {
         priorAnos
           ? pool.query<{ ano: string; mes: string; valor: string }>(
               `SELECT ano, mes, ROUND(SUM(ventas_valor)::numeric, 2) AS valor
-               FROM mv_sellout_mensual
+               FROM mv_sellout_agg
                WHERE ${where} AND ano = ANY($${vals.length + 1})
                GROUP BY ano, mes
                ORDER BY ano, mes`,

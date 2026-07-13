@@ -31,7 +31,7 @@ export async function GET(req: NextRequest) {
       `),
       pool.query(`
         SELECT sku, ROUND((SUM(ventas_unidades) / 90.0)::numeric, 4) AS venta_dia
-        FROM mv_sellout_mensual ${ventaWhere}
+        FROM mv_sellout_agg ${ventaWhere}
         GROUP BY sku
       `),
     ])

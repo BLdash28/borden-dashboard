@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 export async function GET(req: NextRequest) {
   const sp     = req.nextUrl.searchParams
   const nivel  = sp.get('nivel') || 'pais'

@@ -11,14 +11,14 @@ export async function GET() {
     const [selloutR, sellinR] = await Promise.all([
       pool.query(`
         SELECT
-          EXTRACT(MONTH FROM fecha)::int          AS mes,
+          mes          AS mes,
           categoria,
           ROUND(SUM(ventas_valor)::numeric,    2) AS sellout_val,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS sellout_uni
-        FROM fact_ventas_selectos
-        WHERE EXTRACT(YEAR FROM fecha) = 2026
+        FROM mv_selectos_mensual
+        WHERE ano = 2026
           AND categoria IN ('Quesos', 'Leches')
-        GROUP BY EXTRACT(MONTH FROM fecha)::int, categoria
+        GROUP BY mes, categoria
         ORDER BY mes, categoria
       `),
       pool.query(`

@@ -4,6 +4,8 @@ import { createClient } from '@supabase/supabase-js'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
 import { pool as poolNeon } from '@/lib/db/pool'
 
+export const revalidate = 300
+
 export const dynamic = 'force-dynamic'
 
 // ── Mapeo de códigos de cadena ────────────────────────────────────────────────

@@ -19,11 +19,11 @@ export async function GET(req: NextRequest) {
       pool.query(`
         SELECT
           EXTRACT(YEAR  FROM fecha)::int AS ano,
-          EXTRACT(MONTH FROM fecha)::int AS mes,
+          mes AS mes,
           ROUND(SUM(ventas_valor)::numeric,    2) AS valor,
           ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
-        FROM fact_ventas_selectos
-        WHERE EXTRACT(YEAR FROM fecha) IN (2024, 2025, 2026)
+        FROM mv_selectos_mensual
+        WHERE ano IN (2024, 2025, 2026)
           ${catFilter} ${subcatFilter}
         GROUP BY 1, 2
         ORDER BY 1, 2
@@ -31,13 +31,13 @@ export async function GET(req: NextRequest) {
       pool.query(`
         WITH monthly AS (
           SELECT
-            EXTRACT(MONTH FROM fecha)::int AS mes,
+            mes AS mes,
             SUM(ventas_valor)    AS valor_mes,
             SUM(ventas_unidades) AS uni_mes
-          FROM fact_ventas_selectos
+          FROM mv_selectos_mensual
           WHERE (
-            EXTRACT(YEAR FROM fecha) > 2025
-            OR (EXTRACT(YEAR FROM fecha) = 2025 AND EXTRACT(MONTH FROM fecha) >= 10)
+            ano > 2025
+            OR (ano = 2025 AND mes >= 10)
           )
           ${catFilter} ${subcatFilter}
           GROUP BY 1

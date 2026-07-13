@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { getUserRestrictions } from '@/lib/auth/restrictions'
 
+export const revalidate = 300
+
 export async function GET() {
   const r = await getUserRestrictions()
   if (!r) return NextResponse.json({ role: null, isAdmin: false }, { status: 401 })

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
+export const revalidate = 300
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -76,32 +78,43 @@ export async function GET(req: NextRequest) {
     }
 
     const where = 'WHERE ' + conds.join(' AND ')
+    // KPI usa mv_sellout_agg (4K filas, ~100ms) removiendo `dia > 0`.
+    const whereAgg = conds.filter(c => c !== 'dia > 0').length
+      ? 'WHERE ' + conds.filter(c => c !== 'dia > 0').join(' AND ')
+      : ''
 
-    const [kpiR, countR, r] = await Promise.all([
+    // COUNT es costoso (4s+) sobre 943K filas. Sólo lo ejecutamos en la página 1;
+    // en páginas siguientes reutilizamos el count desde el frontend.
+    // Timeout defensivo de 2s: si Postgres tarda más, devolvemos null.
+    const runCount = page === 1
+    const countPromise = runCount
+      ? (async () => {
+          const client = await pool.connect()
+          try {
+            await client.query('SET LOCAL statement_timeout = 2000')
+            const rc = await client.query(
+              `SELECT COUNT(*) AS total FROM mv_sellout_mensual ${where}`, params
+            )
+            return parseInt(rc.rows[0]?.total ?? '0')
+          } catch {
+            return null
+          } finally {
+            client.release()
+          }
+        })()
+      : Promise.resolve(null)
+
+    const [kpiR, countVal, r] = await Promise.all([
       pool.query(
         `SELECT ROUND(SUM(ventas_valor)::numeric, 2) AS total_valor,
                 ROUND(SUM(ventas_unidades)::numeric, 0) AS total_unidades
-         FROM mv_sellout_mensual ${where}`,
+         FROM mv_sellout_agg ${whereAgg}`,
         params
       ),
+      countPromise,
       pool.query(
-        `SELECT COUNT(*) AS total FROM mv_sellout_mensual ${where}`,
-        params
-      ),
-      pool.query(
-        `SELECT ano,
-                mes,
-                dia,
-                pais,
-                cliente,
-                cadena,
-                formato,
-                punto_venta,
-                codigo_barras,
-                sku,
-                descripcion,
-                categoria,
-                subcategoria,
+        `SELECT ano, mes, dia, pais, cliente, cadena, formato, punto_venta,
+                codigo_barras, sku, descripcion, categoria, subcategoria,
                 ROUND(ventas_unidades::numeric, 0) AS ventas_unidades,
                 ROUND(ventas_valor::numeric, 2)    AS ventas_valor
          FROM mv_sellout_mensual ${where}
@@ -115,9 +128,10 @@ export async function GET(req: NextRequest) {
       total_valor:    parseFloat(kpiR.rows[0]?.total_valor ?? '0'),
       total_unidades: parseFloat(kpiR.rows[0]?.total_unidades ?? '0'),
     }
-    const total = parseInt(countR.rows[0]?.total ?? '0')
+    const total = countVal   // null si timeout o si page > 1
+    const has_more = r.rows.length === pageSize
 
-    return NextResponse.json({ rows: r.rows, kpi, total, page, pageSize })
+    return NextResponse.json({ rows: r.rows, kpi, total, has_more, page, pageSize })
   } catch (err) {
     return handleApiError(err)
   }

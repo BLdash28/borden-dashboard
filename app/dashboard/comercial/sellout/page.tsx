@@ -720,7 +720,7 @@ export default function SelloutPage() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                     <button
-                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, buscar, pg) }}
+                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, buscar, pg, sort) }}
                       disabled={page === 1}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >
@@ -728,7 +728,7 @@ export default function SelloutPage() {
                     </button>
                     <span className="text-sm text-gray-500">Página {page} de {totalPages}</span>
                     <button
-                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, buscar, pg) }}
+                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, buscar, pg, sort) }}
                       disabled={page === totalPages}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >

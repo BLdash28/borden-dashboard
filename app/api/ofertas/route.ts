@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { handleApiError, AppError } from '@/lib/api/errors'
 
+export const revalidate = 300
+
 export const dynamic = 'force-dynamic'
 
 /*

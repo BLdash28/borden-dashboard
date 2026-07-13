@@ -3,6 +3,8 @@ import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 /**
  * GET /api/ventas/crecimientos
  *
@@ -33,7 +35,7 @@ export async function GET(req: NextRequest) {
         anoActual = parseInt(anoP)
       } else {
         const r = await pool.query(
-          'SELECT MAX(ano) AS max_ano FROM mv_sellout_mensual WHERE ano > 2000'
+          'SELECT MAX(ano) AS max_ano FROM mv_sellout_agg WHERE ano > 2000'
         )
         anoActual = parseInt(r.rows[0]?.max_ano ?? new Date().getFullYear())
       }
@@ -41,7 +43,7 @@ export async function GET(req: NextRequest) {
 
       // Fecha de corte: último mes con datos en el año actual
       const corteR = await pool.query(
-        'SELECT MAX(mes) AS max_mes FROM mv_sellout_mensual WHERE ano = $1',
+        'SELECT MAX(mes) AS max_mes FROM mv_sellout_agg WHERE ano = $1',
         [anoActual]
       )
       const mesCorteCurrent = parseInt(corteR.rows[0]?.max_mes ?? '12')
@@ -87,7 +89,7 @@ export async function GET(req: NextRequest) {
             ano,
             ROUND(SUM(ventas_valor)::numeric, 2) AS ventas_valor,
             ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
-          FROM mv_sellout_mensual
+          FROM mv_sellout_agg
           WHERE ano IN ($${pActual}, $${pAnterior})
             AND mes <= $${pCorte}
             AND sku IS NOT NULL AND sku != ''
@@ -129,7 +131,7 @@ export async function GET(req: NextRequest) {
           ROUND(SUM(CASE WHEN ano = $${pActual}   AND mes <= $${pCorte} THEN ventas_unidades ELSE 0 END)::numeric, 0) AS unidades_actual,
           ROUND(SUM(CASE WHEN ano = $${pAnterior} AND mes <= $${pCorte} THEN ventas_unidades ELSE 0 END)::numeric, 0) AS unidades_anterior,
           COUNT(DISTINCT CASE WHEN ano = $${pActual} AND mes <= $${pCorte} THEN sku END) AS skus_actual
-        FROM mv_sellout_mensual
+        FROM mv_sellout_agg
         WHERE ano IN ($${pActual}, $${pAnterior})
           AND mes <= $${pCorte}
           ${extraWhere}
@@ -141,7 +143,7 @@ export async function GET(req: NextRequest) {
           mes,
           ROUND(SUM(CASE WHEN ano = $${pActual}   THEN ventas_valor ELSE 0 END)::numeric, 2) AS valor_actual,
           ROUND(SUM(CASE WHEN ano = $${pAnterior} THEN ventas_valor ELSE 0 END)::numeric, 2) AS valor_anterior
-        FROM mv_sellout_mensual
+        FROM mv_sellout_agg
         WHERE ano IN ($${pActual}, $${pAnterior})
           AND mes <= $${pCorte}
           ${extraWhere}

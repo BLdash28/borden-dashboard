@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
     let i = 1
     if (canal)    { conds.push(`canal_ul    = $${i++}`); params.push(canal) }
     if (subcanal) { conds.push(`subcanal_ul = $${i++}`); params.push(subcanal) }
-    conds.push(`EXTRACT(YEAR FROM fecha) = $${i++}`); params.push(ano)
+    conds.push(`ano = $${i++}`); params.push(ano)
     const where = conds.join(' AND ')
 
     const [kpiR, canalR, subcanalR, monthlyR, clienteR, vendedorR, zonaR] = await Promise.all([
@@ -33,28 +33,28 @@ export async function GET(req: NextRequest) {
            MAX(fecha)                              AS ultima_fecha,
            MIN(fecha)                              AS primera_fecha,
            COUNT(*) FILTER (WHERE ventas_colones < 0) AS notas_credito
-         FROM fact_ventas_costa_dairy WHERE ${where}`, params),
+         FROM mv_costadairy_mensual WHERE ${where}`, params),
       pool.query(
         `SELECT canal_ul AS canal,
                 ROUND(SUM(ventas_colones)::numeric,2) AS crc,
                 ROUND(SUM(ventas_valor)::numeric,2)   AS usd,
                 ROUND(SUM(ventas_unidades)::numeric,0) AS uds,
                 COUNT(DISTINCT cod_cliente)           AS n_clientes
-         FROM fact_ventas_costa_dairy WHERE ${where}
+         FROM mv_costadairy_mensual WHERE ${where}
          GROUP BY canal_ul ORDER BY crc DESC`, params),
       pool.query(
         `SELECT canal_ul AS canal, subcanal_ul AS subcanal,
                 ROUND(SUM(ventas_colones)::numeric,2) AS crc,
                 ROUND(SUM(ventas_unidades)::numeric,0) AS uds,
                 COUNT(DISTINCT cod_cliente)           AS n_clientes
-         FROM fact_ventas_costa_dairy WHERE ${where} AND subcanal_ul IS NOT NULL
+         FROM mv_costadairy_mensual WHERE ${where} AND subcanal_ul IS NOT NULL
          GROUP BY canal_ul, subcanal_ul ORDER BY crc DESC`, params),
       pool.query(
-        `SELECT EXTRACT(MONTH FROM fecha)::int AS mes,
+        `SELECT mes AS mes,
                 ROUND(SUM(ventas_colones)::numeric,2) AS crc,
                 ROUND(SUM(ventas_valor)::numeric,2)   AS usd,
                 ROUND(SUM(ventas_unidades)::numeric,0) AS uds
-         FROM fact_ventas_costa_dairy WHERE ${where}
+         FROM mv_costadairy_mensual WHERE ${where}
          GROUP BY mes ORDER BY mes`, params),
       pool.query(
         `SELECT cod_cliente, nom_cliente,
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
                 ROUND(SUM(ventas_colones)::numeric,2) AS crc,
                 ROUND(SUM(ventas_unidades)::numeric,0) AS uds,
                 COUNT(DISTINCT fecha)                 AS dias_compra
-         FROM fact_ventas_costa_dairy WHERE ${where} AND cod_cliente IS NOT NULL
+         FROM mv_costadairy_mensual WHERE ${where} AND cod_cliente IS NOT NULL
          GROUP BY cod_cliente, nom_cliente
          ORDER BY crc DESC LIMIT 20`, params),
       pool.query(
@@ -70,14 +70,14 @@ export async function GET(req: NextRequest) {
                 ROUND(SUM(ventas_colones)::numeric,2) AS crc,
                 ROUND(SUM(ventas_unidades)::numeric,0) AS uds,
                 COUNT(DISTINCT cod_cliente)           AS n_clientes
-         FROM fact_ventas_costa_dairy WHERE ${where} AND vendedor IS NOT NULL
+         FROM mv_costadairy_mensual WHERE ${where} AND vendedor IS NOT NULL
          GROUP BY codvendedor, vendedor ORDER BY crc DESC`, params),
       pool.query(
         `SELECT zona,
                 ROUND(SUM(ventas_colones)::numeric,2) AS crc,
                 ROUND(SUM(ventas_unidades)::numeric,0) AS uds,
                 COUNT(DISTINCT cod_cliente)           AS n_clientes
-         FROM fact_ventas_costa_dairy WHERE ${where} AND zona IS NOT NULL
+         FROM mv_costadairy_mensual WHERE ${where} AND zona IS NOT NULL
          GROUP BY zona ORDER BY crc DESC LIMIT 15`, params),
     ])
 

@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
                 SUM(ventas_unidades)::numeric AS und,
                 SUM(ventas_valorusd)::numeric  AS usd,
                 SUM(venta_valorcop)::numeric   AS cop
-         FROM fact_ventas_exito
+         FROM mv_exito_mensual
          WHERE pais='CO' AND ano=$1 AND sku IS NOT NULL AND sku <> ''
            AND ${w.where}
          GROUP BY sku, mes`,
@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
                 SUM(ventas_unidades)::numeric AS und,
                 SUM(ventas_valorusd)::numeric  AS usd,
                 SUM(venta_valorcop)::numeric   AS cop
-         FROM fact_ventas_exito
+         FROM mv_exito_mensual
          WHERE pais='CO' AND ano=$1 AND cadena IS NOT NULL AND cadena <> ''
            AND ${w.where}
          GROUP BY cadena, mes`,
@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
                 SUM(ventas_unidades)::numeric AS und,
                 SUM(ventas_valorusd)::numeric  AS usd,
                 SUM(venta_valorcop)::numeric   AS cop
-         FROM fact_ventas_exito
+         FROM mv_exito_mensual
          WHERE pais='CO' AND ano=$1 AND subcadena IS NOT NULL AND subcadena <> ''
            AND ${w.where}
          GROUP BY subcadena, cadena, mes`,

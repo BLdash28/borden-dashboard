@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js'
 import { handleApiError } from '@/lib/api/errors'
 import { requireAuth } from '@/lib/api/auth'
 
+export const revalidate = 300
+
 export const dynamic = 'force-dynamic'
 
 const supabase = createClient(

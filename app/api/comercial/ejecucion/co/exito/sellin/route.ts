@@ -159,6 +159,7 @@ export async function GET(req: NextRequest) {
       margen_pct: cop26 > 0 ? (ut26 / cop26) * 100 : null,
       uds_25: uds25,
       cop_25: cop25,
+      usd_25: parseFloat(k.usd_25 ?? '0'),
       ut_25: ut25,
       margen_pct_25: cop25 > 0 ? (ut25 / cop25) * 100 : null,
       delta_venta: delta(cop26, cop25),

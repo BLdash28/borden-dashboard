@@ -5,6 +5,8 @@ import { requireAuth } from '@/lib/api/auth'
 import { VentasPaisQuerySchema, parsePaisList } from '@/lib/validation/ventas'
 import { withCache, cacheHeaders } from '@/lib/db/cache'
 
+export const revalidate = 300
+
 export async function GET(req: NextRequest) {
   try {
     await requireAuth()
