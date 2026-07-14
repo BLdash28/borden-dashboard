@@ -7,6 +7,10 @@ import {
   Tooltip, ResponsiveContainer, Legend, LabelList,
   PieChart, Pie, Cell,
 } from 'recharts'
+import {
+  TendenciaMensualChart, TendenciaDiariaChart, MetricaTogglePill,
+  type TendMetrica, type TendData, type TendDailyRow,
+} from '@/components/ui/tendencia-chart'
 
 // Formatters
 const fmt$ = (v: unknown) => {
@@ -119,6 +123,20 @@ export default function SellInLicenciamiento() {
   const [loading, setLoading] = useState(false)
   const [loadingHel, setLoadingHel] = useState(false)
 
+  // Tendencia reusable (chart Sell-Out Walmart CR helados)
+  const [wmTend, setWmTend] = useState<TendData | null>(null)
+  const [wmTendMetricas, setWmTendMetricas] = useState<TendMetrica[]>(['valor'])
+  const [wmTendVista, setWmTendVista] = useState<'mensual' | 'diaria'>('mensual')
+  const [wmTendDaily, setWmTendDaily] = useState<TendDailyRow[]>([])
+  const [wmTendDailyLoading, setWmTendDailyLoading] = useState(false)
+  const toggleWmTendMetrica = (m: TendMetrica) => {
+    setWmTendMetricas(prev => {
+      const has = prev.includes(m)
+      if (has && prev.length === 1) return prev
+      return has ? prev.filter(x => x !== m) : [...prev, m]
+    })
+  }
+
   // Sort para la tabla Top SKUs
   type SortCol = 'uds' | 'cop' | 'ut' | 'margen_pct'
   const [sortCol, setSortCol] = useState<SortCol>('cop')
@@ -170,6 +188,28 @@ export default function SellInLicenciamiento() {
       .then(([h, w]) => { setHelados(h); setWmHel(w) })
       .finally(() => setLoadingHel(false))
   }, [tipo, helados, wmHel])
+
+  // Tendencia mensual Walmart helados (chart Sell-Out reusable)
+  useEffect(() => {
+    if (tipo !== 'helados') return
+    if (wmTend) return
+    fetch('/api/comercial/sell-in/licenciamiento/walmart-helados-tendencia')
+      .then(r => r.json())
+      .then((d: TendData) => setWmTend(d))
+      .catch(() => setWmTend({ desde: null, hasta: null, labels: [], total: [], por_sku: [] }))
+  }, [tipo, wmTend])
+
+  // Tendencia diaria Walmart helados (dedicado)
+  useEffect(() => {
+    if (tipo !== 'helados' || wmTendVista !== 'diaria') return
+    if (wmTendDaily.length > 0 || wmTendDailyLoading) return
+    setWmTendDailyLoading(true)
+    fetch('/api/comercial/sell-in/licenciamiento/walmart-helados-diaria')
+      .then(r => r.json())
+      .then(d => setWmTendDaily(d.rows ?? []))
+      .catch(() => setWmTendDaily([]))
+      .finally(() => setWmTendDailyLoading(false))
+  }, [tipo, wmTendVista, wmTendDaily.length, wmTendDailyLoading])
 
   const useUsd = moneda === 'usd'
   const fmtVal = (v: number) => useUsd ? fmtFull(v) : fmtCOP(v)
@@ -242,9 +282,6 @@ export default function SellInLicenciamiento() {
           v2025: useHelUsd ? m.y2025 : m.crc2025,
           v2026: useHelUsd ? m.y2026 : m.crc2026,
         })).filter(m => (m.v2025 && m.v2025 > 0) || (m.v2026 && m.v2026 > 0))
-
-        // Walmart sellout — solo mostramos si hay data
-        const wmMonthly = wmHel?.monthly.filter(m => (m.y2025 && m.y2025 > 0) || (m.y2026 && m.y2026 > 0)) ?? []
 
         return (
           <div className="space-y-5">
@@ -369,41 +406,64 @@ export default function SellInLicenciamiento() {
                 </div>
 
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mt-3">
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
                     <div>
-                      <h3 className="text-sm font-bold text-gray-800">Sell-Out Mensual · Walmart CR</h3>
-                      <p className="text-[11px] text-gray-400">2025 vs 2026 · USD</p>
+                      <h3 className="text-sm font-bold text-gray-800">
+                        Sell-Out {wmTendVista === 'mensual' ? 'Mensual' : 'Diaria'} · Walmart CR
+                      </h3>
+                      {(() => {
+                        let precioUlt = 0
+                        let refLabel  = ''
+                        if (wmTendVista === 'diaria' && wmTendDaily.length > 0) {
+                          const last = wmTendDaily[wmTendDaily.length - 1]
+                          precioUlt = last.unidades > 0 ? last.valor_usd / last.unidades : 0
+                          refLabel = last.dia_str
+                        } else if (wmTendVista === 'mensual' && wmTend?.total) {
+                          const withData = wmTend.total.filter(p => (p.unidades ?? 0) > 0)
+                          const last = withData[withData.length - 1]
+                          if (last) { precioUlt = last.precio_usd; refLabel = last.mes_str }
+                        }
+                        const precioFmt = '$' + precioUlt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                        return (
+                          <p className="text-[11px] text-gray-400">
+                            {wmTendVista === 'mensual' ? 'Tendencia mensual continua · USD' : 'Tendencia diaria · 2026 · USD'}
+                            {precioUlt > 0 && (
+                              <>
+                                <span className="mx-1.5 text-gray-300">·</span>
+                                <span className="font-semibold text-emerald-600">Último precio prom / Und ({refLabel}): {precioFmt}</span>
+                              </>
+                            )}
+                          </p>
+                        )
+                      })()}
                     </div>
-                    <div className="flex items-center gap-3 text-[11px]">
-                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
-                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"/> 2026</span>
+                    <div className="flex items-center gap-3 text-[11px] flex-wrap">
+                      <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                        {(['mensual','diaria'] as const).map(v => (
+                          <button key={v} onClick={() => setWmTendVista(v)}
+                            className={`px-3 py-1 font-semibold transition-colors ${wmTendVista === v ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                            {v === 'mensual' ? 'Mensual' : 'Diaria'}
+                          </button>
+                        ))}
+                      </div>
+                      <MetricaTogglePill metricas={wmTendMetricas} onToggle={toggleWmTendMetrica} />
                     </div>
                   </div>
-                  <div className="h-[260px] mt-3">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={wmMonthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={4}>
-                        <defs>
-                          <linearGradient id="gradHelWM25" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#94a3b8" stopOpacity={1}/>
-                            <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.85}/>
-                          </linearGradient>
-                          <linearGradient id="gradHelWM26" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
-                            <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
-                        <YAxis tickFormatter={(v: any) => '$' + (Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : Math.round(Number(v)))}
-                          tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}/>
-                        <Tooltip formatter={(v: unknown) => ['$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), '']}
-                          cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
-                        <Bar dataKey="y2025" name="2025" fill="url(#gradHelWM25)" radius={[8,8,0,0]} maxBarSize={28}/>
-                        <Bar dataKey="y2026" name="2026" fill="url(#gradHelWM26)" radius={[8,8,0,0]} maxBarSize={28}/>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
+                  {wmTendVista === 'mensual' ? (
+                    <TendenciaMensualChart
+                      tendencia={wmTend}
+                      metricas={wmTendMetricas}
+                      moneda="usd"
+                      skuFilter={[]}
+                    />
+                  ) : (
+                    <TendenciaDiariaChart
+                      rows={wmTendDaily}
+                      metricas={wmTendMetricas}
+                      moneda="usd"
+                      loading={wmTendDailyLoading}
+                    />
+                  )}
                 </div>
 
                 {/* Detalle por producto + top pdvs */}
