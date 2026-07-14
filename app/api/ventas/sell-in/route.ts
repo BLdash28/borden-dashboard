@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
     const sp = req.nextUrl.searchParams
 
     const fetchAll = sp.get('all') === 'true'
+    // Granularidad opcional: 'mes' agrega ano,mes al GROUP BY (para CSV mes a mes)
+    const granularidad = sp.get('granularidad') === 'mes' ? 'mes' : 'combo'
     const page     = parseInt(sp.get('page')     || '1')
     const pageSize = parseInt(sp.get('pageSize') || '500')
     const offset   = (page - 1) * pageSize
@@ -80,12 +82,23 @@ export async function GET(req: NextRequest) {
         : 0,
     }
 
+    // GROUP BY dinámico según granularidad
+    // 'mes' = fila por (combo × mes × OC) — para CSV detallado
+    // 'combo' = fila por combo (default de la tabla paginada)
+    const groupBy = granularidad === 'mes'
+      ? 'pais, cliente_nombre, canal, tipo_negocio, sku, descripcion, categoria, subcategoria, ano, mes, numero_factura'
+      : 'pais, cliente_nombre, canal, tipo_negocio, sku, descripcion, categoria, subcategoria'
+    const selectExtra = granularidad === 'mes' ? ', ano, mes, numero_factura AS orden_compra' : ''
+    const countGroupBy = granularidad === 'mes'
+      ? 'pais, cliente_nombre, canal, sku, descripcion, categoria, ano, mes, numero_factura'
+      : 'pais, cliente_nombre, canal, sku, descripcion, categoria'
+
     // Count (filas agrupadas)
     const countR = await pool.query(
       `SELECT COUNT(*) AS total FROM (
-         SELECT pais, cliente_nombre, canal, sku, descripcion, categoria
+         SELECT ${countGroupBy}
          FROM fact_sales_sellin ${where}
-         GROUP BY pais, cliente_nombre, canal, sku, descripcion, categoria
+         GROUP BY ${countGroupBy}
        ) sub`,
       params
     )
@@ -101,7 +114,7 @@ export async function GET(req: NextRequest) {
          sku,
          descripcion,
          categoria,
-         subcategoria,
+         subcategoria${selectExtra},
          MIN(fecha_factura)                           AS fecha_min,
          MAX(fecha_factura)                           AS fecha_max,
          COUNT(DISTINCT fecha_factura)                AS dias_venta,
@@ -116,8 +129,8 @@ export async function GET(req: NextRequest) {
               THEN ROUND((SUM(venta_neta)/SUM(cantidad_cajas))::numeric, 4)
               ELSE 0 END                              AS precio_promedio
        FROM fact_sales_sellin ${where}
-       GROUP BY pais, cliente_nombre, canal, tipo_negocio, sku, descripcion, categoria, subcategoria
-       ORDER BY ingresos DESC
+       GROUP BY ${groupBy}
+       ORDER BY ${granularidad === 'mes' ? 'ano, mes, ingresos DESC' : 'ingresos DESC'}
        ${fetchAll ? '' : `LIMIT $${idx} OFFSET $${idx + 1}`}`,
       fetchAll ? params : [...params, pageSize, offset]
     )

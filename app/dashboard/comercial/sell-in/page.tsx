@@ -290,6 +290,7 @@ export default function SellInPage() {
       if (fClientes.length) p.set('clientes',   fClientes.join(','))
       if (fSkus.length)     p.set('skus',       fSkus.join(','))
       p.set('all', 'true')
+      p.set('granularidad', 'mes')   // fila por (SKU × cliente × mes × OC)
 
       const r = await fetch('/api/ventas/sell-in?' + p)
       const j = await r.json()
@@ -299,10 +300,13 @@ export default function SellInPage() {
         pais:            String(x.pais         ?? ''),
         cliente:         String(x.cliente      ?? ''),
         canal:           String(x.canal        ?? ''),
+        orden_compra:    String(x.orden_compra ?? ''),
         sku:             String(x.sku          ?? ''),
         descripcion:     String(x.descripcion  ?? ''),
         categoria:       String(x.categoria    ?? ''),
         subcategoria:    String(x.subcategoria ?? ''),
+        ano:             x.ano != null ? Number(x.ano) : null,
+        mes:             x.mes != null ? Number(x.mes) : null,
         fecha_max:       x.fecha_max ? String(x.fecha_max).slice(0, 10) : null,
         cajas:           toNum(x.cajas),
         ingresos:        toNum(x.ingresos),
@@ -319,15 +323,18 @@ export default function SellInPage() {
       const csvRows = [
         headers.join(','),
         ...allRows.map((x: {
-          pais: string; cliente: string; canal: string; sku: string; descripcion: string;
-          categoria: string; subcategoria: string; fecha_max: string | null;
+          pais: string; cliente: string; canal: string; orden_compra: string;
+          sku: string; descripcion: string; categoria: string; subcategoria: string;
+          ano: number | null; mes: number | null; fecha_max: string | null;
           cajas: number; ingresos: number; precio_promedio: number;
         }) => {
           const p2 = partesFecha(x.fecha_max)
+          const anoOut = x.ano ?? p2.ano
+          const mesOut = x.mes != null ? MESES[x.mes] ?? String(x.mes) : p2.mes
           const pct = gTotal > 0 ? (x.ingresos / gTotal) * 100 : 0
           return [
-            x.pais, x.cliente, x.canal, x.sku, x.descripcion, x.categoria, x.subcategoria,
-            p2.ano, p2.mes,
+            x.pais, x.cliente, x.orden_compra, x.sku, x.descripcion, x.categoria, x.subcategoria,
+            anoOut, mesOut,
             x.cajas.toFixed(0), x.ingresos.toFixed(2), x.precio_promedio.toFixed(4), pct.toFixed(2) + '%',
           ].map(esc).join(',')
         }),
