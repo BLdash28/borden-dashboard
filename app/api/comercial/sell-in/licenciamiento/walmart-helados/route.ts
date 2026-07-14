@@ -14,7 +14,7 @@ export async function GET() {
     // Walmart guarda el EAN en formato: 0005300000051 (13 chars con lead zero, sin check digit)
     // Los helados Borden tienen EAN 13 chars real (7441134017824). El match debe ser directo.
 
-    const [ytdR, monthlyR, prodR, tiendaR] = await Promise.all([
+    const [ytdR, monthlyR, dailyR, prodR, tiendaR] = await Promise.all([
       // YTD 2026 vs 2025 mismo período
       pool.query(`
         WITH cur AS (
@@ -51,6 +51,19 @@ export async function GET() {
         WHERE pais='CR' AND fecha >= '2025-01-01' AND fecha < '2027-01-01'
           AND codigo_barras = ANY($1::text[])
         GROUP BY 1, 2 ORDER BY 1, 2
+      `, [EAN_HELADOS]),
+      // Diaria 2026 — para el toggle Mensual/Diaria en el frontend
+      pool.query(`
+        SELECT
+          fecha,
+          EXTRACT(MONTH FROM fecha)::int mes,
+          EXTRACT(DAY   FROM fecha)::int dia,
+          ROUND(SUM(ventas_valor)::numeric, 2)    usd,
+          ROUND(SUM(ventas_unidades)::numeric, 0) uds
+        FROM fact_ventas_walmart
+        WHERE pais='CR' AND fecha >= '2026-01-01' AND fecha < '2027-01-01'
+          AND codigo_barras = ANY($1::text[])
+        GROUP BY fecha ORDER BY fecha
       `, [EAN_HELADOS]),
       // Por producto (EAN) 2026
       pool.query(`
@@ -98,6 +111,18 @@ export async function GET() {
       ultimo_mes: ultimoMes,
       ultimo_mes_nombre: MN[ultimoMes] ?? '',
       monthly: Object.values(monthly),
+      daily: dailyR.rows.map(r => {
+        const d = new Date(r.fecha)
+        const dia = +r.dia
+        const mes = +r.mes
+        return {
+          fecha: r.fecha,
+          dia_str: `${dia} ${MN[mes]}`,
+          mes, dia,
+          usd: +r.usd,
+          uds: +r.uds,
+        }
+      }),
       por_producto: prodR.rows.map(r => ({
         codigo_barras: r.codigo_barras,
         descripcion: r.descripcion,

@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     }
     const where = conds.length ? `AND ${conds.join(' AND ')}` : ''
 
-    const [ytdR, cadenaR, prodR, monthlyR] = await Promise.all([
+    const [ytdR, cadenaR, prodR, monthlyR, pdvsR] = await Promise.all([
       // YTD 2026 vs 2025 (mismo período — hasta último mes 2026)
       pool.query(`
         WITH cur AS (
@@ -88,6 +88,25 @@ export async function GET(req: NextRequest) {
         WHERE 1=1 ${where}
         GROUP BY ano, mes ORDER BY ano, mes
       `, params),
+      // PDVs por cadena (con detalle 2026 vs 2025 mismo período)
+      pool.query(`
+        WITH ult AS (
+          SELECT MAX(mes)::int ultimo_mes FROM sellin_sensacion WHERE ano = 2026
+        )
+        SELECT cadena, cliente_codigo, cliente_nombre, zona, ruta,
+          SUM(CASE WHEN ano = 2026 THEN venta_neta_usd ELSE 0 END) usd_26,
+          SUM(CASE WHEN ano = 2026 THEN unidades       ELSE 0 END) uds_26,
+          SUM(CASE WHEN ano = 2025 AND mes <= (SELECT ultimo_mes FROM ult)
+                   THEN venta_neta_usd ELSE 0 END) usd_25,
+          SUM(CASE WHEN ano = 2025 AND mes <= (SELECT ultimo_mes FROM ult)
+                   THEN unidades ELSE 0 END) uds_25,
+          MIN(ano * 100 + mes) primer_mes,
+          MAX(ano * 100 + mes) ultimo_mes
+        FROM sellin_sensacion
+        WHERE cliente_codigo IS NOT NULL AND cliente_codigo <> '' ${where}
+        GROUP BY cadena, cliente_codigo, cliente_nombre, zona, ruta
+        ORDER BY cadena, usd_26 DESC
+      `, params),
     ])
 
     const row = ytdR.rows[0] ?? {}
@@ -134,6 +153,18 @@ export async function GET(req: NextRequest) {
         codigo_barras: r.codigo_barras,
         usd_2026: +r.usd,
         uds_2026: +r.uds,
+      })),
+      pdvs_por_cadena: pdvsR.rows.map(r => ({
+        cadena: r.cadena,
+        cliente_codigo: r.cliente_codigo,
+        cliente_nombre: r.cliente_nombre,
+        zona: r.zona,
+        ruta: r.ruta,
+        usd_2026: +r.usd_26,
+        uds_2026: +r.uds_26,
+        usd_2025: +r.usd_25,
+        uds_2025: +r.uds_25,
+        delta: +r.usd_25 > 0 ? ((+r.usd_26 - +r.usd_25) / +r.usd_25) * 100 : null,
       })),
       monthly: Object.values(monthly),
     })
