@@ -35,6 +35,9 @@ interface SellInRow {
   pais:            string
   cliente:         string
   canal:           string
+  orden_compra:    string
+  ano:             number | null
+  mes:             number | null
   sku:             string
   descripcion:     string
   categoria:       string
@@ -190,8 +193,9 @@ export default function SellInPage() {
     if (cats.length)     p.set('categorias', cats.join(','))
     if (clientes.length) p.set('clientes',   clientes.join(','))
     if (skus.length)     p.set('skus',       skus.join(','))
-    p.set('page',     String(pg))
-    p.set('pageSize', String(PAGE_SIZE))
+    p.set('page',         String(pg))
+    p.set('pageSize',     String(PAGE_SIZE))
+    p.set('granularidad', 'mes')   // fila por (SKU × cliente × mes × OC)
 
     fetch('/api/ventas/sell-in?' + p)
       .then(r => r.json())
@@ -201,6 +205,9 @@ export default function SellInPage() {
           pais:            String(r.pais         ?? ''),
           cliente:         String(r.cliente      ?? ''),
           canal:           String(r.canal        ?? ''),
+          orden_compra:    String(r.orden_compra ?? ''),
+          ano:             r.ano != null ? Number(r.ano) : null,
+          mes:             r.mes != null ? Number(r.mes) : null,
           sku:             String(r.sku          ?? ''),
           descripcion:     String(r.descripcion  ?? ''),
           categoria:       String(r.categoria    ?? ''),
@@ -574,15 +581,13 @@ export default function SellInPage() {
                         <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="py-1.5 pr-3 font-semibold text-amber-600">{r.pais}</td>
                           <td className="py-1.5 pr-3 text-gray-700 max-w-[140px] truncate">{r.cliente}</td>
-                          <td className="py-1.5 pr-6 w-1 whitespace-nowrap text-gray-500 font-mono text-[11px]">{r.canal}</td>
+                          <td className="py-1.5 pr-6 w-1 whitespace-nowrap text-gray-500 font-mono text-[11px]">{r.orden_compra || r.canal}</td>
                           <td className="py-1.5 pr-3 font-mono text-gray-500">{r.sku}</td>
                           <td className="py-1.5 pr-3 text-gray-700 max-w-[260px] truncate" title={r.descripcion}>{r.descripcion}</td>
                           <td className="py-1.5 pr-3 w-1 whitespace-nowrap text-gray-600">{r.categoria}</td>
                           <td className="py-1.5 pr-3 max-w-[110px] truncate text-gray-500" title={r.subcategoria}>{r.subcategoria}</td>
-                          {(() => { const p = partesFecha(r.fecha_max); return <>
-                            <td className="py-1.5 pr-3 w-1 whitespace-nowrap text-gray-700 font-mono text-[11px]">{p.ano}</td>
-                            <td className="py-1.5 pr-3 w-1 whitespace-nowrap text-gray-800 font-mono text-[11px]">{p.mes}</td>
-                          </> })()}
+                          <td className="py-1.5 pr-3 w-1 whitespace-nowrap text-gray-700 font-mono text-[11px]">{r.ano ?? partesFecha(r.fecha_max).ano}</td>
+                          <td className="py-1.5 pr-3 w-1 whitespace-nowrap text-gray-800 font-mono text-[11px]">{r.mes != null ? (MES_LBL[r.mes] ?? String(r.mes)) : partesFecha(r.fecha_max).mes}</td>
                           <td className="py-1.5 pr-3 text-right text-gray-700">{fmtN(r.cajas)}</td>
                           <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>
                           <td className="py-1.5 pr-3 text-right text-gray-500">{fmt(r.precio_promedio)}</td>
