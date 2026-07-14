@@ -2804,6 +2804,32 @@ export default function ExitoEjecucion() {
       margen_25_pct: (m.cop_25 > 0)                                 ? (m.ut_25 / m.cop_25) * 100 : null,
     }))
 
+    // Timeline continuo 2025 → 2026 (flatten para charts que antes eran overlaid)
+    // Sell-In monthly viene solo en COP → convertimos a USD via ratio del KPI si aplica.
+    const usdRatio25 = kpi.cop_25 > 0 && kpi.usd_25 > 0 ? kpi.usd_25 / kpi.cop_25 : 0
+    const usdRatio26 = kpi.cop_26 > 0 && kpi.usd_26 > 0 ? kpi.usd_26 / kpi.cop_26 : 0
+    const monthlyContinuo = (() => {
+      const out: { mes_str: string; valor: number; utilidad: number; margen: number | null }[] = []
+      const byMes = new Map(monthly.map(m => [m.mes, m]))
+      for (const ano of [2025, 2026] as const) {
+        for (let m = 1; m <= 12; m++) {
+          const row = byMes.get(m)
+          if (!row) continue
+          const cop      = ano === 2025 ? Number(row.cop_25 ?? 0) : Number(row.cop_26 ?? 0)
+          const ratio    = ano === 2025 ? usdRatio25 : usdRatio26
+          const valor    = useUsd ? cop * ratio : cop
+          const utilCop  = ano === 2025 ? Number(row.ut_25 ?? 0) : Number(row.ut_26 ?? 0)
+          const utilidad = useUsd ? utilCop * ratio : utilCop
+          const margen   = ano === 2025
+            ? (row.cop_25 > 0 ? (row.ut_25 / row.cop_25) * 100 : null)
+            : (row.cop_26 && row.cop_26 > 0 && row.ut_26 !== null ? (row.ut_26 / row.cop_26) * 100 : null)
+          if (valor <= 0 && utilidad <= 0 && margen === null) continue
+          out.push({ mes_str: `${MN12[m]}-${String(ano).slice(2)}`, valor, utilidad, margen })
+        }
+      }
+      return out
+    })()
+
     // Top SKUs — filtrado por categoría/cadenaFilter no aplica (SellIn es solo GRUPO ÉXITO)
     const topSkus = top_skus.slice(0, 15)
     const totalSku = top_skus.reduce((s, x) => s + x.cop, 0)
@@ -2884,46 +2910,33 @@ export default function ExitoEjecucion() {
           </div>
         </div>
 
-        {/* Ventas mensuales chart */}
+        {/* Sell-In Mensual — timeline continuo 2025 → 2026 */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-center justify-between mb-1">
             <div>
               <h3 className="text-sm font-bold text-gray-800">Sell-In Mensual</h3>
-              <p className="text-[11px] text-gray-400">2025 vs 2026 ({useUsd ? 'USD' : 'COP'})</p>
-            </div>
-            <div className="flex items-center gap-3 text-[11px]">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> 2026</span>
+              <p className="text-[11px] text-gray-400">Timeline continuo 2025 → 2026 ({useUsd ? 'USD' : 'COP'})</p>
             </div>
           </div>
           <div className="h-[260px] mt-3">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyPlus} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
+              <BarChart data={monthlyContinuo} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="18%">
                 <defs>
-                  <linearGradient id="gradExitoSellIn25" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                  </linearGradient>
-                  <linearGradient id="gradExitoSellIn26" x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id="gradExitoSellInCont" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
                     <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
                 <Tooltip
                   formatter={(v: any) => fmtVal(Number(v))}
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey="cop_25" name="2025" fill="url(#gradExitoSellIn25)" radius={[8,8,0,0]} maxBarSize={36}>
-                  <LabelList dataKey="cop_25" position="top"
-                    formatter={fmtLblSellin}
-                    style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
-                </Bar>
-                <Bar dataKey="cop_26" name="2026" fill="url(#gradExitoSellIn26)" radius={[8,8,0,0]} maxBarSize={36}>
-                  <LabelList dataKey="cop_26" position="top"
+                <Bar dataKey="valor" name={`Sell-In (${useUsd ? 'USD' : 'COP'})`} fill="url(#gradExitoSellInCont)" radius={[6,6,0,0]} maxBarSize={26}>
+                  <LabelList dataKey="valor" position="top"
                     formatter={fmtLblSellin}
                     style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                 </Bar>
@@ -2938,42 +2951,29 @@ export default function ExitoEjecucion() {
             <div className="flex items-center justify-between mb-1">
               <div>
                 <h3 className="text-sm font-bold text-gray-800">Utilidad Bruta Mensual</h3>
-                <p className="text-[11px] text-gray-400">2025 vs 2026 · COP</p>
-              </div>
-              <div className="flex items-center gap-3 text-[11px]">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> 2026</span>
+                <p className="text-[11px] text-gray-400">Timeline continuo 2025 → 2026 · {useUsd ? 'USD' : 'COP'}</p>
               </div>
             </div>
             <div className="h-[220px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyPlus} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
+                <BarChart data={monthlyContinuo} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="18%">
                   <defs>
-                    <linearGradient id="gradExitoUt25" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                    </linearGradient>
-                    <linearGradient id="gradExitoUt26" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="gradExitoUtCont" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#2a7a58" stopOpacity={1}/>
                       <stop offset="100%" stopColor="#4a9b78" stopOpacity={0.85}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={(v: any) => fmtCOP(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                   <Tooltip
-                    formatter={(v: any) => fmtCOP(Number(v))}
+                    formatter={(v: any) => fmtVal(Number(v))}
                     cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Bar dataKey="ut_25" name="2025" fill="url(#gradExitoUt25)" radius={[8,8,0,0]} maxBarSize={36}>
-                    <LabelList dataKey="ut_25" position="top"
-                      formatter={fmtLblCop}
-                      style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
-                  </Bar>
-                  <Bar dataKey="ut_26" name="2026" fill="url(#gradExitoUt26)" radius={[8,8,0,0]} maxBarSize={36}>
-                    <LabelList dataKey="ut_26" position="top"
-                      formatter={fmtLblCop}
+                  <Bar dataKey="utilidad" name={`Utilidad (${useUsd ? 'USD' : 'COP'})`} fill="url(#gradExitoUtCont)" radius={[6,6,0,0]} maxBarSize={26}>
+                    <LabelList dataKey="utilidad" position="top"
+                      formatter={fmtLblSellin}
                       style={{ fontSize: 9, fill: '#065f46', fontWeight: 700 }} />
                   </Bar>
                 </BarChart>
@@ -2984,41 +2984,28 @@ export default function ExitoEjecucion() {
             <div className="flex items-center justify-between mb-1">
               <div>
                 <h3 className="text-sm font-bold text-gray-800">Margen Bruto % por Mes</h3>
-                <p className="text-[11px] text-gray-400">Evolución del margen · 2025 vs 2026</p>
-              </div>
-              <div className="flex items-center gap-3 text-[11px]">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-violet-500"/> 2026</span>
+                <p className="text-[11px] text-gray-400">Timeline continuo 2025 → 2026</p>
               </div>
             </div>
             <div className="h-[220px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyPlus} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                <BarChart data={monthlyContinuo} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="18%">
                   <defs>
-                    <linearGradient id="gradMargen25Bar" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
-                      <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.75}/>
-                    </linearGradient>
-                    <linearGradient id="gradMargen26Bar" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="gradMargenContBar" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#8b5cf6" stopOpacity={1}/>
                       <stop offset="100%" stopColor="#a78bfa" stopOpacity={0.85}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                   <YAxis tickFormatter={(v: any) => `${Math.round(Number(v))}%`} tick={{ fontSize: 11, fill: '#94a3b8' }} width={40} axisLine={false} tickLine={false} />
                   <Tooltip
                     formatter={(v: any) => v === null ? '—' : `${Number(v).toFixed(1)}%`}
                     cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Bar dataKey="margen_25_pct" name="2025" fill="url(#gradMargen25Bar)" radius={[8,8,0,0]} maxBarSize={28}>
-                    <LabelList dataKey="margen_25_pct" position="top"
-                      formatter={(v: any) => v === null || v === undefined ? '' : `${Number(v).toFixed(0)}%`}
-                      style={{ fontSize: 9, fill: '#64748b', fontWeight: 600 }} />
-                  </Bar>
-                  <Bar dataKey="margen_26_pct" name="2026" fill="url(#gradMargen26Bar)" radius={[8,8,0,0]} maxBarSize={28}>
-                    <LabelList dataKey="margen_26_pct" position="top"
+                  <Bar dataKey="margen" name="Margen %" fill="url(#gradMargenContBar)" radius={[6,6,0,0]} maxBarSize={22}>
+                    <LabelList dataKey="margen" position="top"
                       formatter={(v: any) => v === null || v === undefined ? '' : `${Number(v).toFixed(0)}%`}
                       style={{ fontSize: 9, fill: '#5b21b6', fontWeight: 700 }} />
                   </Bar>
