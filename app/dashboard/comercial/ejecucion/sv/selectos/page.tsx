@@ -1,6 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import InnovacionesSection from '@/components/ejecucion/InnovacionesSection'
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, ComposedChart, PieChart, Pie,
@@ -11,12 +11,10 @@ import {
   TendenciaMensualChart, TendenciaDiariaChart, MetricaTogglePill,
   type TendMetrica, type TendData, type TendDailyRow,
 } from '@/components/ui/tendencia-chart'
+import { EjecucionLayout } from '@/components/ejecucion/shared'
 
-const DIVS = [
-  { key: 'TOTAL', label: 'Total',     cats: [] as string[] },
-  { key: 'QUESO', label: '🧀 Queso', cats: ['Quesos'] },
-  { key: 'LECHE', label: '🥛 Leche', cats: ['Leches'] },
-]
+// Categorías disponibles Selectos SV (para el filtro estándar Categoría)
+const CATEGORIAS_SELECTOS = ['Quesos', 'Leches']
 
 const HEALTH_CFG: Record<string, { label: string; color: string; bg: string }> = {
   'CRÍTICO':        { label: 'Crítico <7d',      color: '#dc2626', bg: '#fef2f2' },
@@ -101,7 +99,19 @@ function Empty({ msg }: { msg: string }) {
 
 export default function EjecucionSelectos() {
   const [section, setSection] = useState('resumen')
-  const [div,     setDiv]     = useState('TOTAL')
+  // Filtro estándar Categoría (multi-select). Se persiste como CSV en localStorage.
+  const [categoriaSel, setCategoriaSel] = useState<string[]>([])
+
+  // Compat: derivar `div` legacy desde la selección multi para no romper la lógica
+  // interna que hace `div === 'QUESO'` etc. Reglas:
+  //   - vacío o ambas categorías → TOTAL
+  //   - solo Quesos → QUESO
+  //   - solo Leches → LECHE
+  const div: 'TOTAL' | 'QUESO' | 'LECHE' =
+    categoriaSel.length !== 1 ? 'TOTAL'
+      : categoriaSel[0] === 'Quesos' ? 'QUESO'
+      : categoriaSel[0] === 'Leches' ? 'LECHE'
+      : 'TOTAL'
 
   const goSection = (key: string) => {
     setSection(key)
@@ -109,16 +119,23 @@ export default function EjecucionSelectos() {
     localStorage.setItem('selectos-sv-section', key)
   }
 
-  // Restore section + division from localStorage (or hash fallback) after hydration
+  // Restore section + categoria filter from localStorage (or hash fallback) after hydration
   useEffect(() => {
     const saved = localStorage.getItem('selectos-sv-section')
     const h = window.location.hash.slice(1)
     const target = (h && SECTIONS.some(s => s.key === h) ? h : null)
                 ?? (saved && SECTIONS.some(s => s.key === saved) ? saved : null)
     if (target) setSection(target)
-    const savedDiv = localStorage.getItem('selectos-sv-div')
-    if (savedDiv && DIVS.some(d => d.key === savedDiv)) setDiv(savedDiv)
+    const savedCat = localStorage.getItem('selectos-sv-categoria')
+    if (savedCat) {
+      try { const arr = JSON.parse(savedCat); if (Array.isArray(arr)) setCategoriaSel(arr) } catch {}
+    }
   }, [])
+
+  // Persistir Categoría en localStorage
+  useEffect(() => {
+    localStorage.setItem('selectos-sv-categoria', JSON.stringify(categoriaSel))
+  }, [categoriaSel])
 
   // ── Data ──
   const [inv,        setInv]        = useState<any[]>([])
@@ -273,20 +290,20 @@ export default function EjecucionSelectos() {
   useEffect(() => {
     if (section !== 'pedidos') return
     setSelTend(null)
-    const cats = DIVS.find(d => d.key === div)?.cats ?? []
+    const cats = categoriaSel
     const p = new URLSearchParams()
     if (cats.length) p.set('categoria', cats.join(','))
     fetch(`/api/comercial/ejecucion/sv/selectos/tendencia-mensual?${p}`)
       .then(r => r.json())
       .then((d: TendData) => setSelTend(d))
       .catch(() => setSelTend({ desde: null, hasta: null, labels: [], total: [], por_sku: [] }))
-  }, [section, div])
+  }, [section, categoriaSel])
 
   // Tendencia diaria Selectos (dedicado)
   useEffect(() => {
     if (section !== 'pedidos' || selTendVista !== 'diaria') return
     setSelTendDailyLoading(true)
-    const cats = DIVS.find(d => d.key === div)?.cats ?? []
+    const cats = categoriaSel
     const p = new URLSearchParams()
     if (cats.length) p.set('categoria', cats.join(','))
     fetch(`/api/comercial/ejecucion/sv/selectos/tendencia-diaria?${p}`)
@@ -294,10 +311,10 @@ export default function EjecucionSelectos() {
       .then(d => setSelTendDaily(d.rows ?? []))
       .catch(() => setSelTendDaily([]))
       .finally(() => setSelTendDailyLoading(false))
-  }, [section, selTendVista, div])
+  }, [section, selTendVista, categoriaSel])
 
   // Reset diaria al cambiar división
-  useEffect(() => { setSelTendDaily([]) }, [div])
+  useEffect(() => { setSelTendDaily([]) }, [categoriaSel])
 
   // Re-fetch cobertura when cobSubcat changes
   useEffect(() => {
@@ -318,7 +335,7 @@ export default function EjecucionSelectos() {
 
   // ── Fetch ──
   useEffect(() => {
-    const cats = DIVS.find(d => d.key === div)?.cats ?? []
+    const cats = categoriaSel
     const base = new URLSearchParams({ pais: 'SV' })
     if (cats.length) base.set('categoria', cats.join(','))
     const q = base.toString()
@@ -495,7 +512,7 @@ export default function EjecucionSelectos() {
           .finally(() => setL('pareto', false))
       }
     }
-  }, [section, div]) // eslint-disable-line
+  }, [section, categoriaSel]) // eslint-disable-line
 
   // ── Derived ──
   const criticosPdv  = inv.filter(r => r.semaforo === 'rojo').length
@@ -3974,76 +3991,30 @@ export default function EjecucionSelectos() {
   }
 
   return (
-    <div className="flex flex-col min-h-full">
-
-      {/* ── Header ── */}
-      <div className="px-6 pt-6 pb-0 flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-xs text-gray-400 uppercase tracking-widest">Ejecución Selectos</p>
-          <h1 className="text-2xl font-bold text-gray-800">Selectos</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
-            Portafolio BL Foods
-            {invFecha && <> · Inventario al <span className="font-medium text-gray-500">{invFecha}</span></>}
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            const cats = DIVS.find(d => d.key === div)?.cats ?? []
-            const base = new URLSearchParams({ pais: 'SV' })
-            if (cats.length) base.set('categoria', cats.join(','))
-            // re-trigger effect by toggling section momentarily is complex; simpler: just reload page data
-            window.location.reload()
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
-          <RefreshCw size={13} className={Object.values(loading).some(Boolean) ? 'animate-spin' : ''} /> Actualizar
-        </button>
+    <EjecucionLayout
+      eyebrow="Ejecución Selectos"
+      title="Selectos"
+      flag="🇸🇻"
+      subtitle={`Portafolio BL Foods${invFecha ? ` · Inventario al ${invFecha}` : ''}`}
+      loading={Object.values(loading).some(Boolean)}
+      accent="amber"
+      storageKey="selectos-sv"
+      sections={SECTIONS}
+      section={section}
+      onSection={goSection}
+      filters={[
+        { key: 'categoria', label: 'Categoría', value: categoriaSel, onChange: setCategoriaSel,
+          options: CATEGORIAS_SELECTOS.map(c => ({ value: c })) },
+      ]}
+    >
+      {/* Leyenda DOH (colores de salud de inventario) */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-2 flex items-center gap-3 text-xs text-gray-400 flex-wrap">
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />DOH ≤7d</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" />DOH ≤21d</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />DOH ≤60d</span>
+        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block" />&gt;60d</span>
       </div>
-
-      {/* ── División + leyenda ── */}
-      <div className="px-6 pt-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-4 flex-wrap">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">División</p>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {DIVS.map(d => (
-                <button key={d.key} onClick={() => { setDiv(d.key); localStorage.setItem('selectos-sv-div', d.key) }}
-                  className={`px-4 py-1.5 text-sm font-medium transition-colors ${div === d.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {d.label}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex items-center gap-3 ml-auto text-xs text-gray-400 flex-wrap">
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />DOH ≤7d</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" />DOH ≤21d</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />DOH ≤60d</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block" />&gt;60d</span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Section navigation ── */}
-      <div className="px-6 pt-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="flex overflow-x-auto">
-            {SECTIONS.map(s => (
-              <button key={s.key} onClick={() => goSection(s.key)}
-                className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors flex-shrink-0
-                  ${section === s.key
-                    ? 'border-amber-500 text-amber-600 bg-amber-50/40'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Content ── */}
-      <div className="px-6 py-6 flex-1">
-        {renderSection()}
-      </div>
-
-    </div>
+      {renderSection()}
+    </EjecucionLayout>
   )
 }
