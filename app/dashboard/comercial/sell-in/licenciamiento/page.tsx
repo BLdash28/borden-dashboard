@@ -4,6 +4,7 @@ import Link from 'next/link'
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, LabelList,
+  PieChart, Pie, Cell,
 } from 'recharts'
 
 // Formatters
@@ -385,25 +386,90 @@ export default function SellInLicenciamiento() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-3">
                   <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                     <h3 className="text-sm font-bold text-gray-800 mb-3">Sell-Out por Producto · 2026</h3>
-                    <div className="space-y-2">
-                      {wmHel.por_producto.map(p => {
-                        const total = wmHel.por_producto.reduce((s, x) => s + x.usd, 0)
-                        const pct = total > 0 ? (p.usd / total) * 100 : 0
-                        return (
-                          <div key={p.codigo_barras}>
-                            <div className="flex items-center justify-between text-xs mb-0.5">
-                              <span className="font-medium text-gray-700 truncate">{p.descripcion || p.codigo_barras}</span>
-                              <span className="tabular-nums text-gray-600 whitespace-nowrap">
-                                ${fmtNum(p.usd)} <span className="text-gray-400">· {fmtNum(p.uds)} und · {p.pdvs} PDV</span>
-                              </span>
-                            </div>
-                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full" style={{ width: `${pct}%` }}/>
-                            </div>
+                    {(() => {
+                      // Paleta gradient para el pie (uno por sabor)
+                      const COLORS = [
+                        { id: 'gradPieHel0', a: '#3b82f6', b: '#93c5fd', label: '#1e40af' },
+                        { id: 'gradPieHel1', a: '#f59e0b', b: '#fcd34d', label: '#92400e' },
+                        { id: 'gradPieHel2', a: '#ef4444', b: '#fca5a5', label: '#b91c1c' },
+                        { id: 'gradPieHel3', a: '#10b981', b: '#6ee7b7', label: '#065f46' },
+                        { id: 'gradPieHel4', a: '#8b5cf6', b: '#c4b5fd', label: '#5b21b6' },
+                      ]
+                      const totalPie = wmHel.por_producto.reduce((s, x) => s + x.usd, 0)
+                      const data = wmHel.por_producto.map((p, i) => ({
+                        name: p.descripcion || p.codigo_barras,
+                        value: p.usd,
+                        uds: p.uds,
+                        pdvs: p.pdvs,
+                        gradId: COLORS[i % COLORS.length].id,
+                        labelColor: COLORS[i % COLORS.length].label,
+                      }))
+                      return (
+                        <>
+                          <div className="h-[240px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <PieChart>
+                                <defs>
+                                  {COLORS.map(c => (
+                                    <linearGradient key={c.id} id={c.id} x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="0%" stopColor={c.a} stopOpacity={1}/>
+                                      <stop offset="100%" stopColor={c.b} stopOpacity={0.9}/>
+                                    </linearGradient>
+                                  ))}
+                                </defs>
+                                <Pie
+                                  data={data}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%" cy="50%"
+                                  innerRadius={45}
+                                  outerRadius={90}
+                                  paddingAngle={2}
+                                  stroke="#fff"
+                                  strokeWidth={2}
+                                  label={(entry: any) => {
+                                    const pct = totalPie > 0 ? (entry.value / totalPie) * 100 : 0
+                                    return pct >= 5 ? `${pct.toFixed(0)}%` : ''
+                                  }}
+                                  labelLine={false}
+                                >
+                                  {data.map((d, i) => (
+                                    <Cell key={i} fill={`url(#${d.gradId})`}/>
+                                  ))}
+                                </Pie>
+                                <Tooltip
+                                  formatter={(v: any, _n: any, item: any) => [
+                                    `$${fmtNum(Number(v))} · ${fmtNum(item?.payload?.uds ?? 0)} und`,
+                                    item?.payload?.name ?? '',
+                                  ]}
+                                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                                />
+                              </PieChart>
+                            </ResponsiveContainer>
                           </div>
-                        )
-                      })}
-                    </div>
+                          {/* Legend chips manuales con detalle */}
+                          <div className="grid grid-cols-1 gap-1 mt-2 text-[11px]">
+                            {data.map((d, i) => {
+                              const pct = totalPie > 0 ? (d.value / totalPie) * 100 : 0
+                              return (
+                                <div key={i} className="flex items-center justify-between gap-2 py-1 border-b border-gray-50 last:border-b-0">
+                                  <span className="flex items-center gap-1.5 truncate">
+                                    <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ background: COLORS[i % COLORS.length].a }}/>
+                                    <span className="truncate text-gray-700">{d.name}</span>
+                                  </span>
+                                  <span className="tabular-nums text-gray-600 whitespace-nowrap">
+                                    <span style={{ color: d.labelColor }} className="font-semibold">{pct.toFixed(1)}%</span>
+                                    <span className="text-gray-300 mx-1">·</span>
+                                    ${fmtNum(d.value)}
+                                    <span className="text-gray-400"> · {fmtNum(d.uds)} und · {d.pdvs} PDV</span>
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </>
+                      )
+                    })()}
                   </div>
                   <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                     <h3 className="text-sm font-bold text-gray-800 mb-3">Top 15 PDVs · 2026</h3>
