@@ -97,17 +97,24 @@ export default function SensacionEjecucion() {
   const tipVal = (v: unknown) => isUsd ? fmt$Full(Number(v)) : fmtCRC(Number(v))
 
   const ventaCur = data ? (isUsd ? data.ytd_2026 : data.ytd_2026_crc) : 0
-  const monthlyChart = useMemo(() => {
+  // Timeline continuo 2025 → 2026 (flatten para chart que antes era overlaid)
+  const monthlyContinuo = useMemo(() => {
     if (!data) return []
-    return data.monthly
-      .map(m => ({
-        mes_nombre: m.mes_nombre,
-        v2025: isUsd ? m.y2025 : m.crc2025,
-        v2026: isUsd ? m.y2026 : m.crc2026,
-        uds2025: m.uds2025,
-        uds2026: m.uds2026,
-      }))
-      .filter(m => (m.v2025 && m.v2025 > 0) || (m.v2026 && m.v2026 > 0))
+    const byMes = new Map(data.monthly.map(m => [m.mes, m]))
+    const out: { mes_str: string; valor: number; unidades: number }[] = []
+    for (const ano of [2025, 2026] as const) {
+      for (let m = 1; m <= 12; m++) {
+        const row = byMes.get(m)
+        if (!row) continue
+        const valor = ano === 2025
+          ? (isUsd ? Number(row.y2025 ?? 0) : Number(row.crc2025 ?? 0))
+          : (isUsd ? Number(row.y2026 ?? 0) : Number(row.crc2026 ?? 0))
+        const unidades = ano === 2025 ? Number(row.uds2025 ?? 0) : Number(row.uds2026 ?? 0)
+        if (valor <= 0 && unidades <= 0) continue
+        out.push({ mes_str: `${MN[m]}-${String(ano).slice(2)}`, valor, unidades })
+      }
+    }
+    return out
   }, [data, isUsd])
 
   return (
@@ -192,43 +199,31 @@ export default function SensacionEjecucion() {
                 </div>
               </div>
 
-              {/* Chart mensual */}
+              {/* Chart mensual — timeline continuo 2025 → 2026 */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
                 <div className="flex items-center justify-between mb-1">
                   <div>
                     <h3 className="text-sm font-bold text-gray-800">Sell-In Mensual</h3>
-                    <p className="text-[11px] text-gray-400">2025 vs 2026 · {moneda.toUpperCase()}</p>
-                  </div>
-                  <div className="flex items-center gap-3 text-[11px]">
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
+                    <p className="text-[11px] text-gray-400">Timeline continuo 2025 → 2026 · {moneda.toUpperCase()}</p>
                   </div>
                 </div>
                 <div className="h-[280px] mt-3">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlyChart} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={4}>
+                    <BarChart data={monthlyContinuo} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="18%">
                       <defs>
-                        <linearGradient id="gradSensa25" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                          <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                        </linearGradient>
-                        <linearGradient id="gradSensa26" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id="gradSensaCont" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
                           <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                      <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
+                      <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
                       <YAxis tickFormatter={(v: any) => fmtVal(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}/>
                       <Tooltip formatter={(v: unknown) => [tipVal(v), '']}
                         cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                         contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
-                      <Bar dataKey="v2025" name="2025" fill="url(#gradSensa25)" radius={[8,8,0,0]} maxBarSize={28}>
-                        <LabelList dataKey="v2025" position="top" formatter={(v: any) => fmt$(Number(v))}
-                          style={{ fontSize: 9, fill: '#1e40af', fontWeight: 700 }}/>
-                      </Bar>
-                      <Bar dataKey="v2026" name="2026" fill="url(#gradSensa26)" radius={[8,8,0,0]} maxBarSize={28}>
-                        <LabelList dataKey="v2026" position="top" formatter={(v: any) => fmt$(Number(v))}
+                      <Bar dataKey="valor" name={`Sell-In (${moneda.toUpperCase()})`} fill="url(#gradSensaCont)" radius={[8,8,0,0]} maxBarSize={28}>
+                        <LabelList dataKey="valor" position="top" formatter={(v: any) => fmt$(Number(v))}
                           style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }}/>
                       </Bar>
                     </BarChart>
@@ -408,7 +403,20 @@ export default function SensacionEjecucion() {
 
               {/* ── Sell-Out Walmart CR ── */}
               {wmSellout && wmSellout.ytd_2026 > 0 && (() => {
-                const wmMonthly = wmSellout.monthly.filter(m => (m.y2025 && m.y2025 > 0) || (m.y2026 && m.y2026 > 0))
+                // Timeline continuo 2025 → 2026 (flatten para chart mensual que antes era overlaid)
+                const wmMonthlyContinuo: { mes_str: string; valor: number; unidades: number; precio: number | null }[] = []
+                const wmByMes = new Map(wmSellout.monthly.map(m => [m.mes, m]))
+                for (const ano of [2025, 2026] as const) {
+                  for (let m = 1; m <= 12; m++) {
+                    const row = wmByMes.get(m)
+                    if (!row) continue
+                    const valor    = ano === 2025 ? Number(row.y2025 ?? 0) : Number(row.y2026 ?? 0)
+                    const unidades = ano === 2025 ? Number(row.uds2025 ?? 0) : Number(row.uds2026 ?? 0)
+                    if (valor <= 0 && unidades <= 0) continue
+                    const precio = unidades > 0 ? valor / unidades : null
+                    wmMonthlyContinuo.push({ mes_str: `${MN[m]}-${String(ano).slice(2)}`, valor, unidades, precio })
+                  }
+                }
                 const ratioSISO = data && data.ytd_2026 > 0 ? (wmSellout.ytd_2026 / data.ytd_2026) * 100 : null
                 return (
                   <div className="space-y-3">
@@ -456,12 +464,10 @@ export default function SensacionEjecucion() {
                             let precioUlt = 0
                             let refLabel = ''
                             if (wmVista === 'mensual') {
-                              const withData = (wmSellout?.monthly ?? []).filter(m => (m.uds2026 ?? 0) > 0)
-                              const last = withData[withData.length - 1]
-                              if (last) {
-                                const u = last.uds2026 ?? 0
-                                precioUlt = u > 0 ? (last.y2026 ?? 0) / u : 0
-                                refLabel = last.mes_nombre
+                              const last = wmMonthlyContinuo[wmMonthlyContinuo.length - 1]
+                              if (last && last.precio !== null) {
+                                precioUlt = last.precio
+                                refLabel = last.mes_str
                               }
                             } else if (wmSellout?.daily?.length) {
                               const last = wmSellout.daily[wmSellout.daily.length - 1]
@@ -471,7 +477,7 @@ export default function SensacionEjecucion() {
                             const precioFmt = '$' + precioUlt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                             return (
                               <p className="text-[11px] text-gray-400">
-                                {wmVista === 'mensual' ? 'Comparativo 2025 vs 2026 · USD' : 'Tendencia diaria · USD'}
+                                {wmVista === 'mensual' ? 'Timeline continuo 2025 → 2026 · USD' : 'Tendencia diaria · USD'}
                                 {precioUlt > 0 && (
                                   <>
                                     <span className="mx-1.5 text-gray-300">·</span>
@@ -493,8 +499,8 @@ export default function SensacionEjecucion() {
                           </div>
                           {wmVista === 'mensual' ? (
                             <>
-                              <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-slate-400"/><span className="w-3 h-2 rounded-sm bg-blue-500"/> Valor</span>
-                              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300 border border-slate-400"/><span className="w-2 h-2 rounded-full bg-emerald-500 border border-emerald-700"/> Unidades</span>
+                              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500"/> Venta</span>
+                              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500 border border-emerald-700"/> Unidades</span>
                             </>
                           ) : (
                             <>
@@ -563,27 +569,19 @@ export default function SensacionEjecucion() {
                               activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#059669' }} connectNulls/>
                           </ComposedChart>
                         ) : (
-                          <ComposedChart data={wmMonthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={4}>
+                          <ComposedChart data={wmMonthlyContinuo} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="18%">
                             <defs>
-                              <linearGradient id="gradSensaWM25" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#94a3b8" stopOpacity={1}/>
-                                <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.85}/>
-                              </linearGradient>
-                              <linearGradient id="gradSensaWM26" x1="0" y1="0" x2="0" y2="1">
+                              <linearGradient id="gradSensaWMCont" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
                                 <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
                               </linearGradient>
-                              <linearGradient id="gradSensaWMUds25" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.35}/>
-                                <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
-                              </linearGradient>
-                              <linearGradient id="gradSensaWMUds26" x1="0" y1="0" x2="0" y2="1">
+                              <linearGradient id="gradSensaWMUdsCont" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%"   stopColor="#10b981" stopOpacity={0.35}/>
                                 <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
                               </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                            <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
+                            <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
                             <YAxis yAxisId="val"
                               tickFormatter={(v: any) => '$' + (Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : Math.round(Number(v)))}
                               tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}/>
@@ -592,18 +590,14 @@ export default function SensacionEjecucion() {
                               tick={{ fontSize: 10, fill: '#059669' }} width={55} axisLine={false} tickLine={false}/>
                             <Tooltip
                               formatter={(v: unknown, name: string) => {
-                                if (String(name).startsWith('Und')) return [Math.round(Number(v)).toLocaleString('en-US'), name]
+                                if (String(name).toLowerCase().includes('unid')) return [Math.round(Number(v)).toLocaleString('en-US'), name]
                                 return [fmt$Full(Number(v)), name]
                               }}
                               cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                               contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
-                            <Bar yAxisId="val" dataKey="y2025" name="2025" fill="url(#gradSensaWM25)" radius={[8,8,0,0]} maxBarSize={28}/>
-                            <Bar yAxisId="val" dataKey="y2026" name="2026" fill="url(#gradSensaWM26)" radius={[8,8,0,0]} maxBarSize={28}/>
-                            <Area yAxisId="uds" type="monotone" dataKey="uds2025" name="Und 2025"
-                              stroke="#94a3b8" strokeWidth={2} fill="url(#gradSensaWMUds25)" dot={false}
-                              activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#94a3b8' }} connectNulls/>
-                            <Area yAxisId="uds" type="monotone" dataKey="uds2026" name="Und 2026"
-                              stroke="#10b981" strokeWidth={2.5} fill="url(#gradSensaWMUds26)" dot={false}
+                            <Bar yAxisId="val" dataKey="valor" name="Venta (USD)" fill="url(#gradSensaWMCont)" radius={[8,8,0,0]} maxBarSize={28}/>
+                            <Area yAxisId="uds" type="monotone" dataKey="unidades" name="Unidades"
+                              stroke="#10b981" strokeWidth={2.5} fill="url(#gradSensaWMUdsCont)" dot={false}
                               activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#10b981' }} connectNulls/>
                           </ComposedChart>
                         )}
@@ -665,11 +659,23 @@ function SellInSensacion({ data, moneda, isUsd, fmtVal, fmt$Short }: {
   )
 
   const totalVenta = isUsd ? data.ytd_2026 : data.ytd_2026_crc
-  const monthlyChart = data.monthly.map(m => ({
-    mes_nombre: m.mes_nombre,
-    v2025: isUsd ? m.y2025 : m.crc2025,
-    v2026: isUsd ? m.y2026 : m.crc2026,
-  })).filter(m => (m.v2025 && m.v2025 > 0) || (m.v2026 && m.v2026 > 0))
+  // Timeline continuo 2025 → 2026
+  const monthlyContinuo: { mes_str: string; valor: number }[] = (() => {
+    const byMes = new Map(data.monthly.map(m => [m.mes, m]))
+    const out: { mes_str: string; valor: number }[] = []
+    for (const ano of [2025, 2026] as const) {
+      for (let m = 1; m <= 12; m++) {
+        const row = byMes.get(m)
+        if (!row) continue
+        const valor = ano === 2025
+          ? (isUsd ? Number(row.y2025 ?? 0) : Number(row.crc2025 ?? 0))
+          : (isUsd ? Number(row.y2026 ?? 0) : Number(row.crc2026 ?? 0))
+        if (valor <= 0) continue
+        out.push({ mes_str: `${MN[m]}-${String(ano).slice(2)}`, valor })
+      }
+    }
+    return out
+  })()
 
   const yFmt = (v: number) => isUsd
     ? (v >= 1e6 ? '$' + (v/1e6).toFixed(1)+'M' : v >= 1e3 ? '$' + (v/1e3).toFixed(0)+'K' : '$' + v)
@@ -723,45 +729,33 @@ function SellInSensacion({ data, moneda, isUsd, fmtVal, fmt$Short }: {
         </div>
       </div>
 
-      {/* Sell-In Mensual (BarChart — estilo Éxito) */}
+      {/* Sell-In Mensual — timeline continuo 2025 → 2026 */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
         <div className="flex items-center justify-between mb-1">
           <div>
             <h3 className="text-sm font-bold text-gray-800">Sell-In Mensual</h3>
-            <p className="text-[11px] text-gray-400">2025 vs 2026 ({moneda.toUpperCase()})</p>
-          </div>
-          <div className="flex items-center gap-3 text-[11px]">
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
-            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> 2026</span>
+            <p className="text-[11px] text-gray-400">Timeline continuo 2025 → 2026 ({moneda.toUpperCase()})</p>
           </div>
         </div>
         <div className="h-[260px] mt-3">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthlyChart} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
+            <BarChart data={monthlyContinuo} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="18%">
               <defs>
-                <linearGradient id="gradSensaSI25" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                  <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                </linearGradient>
-                <linearGradient id="gradSensaSI26" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="gradSensaSICont" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
                   <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-              <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <XAxis dataKey="mes_str" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
               <Tooltip
                 formatter={(v: any) => [fmtVal(Number(v)), '']}
                 cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                 contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
               />
-              <Bar dataKey="v2025" name="2025" fill="url(#gradSensaSI25)" radius={[8,8,0,0]} maxBarSize={36}>
-                <LabelList dataKey="v2025" position="top" formatter={(v: any) => fmt$Short(Number(v))}
-                  style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
-              </Bar>
-              <Bar dataKey="v2026" name="2026" fill="url(#gradSensaSI26)" radius={[8,8,0,0]} maxBarSize={36}>
-                <LabelList dataKey="v2026" position="top" formatter={(v: any) => fmt$Short(Number(v))}
+              <Bar dataKey="valor" name={`Sell-In (${moneda.toUpperCase()})`} fill="url(#gradSensaSICont)" radius={[8,8,0,0]} maxBarSize={36}>
+                <LabelList dataKey="valor" position="top" formatter={(v: any) => fmt$Short(Number(v))}
                   style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
               </Bar>
             </BarChart>

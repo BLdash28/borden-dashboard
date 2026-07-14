@@ -10,6 +10,10 @@ import {
 } from 'recharts'
 import InnovacionesSection from './InnovacionesSection'
 import { useTableSort, SortableTh } from '@/components/ui/table-sort'
+import {
+  TendenciaMensualChart, TendenciaDiariaChart, MetricaTogglePill,
+  type TendMetrica, type TendData, type TendDailyRow,
+} from '@/components/ui/tendencia-chart'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -423,6 +427,20 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [invSkuTiendaLoading, setInvSkuTiendaLoading] = useState(false)
   const [invSkuTiendaFilters, setInvSkuTiendaFilters] = useState({ cadena: '', salud: '', prod: '' })
 
+  // Tendencia reusable (chart Sell-Out Mensual · Walmart)
+  const [tendencia, setTendencia] = useState<TendData | null>(null)
+  const [tendMetricas, setTendMetricas] = useState<TendMetrica[]>(['valor', 'unidades', 'precio'])
+  const [tendVista, setTendVista] = useState<'mensual' | 'diaria'>('mensual')
+  const [tendDaily, setTendDaily] = useState<TendDailyRow[]>([])
+  const [tendDailyLoading, setTendDailyLoading] = useState(false)
+  const toggleTendMetrica = (m: TendMetrica) => {
+    setTendMetricas(prev => {
+      const has = prev.includes(m)
+      if (has && prev.length === 1) return prev
+      return has ? prev.filter(x => x !== m) : [...prev, m]
+    })
+  }
+
   const loadedRef = useRef<Record<string, boolean>>({})
   const setL = (k: string, v: boolean) => setLoading(p => ({ ...p, [k]: v }))
   const isL  = (k: string) => !!loading[k]
@@ -619,6 +637,36 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       .then(r => r.json()).then(d => setEvolDiario(d))
   }, [evolVista, div, evolSubcat, filterKey, evolTopN, evolDesde, evolHasta, section]) // eslint-disable-line
 
+  // Tendencia mensual (chart Sell-Out Mensual · Walmart) — solo Resumen
+  useEffect(() => {
+    if (section !== 'resumen') return
+    setTendencia(null)
+    const cat = DIVS.find(d => d.key === div)?.cat ?? ''
+    const extra: Record<string, string> = {}
+    if (cat) extra.categoria = cat
+    fetch(`/api/comercial/ejecucion/walmart/tendencia-mensual?${buildFilterQS(extra)}`)
+      .then(r => r.json())
+      .then((d: TendData) => setTendencia(d))
+      .catch(() => setTendencia({ desde: null, hasta: null, labels: [], total: [], por_sku: [] }))
+  }, [section, div, filterKey]) // eslint-disable-line
+
+  // Tendencia diaria (chart Sell-Out Diaria · Walmart) — dedicado, no re-dispara mensual
+  useEffect(() => {
+    if (section !== 'resumen' || tendVista !== 'diaria') return
+    setTendDailyLoading(true)
+    const cat = DIVS.find(d => d.key === div)?.cat ?? ''
+    const extra: Record<string, string> = {}
+    if (cat) extra.categoria = cat
+    fetch(`/api/comercial/ejecucion/walmart/tendencia-diaria?${buildFilterQS(extra)}`)
+      .then(r => r.json())
+      .then(d => setTendDaily(d.rows ?? []))
+      .catch(() => setTendDaily([]))
+      .finally(() => setTendDailyLoading(false))
+  }, [section, tendVista, div, filterKey]) // eslint-disable-line
+
+  // Reset diaria al cambiar filtros para forzar refetch
+  useEffect(() => { setTendDaily([]) }, [filterKey, div])
+
   // ── Resumen ──────────────────────────────────────────────────────────────
 
   function Resumen() {
@@ -792,75 +840,68 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           </div>
         )}
 
-        {/* Sell-Out Mensual — valor (bars) + unidades (areas) en composite */}
-        {monthly.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-              <div>
-                <h3 className="text-sm font-bold text-gray-800">Sell-Out Mensual — 2025 / 2026</h3>
-                <p className="text-[11px] text-gray-400">Valor (barras) + Unidades (área)</p>
-              </div>
-              <div className="flex items-center gap-3 text-[11px]">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-slate-400"/><span className="w-3 h-2 rounded-sm bg-amber-500"/> Valor</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300 border border-slate-400"/><span className="w-2 h-2 rounded-full bg-blue-400 border border-blue-600"/> Unidades</span>
-              </div>
+        {/* Sell-Out Mensual/Diaria — tendencia continua reusable */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">
+                Sell-Out {tendVista === 'mensual' ? 'Mensual' : 'Diaria'} · Walmart {paisNombre}
+              </h3>
+              {(() => {
+                // Último precio prom por Und (último mes con data, o último día en diaria)
+                let precioUlt = 0
+                let refLabel  = ''
+                if (tendVista === 'diaria' && tendDaily.length > 0) {
+                  const last = tendDaily[tendDaily.length - 1]
+                  precioUlt = last.unidades > 0 ? last.valor_usd / last.unidades : 0
+                  refLabel = last.dia_str
+                } else if (tendVista === 'mensual' && tendencia?.total) {
+                  const withData = tendencia.total.filter(p => (p.unidades ?? 0) > 0)
+                  const last = withData[withData.length - 1]
+                  if (last) { precioUlt = last.precio_usd; refLabel = last.mes_str }
+                }
+                const precioFmt = '$' + precioUlt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                return (
+                  <p className="text-[11px] text-gray-400">
+                    {tendVista === 'mensual' ? 'Tendencia mensual continua · rango completo' : 'Tendencia diaria · 2026'}
+                    {precioUlt > 0 && (
+                      <>
+                        <span className="mx-1.5 text-gray-300">·</span>
+                        <span className="font-semibold text-emerald-600">Último precio prom / Und ({refLabel}): {precioFmt}</span>
+                      </>
+                    )}
+                  </p>
+                )
+              })()}
             </div>
-            <div className="h-[280px] mt-3">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={monthly} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
-                  <defs>
-                    <linearGradient id="wmGradSO2026" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
-                    </linearGradient>
-                    <linearGradient id="wmGradSO2025" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                    </linearGradient>
-                    <linearGradient id="wmGradSOUds25" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.35}/>
-                      <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="wmGradSOUds26" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#2563eb" stopOpacity={0.35}/>
-                      <stop offset="100%" stopColor="#2563eb" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                  <YAxis yAxisId="val" tickFormatter={fmt$}
-                    tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
-                  <YAxis yAxisId="uds" orientation="right"
-                    tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
-                    tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    formatter={(v: any, name: string) => {
-                      if (String(name).startsWith('Und')) return [Math.round(Number(v)).toLocaleString('en-US'), name]
-                      return [fmtFull(v), name]
-                    }}
-                    labelFormatter={(label: string) => label}
-                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                  />
-                  <Bar yAxisId="val" dataKey="y2025" name="2025" fill="url(#wmGradSO2025)" radius={[8,8,0,0]} maxBarSize={36}>
-                    <LabelList dataKey="y2025" position="top" formatter={fmtLblUsd}
-                      style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
-                  </Bar>
-                  <Bar yAxisId="val" dataKey="y2026" name="2026" fill="url(#wmGradSO2026)" radius={[8,8,0,0]} maxBarSize={36}>
-                    <LabelList dataKey="y2026" position="top" formatter={fmtLblUsd}
-                      style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
-                  </Bar>
-                  <Area yAxisId="uds" type="monotone" dataKey="u2025" name="Und 2025"
-                    stroke="#94a3b8" strokeWidth={2} fill="url(#wmGradSOUds25)" dot={false}
-                    activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#94a3b8' }} connectNulls />
-                  <Area yAxisId="uds" type="monotone" dataKey="u2026" name="Und 2026"
-                    stroke="#2563eb" strokeWidth={2.5} fill="url(#wmGradSOUds26)" dot={false}
-                    activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }} connectNulls />
-                </ComposedChart>
-              </ResponsiveContainer>
+            <div className="flex items-center gap-3 text-[11px] flex-wrap">
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {(['mensual','diaria'] as const).map(v => (
+                  <button key={v} onClick={() => setTendVista(v)}
+                    className={`px-3 py-1 font-semibold transition-colors ${tendVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {v === 'mensual' ? 'Mensual' : 'Diaria'}
+                  </button>
+                ))}
+              </div>
+              <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} activeClass="bg-amber-500 text-white" />
             </div>
           </div>
-        )}
+          {tendVista === 'mensual' ? (
+            <TendenciaMensualChart
+              tendencia={tendencia}
+              metricas={tendMetricas}
+              moneda="usd"
+              skuFilter={skuSel}
+            />
+          ) : (
+            <TendenciaDiariaChart
+              rows={tendDaily}
+              metricas={tendMetricas}
+              moneda="usd"
+              loading={tendDailyLoading}
+            />
+          )}
+        </div>
 
         {/* Indicadores de Inventario */}
         {(() => {
@@ -943,6 +984,33 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     const cadenas   = ts?.cadenas ?? []
     const byCad     = (ts?.byCadena ?? []).filter((m: any) => cadenas.some((c: string) => (m[c] ?? 0) > 0))
     const skus      = evoTop5?.skus ?? []
+
+    // ── Timeline continuo 2024 → 2026 (flatten para el chart de evolución) ──
+    // Respeta el toggle evolMedida (valor/unidades) y el rango de meses.
+    // Además respeta evolYearFilter: si está seteado, muestra sólo ese año.
+    const continuoSeries: { mes_str: string; valor: number }[] = (() => {
+      const byMes: Record<number, any> = {}
+      for (const m of allSeries) byMes[Number(m.mes)] = m
+      const out: { mes_str: string; valor: number }[] = []
+      const anos: (2024 | 2025 | 2026)[] = evolYearFilter === 'y2024' ? [2024]
+        : evolYearFilter === 'y2025' ? [2025]
+        : evolYearFilter === 'y2026' ? [2026]
+        : [2024, 2025, 2026]
+      for (const ano of anos) {
+        for (let m = desdeMonth; m <= hastaMonth; m++) {
+          const row = byMes[m]
+          if (!row) continue
+          const key = evolMedida === 'valor'
+            ? (ano === 2024 ? 'y2024' : ano === 2025 ? 'y2025' : 'y2026')
+            : (ano === 2024 ? 'u2024' : ano === 2025 ? 'u2025' : 'u2026')
+          const raw = row[key]
+          const valor = raw == null ? 0 : Number(raw)
+          if (valor <= 0) continue
+          out.push({ mes_str: `${MN12[m]}-${String(ano).slice(2)}`, valor })
+        }
+      }
+      return out
+    })()
 
     // Generate N perceptually distinct colors spread across the hue wheel
     const makeColors = (n: number) => {
@@ -1036,7 +1104,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 <span className="text-xs text-gray-300">Cargando datos diarios...</span>
               </div>
             )
-          ) : series.length === 0 ? (
+          ) : continuoSeries.length === 0 ? (
             <div className="py-16 text-center">
               <p className="text-3xl mb-2">📭</p>
               <p className="text-sm font-semibold text-gray-600">Sin datos de sell-out para {paisNombre}</p>
@@ -1075,23 +1143,16 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               )}
 
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={series} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="22%" barGap={10}>
+                <BarChart data={continuoSeries} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="18%">
                   <defs>
-                    <linearGradient id="gradWmEvol2024" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#d1d5db" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.85}/>
-                    </linearGradient>
-                    <linearGradient id="gradWmEvol2025" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                    </linearGradient>
-                    <linearGradient id="gradWmEvol2026" x1="0" y1="0" x2="0" y2="1">
+                    <linearGradient id="gradWmEvolCont" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
                       <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                  <XAxis dataKey="mes_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+                    interval={continuoSeries.length > 24 ? 1 : 0} />
                   <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
                   <Tooltip
                     formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]}
@@ -1101,33 +1162,12 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                     <ReferenceLine y={ts.baseline_val} stroke="#f59e0b" strokeDasharray="4 4"
                       label={{ value: 'Baseline', fontSize: 9, fill: '#f59e0b', position: 'insideTopRight' }} />
                   )}
-                  {(!evolYearFilter || evolYearFilter === 'y2024') && (
-                    <Bar dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
-                      fill="url(#gradWmEvol2024)" radius={[8,8,0,0]} maxBarSize={28}
-                      onClick={() => toggleYear('y2024')} style={{ cursor: 'pointer' }}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} position="top"
-                        formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
-                        style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
-                    </Bar>
-                  )}
-                  {(!evolYearFilter || evolYearFilter === 'y2025') && (
-                    <Bar dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
-                      fill="url(#gradWmEvol2025)" radius={[8,8,0,0]} maxBarSize={28}
-                      onClick={() => toggleYear('y2025')} style={{ cursor: 'pointer' }}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} position="top"
-                        formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
-                        style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
-                    </Bar>
-                  )}
-                  {(!evolYearFilter || evolYearFilter === 'y2026') && (
-                    <Bar dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
-                      fill="url(#gradWmEvol2026)" radius={[8,8,0,0]} maxBarSize={28}
-                      onClick={() => toggleYear('y2026')} style={{ cursor: 'pointer' }}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} position="top"
-                        formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
-                        style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
-                    </Bar>
-                  )}
+                  <Bar dataKey="valor" name={evolMedida === 'valor' ? 'Venta' : 'Unidades'}
+                    fill="url(#gradWmEvolCont)" radius={[6,6,0,0]} maxBarSize={24}>
+                    <LabelList dataKey="valor" position="top"
+                      formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
+                      style={{ fontSize: 8, fill: '#92400e', fontWeight: 700 }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
 

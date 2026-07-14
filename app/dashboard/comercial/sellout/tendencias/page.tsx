@@ -21,6 +21,7 @@ const fmtK = (v: number) => {
 // ── Constantes ──────────────────────────────────────────────────────────────
 const MESES_FULL = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                     'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
+const MESES_SHORT = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const COLORS = { '2024': '#d1d5db', '2025': '#60a5fa', '2026': '#c8873a' } as Record<string,string>
 const PAIS_FLAG: Record<string,string> = {
   CR:'🇨🇷', GT:'🇬🇹', SV:'🇸🇻', NI:'🇳🇮', HN:'🇭🇳', CO:'🇨🇴', PA:'🇵🇦',
@@ -157,17 +158,48 @@ export default function TendenciasPage() {
   const catOpts   = (opts.categorias  ?? ['Quesos','Leches','Helados']).map(v => ({ value: v }))
   const cliOpts   = (opts.clientes    ?? []).map(v => ({ value: v }))
 
-  // YTD axis
+  // ── Timeline continuo (2024 → 2026) ────────────────────────────────────
+  // Mensual: un valor por mes flat, Ene-24 → hoy.
+  const mensualContinuo: { mes_str: string; valor: number }[] = (() => {
+    if (!data?.mensual) return []
+    const byMes: Record<number, any> = {}
+    for (const r of data.mensual) byMes[Number(r.mes)] = r
+    const out: { mes_str: string; valor: number }[] = []
+    for (const ano of [2024, 2025, 2026] as const) {
+      for (let m = 1; m <= 12; m++) {
+        const row = byMes[m]
+        if (!row) continue
+        const raw = row[String(ano)]
+        const valor = raw == null ? 0 : Number(raw)
+        if (valor <= 0) continue
+        out.push({ mes_str: `${MESES_SHORT[m]}-${String(ano).slice(2)}`, valor })
+      }
+    }
+    return out
+  })()
+
+  // YTD acumulado como running total continuo (no resetea por año)
+  const ytdContinuo: { mes_str: string; acumulado: number }[] = (() => {
+    if (!mensualContinuo.length) return []
+    let acc = 0
+    return mensualContinuo.map(r => {
+      acc += r.valor
+      return { mes_str: r.mes_str, acumulado: acc }
+    })
+  })()
+
   const ytdMax = (() => {
-    if (!data?.ytd) return undefined
-    let m = 0
-    for (const r of data.ytd) for (const k of ['2024','2025','2026']) if (r[k] != null) m = Math.max(m, r[k])
+    if (!ytdContinuo.length) return undefined
+    const m = Math.max(...ytdContinuo.map(r => r.acumulado))
     if (!m) return undefined
-    const step = m >= 2_000_000 ? 500_000 : m >= 500_000 ? 200_000 : 100_000
+    const step = m >= 20_000_000 ? 5_000_000 : m >= 5_000_000 ? 1_000_000 : m >= 2_000_000 ? 500_000 : m >= 500_000 ? 200_000 : 100_000
     return Math.ceil(m * 1.05 / step) * step
   })()
 
-  const ytdTicks = ytdMax ? Array.from({ length: Math.floor(ytdMax / (ytdMax >= 2_000_000 ? 500_000 : ytdMax >= 500_000 ? 200_000 : 100_000)) + 1 }, (_, i) => i * (ytdMax >= 2_000_000 ? 500_000 : ytdMax >= 500_000 ? 200_000 : 100_000)) : undefined
+  const ytdTicks = ytdMax ? (() => {
+    const step = ytdMax >= 20_000_000 ? 5_000_000 : ytdMax >= 5_000_000 ? 1_000_000 : ytdMax >= 2_000_000 ? 500_000 : ytdMax >= 500_000 ? 200_000 : 100_000
+    return Array.from({ length: Math.floor(ytdMax / step) + 1 }, (_, i) => i * step)
+  })() : undefined
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5">
@@ -238,113 +270,69 @@ export default function TendenciasPage() {
           {/* ── TAB: EVOLUCIÓN ─────────────────────────────────── */}
           {tab === 'evolucion' && (
             <div className="space-y-5">
-              {/* Mensual */}
+              {/* Mensual — timeline continuo 2024 → 2026 */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
                 <div className="flex items-baseline justify-between flex-wrap gap-2 mb-4">
                   <div>
                     <h3 className="text-sm font-semibold text-gray-700">Venta Neta Mensual</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">Comparativo 2024 · 2025 · 2026</p>
-                  </div>
-                  <div className="flex items-center gap-3 text-[11px]">
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS['2024'] }}/> 2024</span>
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS['2025'] }}/> 2025</span>
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm" style={{ background: COLORS['2026'] }}/> 2026</span>
+                    <p className="text-xs text-gray-400 mt-0.5">Timeline continuo 2024 → 2026</p>
                   </div>
                 </div>
                 <div className="h-[240px] md:h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={data.mensual} margin={{ top:10, right:12, left:0, bottom:0 }} barCategoryGap="22%" barGap={10}>
+                    <BarChart data={mensualContinuo} margin={{ top:10, right:12, left:0, bottom:0 }} barCategoryGap="18%">
                       <defs>
-                        <linearGradient id="gradTend2024" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#d1d5db" stopOpacity={0.95}/>
-                          <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.75}/>
-                        </linearGradient>
-                        <linearGradient id="gradTend2025" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                          <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                        </linearGradient>
-                        <linearGradient id="gradTend2026" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id="gradTendCont" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
                           <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                      <XAxis dataKey="mes_label" tick={{ fontSize:12, fill:'#64748b' }} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="mes_str" tick={{ fontSize:10, fill:'#64748b' }} axisLine={false} tickLine={false} interval={mensualContinuo.length > 24 ? 1 : 0} />
                       <YAxis tickFormatter={fmtK} tick={{ fontSize:11, fill:'#94a3b8' }} width={62} axisLine={false} tickLine={false} />
-                      <Tooltip content={<TooltipUsd />} cursor={{ fill: 'rgba(148,163,184,0.08)' }} />
-                      <Bar dataKey="2024" name="2024" fill="url(#gradTend2024)" radius={[8,8,0,0]} maxBarSize={28}>
-                        <LabelList dataKey="2024" position="top"
+                      <Tooltip
+                        formatter={(v: any) => [fmtFull(Number(v)), 'Venta']}
+                        cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                        contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                      />
+                      <Bar dataKey="valor" name="Venta" fill="url(#gradTendCont)" radius={[6,6,0,0]} maxBarSize={22}>
+                        <LabelList dataKey="valor" position="top"
                           formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
-                          style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
-                      </Bar>
-                      <Bar dataKey="2025" name="2025" fill="url(#gradTend2025)" radius={[8,8,0,0]} maxBarSize={28}>
-                        <LabelList dataKey="2025" position="top"
-                          formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
-                          style={{ fontSize: 9, fill: '#1e40af', fontWeight: 700 }} />
-                      </Bar>
-                      <Bar dataKey="2026" name="2026" fill="url(#gradTend2026)" radius={[8,8,0,0]} maxBarSize={28}>
-                        <LabelList dataKey="2026" position="top"
-                          formatter={(v: any) => Number(v) > 0 ? fmtK(Number(v)) : ''}
-                          style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
+                          style={{ fontSize: 8, fill: '#92400e', fontWeight: 700 }} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* YTD */}
+              {/* YTD — acumulado running continuo 2024 → 2026 */}
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
-                <h3 className="text-sm font-semibold text-gray-700 mb-1">Venta Acumulada (YTD)</h3>
-                <p className="text-xs text-gray-400 mb-4">Suma corrida mes a mes</p>
+                <h3 className="text-sm font-semibold text-gray-700 mb-1">Venta Acumulada</h3>
+                <p className="text-xs text-gray-400 mb-4">Suma corrida continua Ene-24 → hoy</p>
                 <div className="h-[220px] md:h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={data.ytd} margin={{ top:4, right:12, left:0, bottom:0 }}>
+                    <AreaChart data={ytdContinuo} margin={{ top:4, right:12, left:0, bottom:0 }}>
                       <defs>
-                        <linearGradient id="gradTendYtd2026" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id="gradTendYtdCont" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%"   stopColor={COLORS['2026']} stopOpacity={0.4}/>
                           <stop offset="60%"  stopColor={COLORS['2026']} stopOpacity={0.1}/>
                           <stop offset="100%" stopColor={COLORS['2026']} stopOpacity={0}/>
                         </linearGradient>
-                        <linearGradient id="gradTendYtd2025" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%"   stopColor={COLORS['2025']} stopOpacity={0.25}/>
-                          <stop offset="100%" stopColor={COLORS['2025']} stopOpacity={0}/>
-                        </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="mes_label" tick={{ fontSize:11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <XAxis dataKey="mes_str" tick={{ fontSize:10, fill: '#64748b' }} axisLine={false} tickLine={false} interval={ytdContinuo.length > 24 ? 1 : 0} />
                       <YAxis
                         tickFormatter={v => v>=1_000_000 ? '$'+(v/1_000_000).toFixed(1)+'M' : '$'+(v/1_000).toFixed(0)+'K'}
                         tick={{ fontSize:11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}
                         domain={[0, ytdMax ?? 'auto']} ticks={ytdTicks}
                       />
-                      <Tooltip content={({ active, payload, label }) => {
-                        if (!active || !payload?.length) return null
-                        const v26 = payload.find(p => p.dataKey === '2026')?.value as number|null
-                        const v25 = payload.find(p => p.dataKey === '2025')?.value as number|null
-                        const pct = v25 && v26 && v25 > 0 ? ((v26 - v25) / v25) * 100 : null
-                        return (
-                          <div className="bg-white border border-gray-200 rounded-lg shadow-md px-3 py-2 text-xs">
-                            <p className="font-semibold text-gray-700 mb-1">{MESES_FULL[Number(label?.split?.(' ')?.[0]) || 0] ?? label}</p>
-                            {payload.map((p: any) => (
-                              <p key={p.dataKey} style={{ color: p.stroke }} className="leading-5">
-                                {p.name}: {p.value != null ? fmtFull(p.value) : '—'}
-                                {p.dataKey === '2026' && pct != null && (
-                                  <span className={`ml-1.5 font-semibold ${pct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                    ({pct >= 0 ? '+' : ''}{pct.toFixed(1)}% vs 2025)
-                                  </span>
-                                )}
-                              </p>
-                            ))}
-                          </div>
-                        )
-                      }} />
-                      <Legend wrapperStyle={{ fontSize:12 }} />
-                      <Line type="monotone" dataKey="2024" name="2024" stroke={COLORS['2024']} strokeWidth={2} dot={false} connectNulls={false} strokeDasharray="4 3" />
-                      <Area type="monotone" dataKey="2025" name="2025" stroke={COLORS['2025']} strokeWidth={2}
-                            fill="url(#gradTendYtd2025)" dot={false} activeDot={{ r: 4 }} connectNulls={false} />
-                      <Area type="monotone" dataKey="2026" name="2026" stroke={COLORS['2026']} strokeWidth={2.5}
-                            fill="url(#gradTendYtd2026)" dot={false}
-                            activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: COLORS['2026'] }} connectNulls={false} />
+                      <Tooltip
+                        formatter={(v: any) => [fmtFull(Number(v)), 'Acumulado']}
+                        contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                      />
+                      <Area type="monotone" dataKey="acumulado" name="Acumulado" stroke={COLORS['2026']} strokeWidth={2.5}
+                            fill="url(#gradTendYtdCont)" dot={false}
+                            activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: COLORS['2026'] }} />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>

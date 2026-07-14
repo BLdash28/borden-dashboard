@@ -7,6 +7,10 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
   ResponsiveContainer, Legend, ReferenceLine, Cell,
 } from 'recharts'
+import {
+  TendenciaMensualChart, TendenciaDiariaChart, MetricaTogglePill,
+  type TendMetrica, type TendData, type TendDailyRow,
+} from '@/components/ui/tendencia-chart'
 
 const DIVS = [
   { key: 'TOTAL', label: 'Total',     cats: [] as string[] },
@@ -172,6 +176,20 @@ export default function EjecucionSelectos() {
   const [cobSubcatOpts, setCobSubcatOpts] = useState<string[]>([])
   const cobInitRef = useRef(false)
 
+  // Tendencia reusable (chart Sell-Out Mensual/Diaria en Pedidos)
+  const [selTend, setSelTend] = useState<TendData | null>(null)
+  const [selTendMetricas, setSelTendMetricas] = useState<TendMetrica[]>(['valor', 'unidades', 'precio'])
+  const [selTendVista, setSelTendVista] = useState<'mensual' | 'diaria'>('mensual')
+  const [selTendDaily, setSelTendDaily] = useState<TendDailyRow[]>([])
+  const [selTendDailyLoading, setSelTendDailyLoading] = useState(false)
+  const toggleSelTendMetrica = (m: TendMetrica) => {
+    setSelTendMetricas(prev => {
+      const has = prev.includes(m)
+      if (has && prev.length === 1) return prev
+      return has ? prev.filter(x => x !== m) : [...prev, m]
+    })
+  }
+
   const setL = (k: string, v: boolean) => setLoading(p => ({ ...p, [k]: v }))
 
   // Re-fetch timeseries + top5 when filters change (after initial load)
@@ -250,6 +268,36 @@ export default function EjecucionSelectos() {
     ]).then(([cobR, nseR]) => { setCob(cobR); setCobNse(nseR) })
       .finally(() => setL('cobertura', false))
   }, [cobCat]) // eslint-disable-line
+
+  // Tendencia mensual Selectos — solo cuando estamos en Pedidos
+  useEffect(() => {
+    if (section !== 'pedidos') return
+    setSelTend(null)
+    const cats = DIVS.find(d => d.key === div)?.cats ?? []
+    const p = new URLSearchParams()
+    if (cats.length) p.set('categoria', cats.join(','))
+    fetch(`/api/comercial/ejecucion/sv/selectos/tendencia-mensual?${p}`)
+      .then(r => r.json())
+      .then((d: TendData) => setSelTend(d))
+      .catch(() => setSelTend({ desde: null, hasta: null, labels: [], total: [], por_sku: [] }))
+  }, [section, div])
+
+  // Tendencia diaria Selectos (dedicado)
+  useEffect(() => {
+    if (section !== 'pedidos' || selTendVista !== 'diaria') return
+    setSelTendDailyLoading(true)
+    const cats = DIVS.find(d => d.key === div)?.cats ?? []
+    const p = new URLSearchParams()
+    if (cats.length) p.set('categoria', cats.join(','))
+    fetch(`/api/comercial/ejecucion/sv/selectos/tendencia-diaria?${p}`)
+      .then(r => r.json())
+      .then(d => setSelTendDaily(d.rows ?? []))
+      .catch(() => setSelTendDaily([]))
+      .finally(() => setSelTendDailyLoading(false))
+  }, [section, selTendVista, div])
+
+  // Reset diaria al cambiar división
+  useEffect(() => { setSelTendDaily([]) }, [div])
 
   // Re-fetch cobertura when cobSubcat changes
   useEffect(() => {
@@ -1010,6 +1058,28 @@ export default function EjecucionSelectos() {
     const hastaMonth = evolHasta ? parseInt(evolHasta.split('-')[1]) : 12
     const displayedSeries = (ts?.series ?? []).filter((r: any) => r.mes >= desdeMonth && r.mes <= hastaMonth)
 
+    // ── Timeline continuo 2024 → 2026 (flatten para chart evolución) ──
+    // Respeta el toggle evolMedida (valor/unidades) y el rango de meses.
+    const continuoSeries: { mes_str: string; valor: number }[] = (() => {
+      const byMes: Record<number, any> = {}
+      for (const m of (ts?.series ?? [])) byMes[Number(m.mes)] = m
+      const out: { mes_str: string; valor: number }[] = []
+      for (const ano of [2024, 2025, 2026] as const) {
+        for (let m = desdeMonth; m <= hastaMonth; m++) {
+          const row = byMes[m]
+          if (!row) continue
+          const key = evolMedida === 'valor'
+            ? (ano === 2024 ? 'y2024' : ano === 2025 ? 'y2025' : 'y2026')
+            : (ano === 2024 ? 'u2024' : ano === 2025 ? 'u2025' : 'u2026')
+          const raw = row[key]
+          const valor = raw == null ? 0 : Number(raw)
+          if (valor <= 0) continue
+          out.push({ mes_str: `${MN_SHORT[m]}-${String(ano).slice(2)}`, valor })
+        }
+      }
+      return out
+    })()
+
     if (L) return <div className="space-y-4">{Array(3).fill(0).map((_, i) => (
       <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 animate-pulse">
         <div className="h-4 bg-gray-100 rounded w-1/3 mb-4" />
@@ -1167,23 +1237,16 @@ export default function EjecucionSelectos() {
 
               {ts ? (
                 <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={displayedSeries} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="22%" barGap={10}>
+                  <BarChart data={continuoSeries} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="18%">
                     <defs>
-                      <linearGradient id="gradSelEvo2024" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#d1d5db" stopOpacity={1}/>
-                        <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.85}/>
-                      </linearGradient>
-                      <linearGradient id="gradSelEvo2025" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                        <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                      </linearGradient>
-                      <linearGradient id="gradSelEvo2026" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient id="gradSelEvoCont" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
                         <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <XAxis dataKey="mes_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+                      interval={continuoSeries.length > 24 ? 1 : 0} />
                     <YAxis
                       tickFormatter={v => evolMedida === 'valor'
                         ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
@@ -1203,9 +1266,9 @@ export default function EjecucionSelectos() {
                       <ReferenceLine y={ts.baseline_val} stroke="#f59e0b" strokeDasharray="4 4"
                         label={{ value: 'Baseline', fontSize: 9, fill: '#f59e0b', position: 'insideTopRight' }} />
                     )}
-                    <Bar dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} name="2024"
-                      fill="url(#gradSelEvo2024)" radius={[8, 8, 0, 0]} maxBarSize={28}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2024' : 'u2024'} position="top"
+                    <Bar dataKey="valor" name={evolMedida === 'valor' ? 'Venta' : 'Unidades'}
+                      fill="url(#gradSelEvoCont)" radius={[6, 6, 0, 0]} maxBarSize={24}>
+                      <LabelList dataKey="valor" position="top"
                         formatter={(v: any) => {
                           const n = Number(v); if (!isFinite(n) || n === 0) return ''
                           if (evolMedida === 'valor') {
@@ -1217,48 +1280,14 @@ export default function EjecucionSelectos() {
                           if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K'
                           return String(Math.round(n))
                         }}
-                        style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
-                    </Bar>
-                    <Bar dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} name="2025"
-                      fill="url(#gradSelEvo2025)" radius={[8, 8, 0, 0]} maxBarSize={28}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2025' : 'u2025'} position="top"
-                        formatter={(v: any) => {
-                          const n = Number(v); if (!isFinite(n) || n === 0) return ''
-                          if (evolMedida === 'valor') {
-                            if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
-                            if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
-                            return '$' + Math.round(n)
-                          }
-                          if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1) + 'M'
-                          if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K'
-                          return String(Math.round(n))
-                        }}
-                        style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
-                    </Bar>
-                    <Bar dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} name="2026"
-                      fill="url(#gradSelEvo2026)" radius={[8, 8, 0, 0]} maxBarSize={28}>
-                      <LabelList dataKey={evolMedida === 'valor' ? 'y2026' : 'u2026'} position="top"
-                        formatter={(v: any) => {
-                          const n = Number(v); if (!isFinite(n) || n === 0) return ''
-                          if (evolMedida === 'valor') {
-                            if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
-                            if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
-                            return '$' + Math.round(n)
-                          }
-                          if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1) + 'M'
-                          if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K'
-                          return String(Math.round(n))
-                        }}
-                        style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
+                        style={{ fontSize: 8, fill: '#92400e', fontWeight: 700 }} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               ) : <div className="h-[280px] bg-gray-50 rounded-lg animate-pulse" />}
 
               <div className="flex items-center gap-4 mt-3 text-[10px] text-gray-400 flex-wrap">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-gray-300 inline-block" />2024</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-300 inline-block" />2025</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" />2026 YTD</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" />Timeline continuo 2024 → 2026</span>
                 {ts?.baseline_val > 0 && evolMedida === 'valor' && (
                   <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 border-t-2 border-dashed border-amber-400 inline-block" />Baseline {fmtFull(ts.baseline_val)}/mes</span>
                 )}
@@ -2564,13 +2593,6 @@ export default function EjecucionSelectos() {
       sellin: Math.round(siMonths[m]?.real ?? 0),
     }))
 
-    const soMonths   = sd.months   ?? []
-    const soVals     = sd.monthly_val ?? []
-    const soChart = soMonths.map((m: string, i: number) => ({
-      name:    sdMonthLabel(m),
-      sellout: Math.round(soVals[i] ?? 0),
-    })).filter((r: any) => r.sellout > 100)
-
     const urgOffers = (sd.ofertas ?? []).filter((r: any) => r.urgencia === 'Alta' || r.urgencia === 'CRÍTICA')
 
     return (
@@ -2630,46 +2652,67 @@ export default function EjecucionSelectos() {
           </div>
         )}
 
-        {/* ── Card 3: Sell-Out mensual ── */}
-        {soChart.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">🛒 Sell-Out Mensual (Selectos)</h3>
-            <p className="text-xs text-gray-400 mb-4">Venta real en tiendas (fact_ventas_selectos)</p>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={soChart} margin={{top:10,right:16,left:8,bottom:4}} barCategoryGap="20%">
-                <defs>
-                  <linearGradient id="gradSelSelloutFull" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
-                  </linearGradient>
-                  <linearGradient id="gradSelSelloutPart" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#3a6fa8" stopOpacity={0.4}/>
-                    <stop offset="100%" stopColor="#5b8ec7" stopOpacity={0.25}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false}/>
-                <XAxis dataKey="name" tick={{fontSize:12, fill:'#64748b'}} axisLine={false} tickLine={false}/>
-                <YAxis tickFormatter={v => fmt$(v)} tick={{fontSize:11, fill:'#94a3b8'}} width={52} axisLine={false} tickLine={false}/>
-                <Tooltip
-                  formatter={(v: number) => [fmt$(v),'Sell-Out']}
-                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                />
-                <Bar dataKey="sellout" radius={[8,8,0,0]} maxBarSize={40}>
-                  {soChart.map((_: any, i: number) => <Cell key={i} fill={i === soChart.length-1 ? 'url(#gradSelSelloutPart)' : 'url(#gradSelSelloutFull)'}/>)}
-                  <LabelList dataKey="sellout" position="top"
-                    formatter={(v: any) => {
-                      const n = Number(v); if (!isFinite(n) || n === 0) return ''
-                      if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
-                      if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
-                      return '$' + Math.round(n)
-                    }}
-                    style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+        {/* ── Card 3: Sell-Out mensual/diaria (tendencia reusable) ── */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-800">
+                🛒 Sell-Out {selTendVista === 'mensual' ? 'Mensual' : 'Diaria'} (Selectos)
+              </h3>
+              {(() => {
+                let precioUlt = 0
+                let refLabel  = ''
+                if (selTendVista === 'diaria' && selTendDaily.length > 0) {
+                  const last = selTendDaily[selTendDaily.length - 1]
+                  precioUlt = last.unidades > 0 ? last.valor_usd / last.unidades : 0
+                  refLabel = last.dia_str
+                } else if (selTendVista === 'mensual' && selTend?.total) {
+                  const withData = selTend.total.filter(p => (p.unidades ?? 0) > 0)
+                  const last = withData[withData.length - 1]
+                  if (last) { precioUlt = last.precio_usd; refLabel = last.mes_str }
+                }
+                const precioFmt = '$' + precioUlt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                return (
+                  <p className="text-xs text-gray-400">
+                    Venta real en tiendas (fact_ventas_selectos)
+                    {precioUlt > 0 && (
+                      <>
+                        <span className="mx-1.5 text-gray-300">·</span>
+                        <span className="font-semibold text-emerald-600">Último precio prom / Und ({refLabel}): {precioFmt}</span>
+                      </>
+                    )}
+                  </p>
+                )
+              })()}
+            </div>
+            <div className="flex items-center gap-3 text-[11px] flex-wrap">
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {(['mensual','diaria'] as const).map(v => (
+                  <button key={v} onClick={() => setSelTendVista(v)}
+                    className={`px-3 py-1 font-semibold transition-colors ${selTendVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {v === 'mensual' ? 'Mensual' : 'Diaria'}
+                  </button>
+                ))}
+              </div>
+              <MetricaTogglePill metricas={selTendMetricas} onToggle={toggleSelTendMetrica} activeClass="bg-amber-500 text-white" />
+            </div>
           </div>
-        )}
+          {selTendVista === 'mensual' ? (
+            <TendenciaMensualChart
+              tendencia={selTend}
+              metricas={selTendMetricas}
+              moneda="usd"
+              skuFilter={[]}
+            />
+          ) : (
+            <TendenciaDiariaChart
+              rows={selTendDaily}
+              metricas={selTendMetricas}
+              moneda="usd"
+              loading={selTendDailyLoading}
+            />
+          )}
+        </div>
 
         {/* ── Card 4: Cobertura & Salud por SKU ── */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">

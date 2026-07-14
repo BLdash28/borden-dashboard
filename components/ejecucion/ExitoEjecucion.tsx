@@ -360,7 +360,7 @@ export default function ExitoEjecucion() {
 
   // Ventas mensuales: tendencia continua (jun-25 → jul-26) + toggle metrica multi-select
   const [tendencia, setTendencia] = useState<TendDataShared | null>(null)
-  const [tendMetricas, setTendMetricas] = useState<TendMetrica[]>(['valor'])
+  const [tendMetricas, setTendMetricas] = useState<TendMetrica[]>(['valor', 'unidades', 'precio'])
   const toggleTendMetrica = (m: TendMetrica) => {
     setTendMetricas(prev => {
       const has = prev.includes(m)

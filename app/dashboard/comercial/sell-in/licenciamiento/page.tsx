@@ -125,7 +125,7 @@ export default function SellInLicenciamiento() {
 
   // Tendencia reusable (chart Sell-Out Walmart CR helados)
   const [wmTend, setWmTend] = useState<TendData | null>(null)
-  const [wmTendMetricas, setWmTendMetricas] = useState<TendMetrica[]>(['valor'])
+  const [wmTendMetricas, setWmTendMetricas] = useState<TendMetrica[]>(['valor', 'unidades', 'precio'])
   const [wmTendVista, setWmTendVista] = useState<'mensual' | 'diaria'>('mensual')
   const [wmTendDaily, setWmTendDaily] = useState<TendDailyRow[]>([])
   const [wmTendDailyLoading, setWmTendDailyLoading] = useState(false)
@@ -277,11 +277,23 @@ export default function SellInLicenciamiento() {
           return (useHelUsd ? '$' : '₡') + Math.round(v).toLocaleString()
         }
         const ventaSI = useHelUsd ? helados.ytd_2026 : helados.ytd_2026_crc
-        const monthlySI = helados.monthly.map(m => ({
-          mes_nombre: m.mes_nombre,
-          v2025: useHelUsd ? m.y2025 : m.crc2025,
-          v2026: useHelUsd ? m.y2026 : m.crc2026,
-        })).filter(m => (m.v2025 && m.v2025 > 0) || (m.v2026 && m.v2026 > 0))
+        // Timeline continuo 2025 → 2026
+        const monthlySI: { mes_str: string; valor: number }[] = (() => {
+          const byMes = new Map(helados.monthly.map(m => [m.mes, m]))
+          const out: { mes_str: string; valor: number }[] = []
+          for (const ano of [2025, 2026] as const) {
+            for (let m = 1; m <= 12; m++) {
+              const row = byMes.get(m)
+              if (!row) continue
+              const valor = ano === 2025
+                ? (useHelUsd ? Number(row.y2025 ?? 0) : Number(row.crc2025 ?? 0))
+                : (useHelUsd ? Number(row.y2026 ?? 0) : Number(row.crc2026 ?? 0))
+              if (valor <= 0) continue
+              out.push({ mes_str: `${MN12[m]}-${String(ano).slice(2)}`, valor })
+            }
+          }
+          return out
+        })()
 
         return (
           <div className="space-y-5">
@@ -329,38 +341,26 @@ export default function SellInLicenciamiento() {
                 <div className="flex items-center justify-between mb-1">
                   <div>
                     <h3 className="text-sm font-bold text-gray-800">Sell-In Mensual</h3>
-                    <p className="text-[11px] text-gray-400">2025 vs 2026 · {monedaHel.toUpperCase()}</p>
-                  </div>
-                  <div className="flex items-center gap-3 text-[11px]">
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
-                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
+                    <p className="text-[11px] text-gray-400">Timeline continuo 2025 → 2026 · {monedaHel.toUpperCase()}</p>
                   </div>
                 </div>
                 <div className="h-[260px] mt-3">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={monthlySI} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={4}>
+                    <BarChart data={monthlySI} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="18%">
                       <defs>
-                        <linearGradient id="gradHelSI25" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                          <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                        </linearGradient>
-                        <linearGradient id="gradHelSI26" x1="0" y1="0" x2="0" y2="1">
+                        <linearGradient id="gradHelSICont" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
                           <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
-                      <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
+                      <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
                       <YAxis tickFormatter={(v: any) => fmtHelShort(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}/>
                       <Tooltip formatter={(v: unknown) => [fmtHel(Number(v)), '']}
                         cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                         contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
-                      <Bar dataKey="v2025" name="2025" fill="url(#gradHelSI25)" radius={[8,8,0,0]} maxBarSize={28}>
-                        <LabelList dataKey="v2025" position="top" formatter={(v: any) => fmtHelShort(Number(v))}
-                          style={{ fontSize: 9, fill: '#1e40af', fontWeight: 700 }}/>
-                      </Bar>
-                      <Bar dataKey="v2026" name="2026" fill="url(#gradHelSI26)" radius={[8,8,0,0]} maxBarSize={28}>
-                        <LabelList dataKey="v2026" position="top" formatter={(v: any) => fmtHelShort(Number(v))}
+                      <Bar dataKey="valor" name={`Sell-In (${monedaHel.toUpperCase()})`} fill="url(#gradHelSICont)" radius={[8,8,0,0]} maxBarSize={28}>
+                        <LabelList dataKey="valor" position="top" formatter={(v: any) => fmtHelShort(Number(v))}
                           style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }}/>
                       </Bar>
                     </BarChart>
