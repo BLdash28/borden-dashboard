@@ -50,13 +50,13 @@ const DESC_MAP = {
   'VANILLA CARAMEL CRUNCH':       'Helado Vainilla Caramel Cruch Borden 320gr',
 }
 
-// Tasa CRC → USD por (año, mes) — promedios aproximados BCCR
+// Tasa CRC → USD promedio mensual (BCCR — provisto por finanzas Borden).
 const TASA_CRC = {
-  '2025-11': 507, '2025-12': 505,
-  '2026-01': 504, '2026-02': 503, '2026-03': 502,
-  '2026-04': 501, '2026-05': 500, '2026-06': 500,
+  '2025-11': 500.98, '2025-12': 496.00,
+  '2026-01': 494.65, '2026-02': 486.10, '2026-03': 468.76,
+  '2026-04': 459.39, '2026-05': 454.44, '2026-06': 455.91,
 }
-const TASA_DEFAULT = 505
+const TASA_DEFAULT = 470
 
 const c = new pg.Client({ connectionString: process.env.DATABASE_URL })
 await c.connect()

@@ -64,11 +64,35 @@ type SellInData = {
   ocs: { orden_compra: string; ano: number; mes: number; n_lineas: number; uds: number; cop: number; ut: number }[]
 }
 
+type SensacionData = {
+  ytd_2026: number; ytd_2026_crc: number; uds_2026: number
+  ytd_2025: number; ytd_2025_crc: number; uds_2025: number
+  delta_ytd: number | null
+  ultimo_mes: number; ultimo_mes_nombre: string
+  por_cadena: { cadena: string; usd_2026: number; uds_2026: number; usd_2025: number; delta: number | null }[]
+  por_producto: { producto: string; codigo_barras: string; usd_2026: number; uds_2026: number }[]
+  monthly: { mes: number; mes_nombre: string; y2025: number; y2026: number | null; uds2025: number; uds2026: number | null; crc2025: number; crc2026: number | null }[]
+}
+
+type WalmartHelados = {
+  ytd_2026: number; uds_2026: number
+  ytd_2025: number; uds_2025: number
+  delta_ytd: number | null
+  ultimo_mes: number; ultimo_mes_nombre: string
+  monthly: { mes: number; mes_nombre: string; y2025: number; y2026: number | null; uds2025: number; uds2026: number | null }[]
+  por_producto: { codigo_barras: string; descripcion: string; usd: number; uds: number; pdvs: number }[]
+  top_pdvs: { punto_venta: string; cadena: string; usd: number; uds: number }[]
+}
+
 export default function SellInLicenciamiento() {
   const [tipo, setTipo] = useState<'helados'|'colombia'>('colombia')
   const [moneda, setMoneda] = useState<'cop'|'usd'>('cop')
+  const [monedaHel, setMonedaHel] = useState<'usd'|'crc'>('usd')
   const [data, setData] = useState<SellInData | null>(null)
+  const [helados, setHelados] = useState<SensacionData | null>(null)
+  const [wmHel, setWmHel] = useState<WalmartHelados | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadingHel, setLoadingHel] = useState(false)
 
   // Sort para la tabla Top SKUs
   type SortCol = 'uds' | 'cop' | 'ut' | 'margen_pct'
@@ -110,6 +134,18 @@ export default function SellInLicenciamiento() {
       .finally(() => setLoading(false))
   }, [tipo, data])
 
+  useEffect(() => {
+    if (tipo !== 'helados') return
+    if (helados && wmHel) return
+    setLoadingHel(true)
+    Promise.all([
+      fetch('/api/comercial/ejecucion/cr/sensacion/kpis').then(r => r.json()),
+      fetch('/api/comercial/sell-in/licenciamiento/walmart-helados').then(r => r.json()),
+    ])
+      .then(([h, w]) => { setHelados(h); setWmHel(w) })
+      .finally(() => setLoadingHel(false))
+  }, [tipo, helados, wmHel])
+
   const useUsd = moneda === 'usd'
   const fmtVal = (v: number) => useUsd ? fmtFull(v) : fmtCOP(v)
 
@@ -139,15 +175,265 @@ export default function SellInLicenciamiento() {
             ))}
           </div>
         )}
+
+        {tipo === 'helados' && (
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden w-fit">
+            {(['usd','crc'] as const).map(m => (
+              <button key={m} onClick={() => setMonedaHel(m)}
+                className={`px-4 py-2 text-xs font-semibold transition-colors ${monedaHel===m?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                {m.toUpperCase()}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
-      {tipo === 'helados' && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
-          <span className="text-2xl">🚧</span>
-          <p className="mt-2 font-semibold text-amber-700">En construcción</p>
-          <p className="text-sm text-amber-600 mt-1">Filtro: tipo_negocio = LICENCIAMIENTO_HELADOS</p>
+      {tipo === 'helados' && loadingHel && !helados && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {Array(4).fill(0).map((_, i) => (
+            <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 animate-pulse">
+              <div className="h-3 bg-gray-100 rounded w-2/3 mb-3" />
+              <div className="h-7 bg-gray-100 rounded w-1/2 mb-2" />
+              <div className="h-3 bg-gray-100 rounded w-1/3" />
+            </div>
+          ))}
         </div>
       )}
+
+      {tipo === 'helados' && helados && (() => {
+        const useHelUsd = monedaHel === 'usd'
+        const fmtHel = (v: number) => useHelUsd
+          ? '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : '₡ ' + Math.round(v).toLocaleString('es-CR')
+        const fmtHelShort = (v: number) => {
+          if (!isFinite(v) || v === 0) return useHelUsd ? '$0' : '₡0'
+          if (Math.abs(v) >= 1e6) return (useHelUsd ? '$' : '₡') + (v / 1e6).toFixed(1) + 'M'
+          if (Math.abs(v) >= 1e3) return (useHelUsd ? '$' : '₡') + (v / 1e3).toFixed(0) + 'K'
+          return (useHelUsd ? '$' : '₡') + Math.round(v).toLocaleString()
+        }
+        const ventaSI = useHelUsd ? helados.ytd_2026 : helados.ytd_2026_crc
+        const monthlySI = helados.monthly.map(m => ({
+          mes_nombre: m.mes_nombre,
+          v2025: useHelUsd ? m.y2025 : m.crc2025,
+          v2026: useHelUsd ? m.y2026 : m.crc2026,
+        })).filter(m => (m.v2025 && m.v2025 > 0) || (m.v2026 && m.v2026 > 0))
+
+        // Walmart sellout — solo mostramos si hay data
+        const wmMonthly = wmHel?.monthly.filter(m => (m.y2025 && m.y2025 > 0) || (m.y2026 && m.y2026 > 0)) ?? []
+
+        return (
+          <div className="space-y-5">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 flex items-center justify-between">
+              <span>💡 Datos consolidados desde <b>Sensación CR</b> (Sell-In) y <b>Walmart CR</b> (Sell-Out) para los 4 helados Borden 320gr.</span>
+              <a href="/dashboard/comercial/ejecucion/cr/sensacion" className="font-semibold text-amber-700 hover:text-amber-900 whitespace-nowrap ml-4">
+                Ver ejecución Sensación →
+              </a>
+            </div>
+
+            {/* ── SELL-IN (Sensación) ──────────────────────────────────────── */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <h2 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Sell-In · Sensación</h2>
+                <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">DISTRIBUIDOR</span>
+                <span className="text-[10px] text-gray-400">Hasta {helados.ultimo_mes_nombre || '—'} 2026</span>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl shadow-sm p-4">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Sell-In YTD 2026 ({monedaHel.toUpperCase()})</p>
+                  <p className="text-xl font-bold text-amber-700">{fmtHel(ventaSI)}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">Hasta {helados.ultimo_mes_nombre || '—'}</p>
+                </div>
+                <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Unidades YTD</p>
+                  <p className="text-xl font-bold text-gray-800">{fmtNum(helados.uds_2026)}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">{helados.uds_2025 > 0 ? `${fmtNum(helados.uds_2025)} en 2025 mismo período` : 'Sin comparativo 2025'}</p>
+                </div>
+                <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">vs YTD 2025</p>
+                  <p className={`text-xl font-bold ${helados.delta_ytd === null ? 'text-gray-400' : helados.delta_ytd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {helados.delta_ytd === null ? '—' : `${helados.delta_ytd > 0 ? '+' : ''}${helados.delta_ytd.toFixed(1)}%`}
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">USD ${fmtNum(helados.ytd_2025)} en 2025</p>
+                </div>
+                <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+                  <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Cadenas activas</p>
+                  <p className="text-xl font-bold text-gray-800">{helados.por_cadena.filter(c => c.usd_2026 > 0).length}</p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">con ventas 2026</p>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mt-3">
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-800">Sell-In Mensual</h3>
+                    <p className="text-[11px] text-gray-400">2025 vs 2026 · {monedaHel.toUpperCase()}</p>
+                  </div>
+                  <div className="flex items-center gap-3 text-[11px]">
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
+                  </div>
+                </div>
+                <div className="h-[260px] mt-3">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={monthlySI} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={4}>
+                      <defs>
+                        <linearGradient id="gradHelSI25" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                          <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
+                        </linearGradient>
+                        <linearGradient id="gradHelSI26" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                          <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                      <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
+                      <YAxis tickFormatter={(v: any) => fmtHelShort(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}/>
+                      <Tooltip formatter={(v: unknown) => [fmtHel(Number(v)), '']}
+                        cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                        contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
+                      <Bar dataKey="v2025" name="2025" fill="url(#gradHelSI25)" radius={[8,8,0,0]} maxBarSize={28}>
+                        <LabelList dataKey="v2025" position="top" formatter={(v: any) => fmtHelShort(Number(v))}
+                          style={{ fontSize: 9, fill: '#1e40af', fontWeight: 700 }}/>
+                      </Bar>
+                      <Bar dataKey="v2026" name="2026" fill="url(#gradHelSI26)" radius={[8,8,0,0]} maxBarSize={28}>
+                        <LabelList dataKey="v2026" position="top" formatter={(v: any) => fmtHelShort(Number(v))}
+                          style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }}/>
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* ── SELL-OUT (Walmart CR) ────────────────────────────────────── */}
+            {wmHel && wmHel.ytd_2026 > 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <h2 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Sell-Out · Walmart CR</h2>
+                  <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">RETAIL</span>
+                  <span className="text-[10px] text-gray-400">Hasta {wmHel.ultimo_mes_nombre || '—'} 2026</span>
+                </div>
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl shadow-sm p-4">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Sell-Out YTD 2026 (USD)</p>
+                    <p className="text-xl font-bold text-blue-700">${fmtNum(wmHel.ytd_2026)}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Hasta {wmHel.ultimo_mes_nombre || '—'}</p>
+                  </div>
+                  <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Unidades YTD</p>
+                    <p className="text-xl font-bold text-gray-800">{fmtNum(wmHel.uds_2026)}</p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">{wmHel.uds_2025 > 0 ? `${fmtNum(wmHel.uds_2025)} en 2025 mismo período` : 'Sin comparativo 2025'}</p>
+                  </div>
+                  <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">vs YTD 2025</p>
+                    <p className={`text-xl font-bold ${wmHel.delta_ytd === null ? 'text-gray-400' : wmHel.delta_ytd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {wmHel.delta_ytd === null ? '—' : `${wmHel.delta_ytd > 0 ? '+' : ''}${wmHel.delta_ytd.toFixed(1)}%`}
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">${fmtNum(wmHel.ytd_2025)} en 2025</p>
+                  </div>
+                  <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Ratio Sell-Out / Sell-In</p>
+                    <p className="text-xl font-bold text-gray-800">
+                      {helados.ytd_2026 > 0 ? ((wmHel.ytd_2026 / helados.ytd_2026) * 100).toFixed(0) : '—'}%
+                    </p>
+                    <p className="text-[10px] text-gray-500 mt-0.5">Del Sell-In llega a POS</p>
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mt-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <div>
+                      <h3 className="text-sm font-bold text-gray-800">Sell-Out Mensual · Walmart CR</h3>
+                      <p className="text-[11px] text-gray-400">2025 vs 2026 · USD</p>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px]">
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
+                      <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"/> 2026</span>
+                    </div>
+                  </div>
+                  <div className="h-[260px] mt-3">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={wmMonthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={4}>
+                        <defs>
+                          <linearGradient id="gradHelWM25" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#94a3b8" stopOpacity={1}/>
+                            <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.85}/>
+                          </linearGradient>
+                          <linearGradient id="gradHelWM26" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
+                            <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
+                        <YAxis tickFormatter={(v: any) => '$' + (Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : Math.round(Number(v)))}
+                          tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}/>
+                        <Tooltip formatter={(v: unknown) => ['$' + Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), '']}
+                          cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
+                        <Bar dataKey="y2025" name="2025" fill="url(#gradHelWM25)" radius={[8,8,0,0]} maxBarSize={28}/>
+                        <Bar dataKey="y2026" name="2026" fill="url(#gradHelWM26)" radius={[8,8,0,0]} maxBarSize={28}/>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* Detalle por producto + top pdvs */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-3">
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                    <h3 className="text-sm font-bold text-gray-800 mb-3">Sell-Out por Producto · 2026</h3>
+                    <div className="space-y-2">
+                      {wmHel.por_producto.map(p => {
+                        const total = wmHel.por_producto.reduce((s, x) => s + x.usd, 0)
+                        const pct = total > 0 ? (p.usd / total) * 100 : 0
+                        return (
+                          <div key={p.codigo_barras}>
+                            <div className="flex items-center justify-between text-xs mb-0.5">
+                              <span className="font-medium text-gray-700 truncate">{p.descripcion || p.codigo_barras}</span>
+                              <span className="tabular-nums text-gray-600 whitespace-nowrap">
+                                ${fmtNum(p.usd)} <span className="text-gray-400">· {fmtNum(p.uds)} und · {p.pdvs} PDV</span>
+                              </span>
+                            </div>
+                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full" style={{ width: `${pct}%` }}/>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                    <h3 className="text-sm font-bold text-gray-800 mb-3">Top 15 PDVs · 2026</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="text-gray-500 text-[10px] uppercase tracking-wider">
+                          <tr className="border-b border-gray-100">
+                            <th className="text-left py-1.5 font-semibold">PDV</th>
+                            <th className="text-right py-1.5 font-semibold">USD</th>
+                            <th className="text-right py-1.5 font-semibold">Uds</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {wmHel.top_pdvs.map(p => (
+                            <tr key={p.punto_venta} className="border-b border-gray-50 hover:bg-blue-50/20">
+                              <td className="py-1.5 pr-3 text-gray-700 truncate max-w-[180px]">{p.punto_venta}</td>
+                              <td className="py-1.5 text-right tabular-nums text-gray-800 font-semibold">${fmtNum(p.usd)}</td>
+                              <td className="py-1.5 text-right tabular-nums text-gray-500">{fmtNum(p.uds)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       {tipo === 'colombia' && loading && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
