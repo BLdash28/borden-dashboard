@@ -6,15 +6,21 @@
 import type { ReactNode } from 'react'
 
 export function KpiCard({
-  label, value, sub, highlight,
+  label, value, sub, highlight, borderLeftColor,
 }: {
   label: string
   value: ReactNode
   sub?: string
   highlight?: boolean
+  /** Color CSS del border izquierdo (barra vertical de acento). Ej: '#f59e0b' */
+  borderLeftColor?: string
 }) {
+  const baseCls = `rounded-xl border shadow-sm p-4 ${highlight ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}`
+  const style = borderLeftColor
+    ? { borderLeftWidth: '4px', borderLeftColor, borderLeftStyle: 'solid' as const }
+    : undefined
   return (
-    <div className={`rounded-xl border shadow-sm p-4 ${highlight ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}`}>
+    <div className={baseCls} style={style}>
       <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest leading-tight mb-1">
         {label}
       </p>

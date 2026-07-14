@@ -3,6 +3,7 @@ import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { RefreshCw, Download, Upload, X, AlertTriangle, CheckCircle, Search, ChevronDown, ChevronRight } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
+import { KpiCard } from '@/components/ejecucion/shared'
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
@@ -593,14 +594,10 @@ export default function SelloutPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-3 md:gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 border-l-4 border-l-amber-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1 md:mb-2">Ventas Totales USD</p>
-          <p className="text-xl md:text-2xl font-bold text-gray-800 break-all">{loading ? '...' : fmtFull(kpi?.total_valor ?? 0)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 border-l-4 border-l-blue-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1 md:mb-2">Unidades Totales</p>
-          <p className="text-xl md:text-2xl font-bold text-gray-800">{loading ? '...' : Math.round(kpi?.total_unidades ?? 0).toLocaleString('en-US')}</p>
-        </div>
+        <KpiCard label="Ventas Totales USD" borderLeftColor="#f59e0b"
+          value={loading ? '...' : fmtFull(kpi?.total_valor ?? 0)} />
+        <KpiCard label="Unidades Totales" borderLeftColor="#3b82f6"
+          value={loading ? '...' : Math.round(kpi?.total_unidades ?? 0).toLocaleString('en-US')} />
       </div>
 
       {/* Tabla */}

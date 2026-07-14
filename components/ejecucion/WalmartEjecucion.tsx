@@ -29,6 +29,7 @@ const SECTIONS = [
   { key: 'evolucion',        label: 'Evolución Ventas'  },
   { key: 'cobertura',        label: 'Cobertura'         },
   { key: 'inventarios',      label: 'Inventarios'       },
+  { key: 'calidad',          label: 'Calidad Inventario'},
   { key: 'innovaciones',     label: 'Innovaciones'      },
   { key: 'pareto',           label: 'Pareto'            },
   { key: 'precios',          label: 'Lista Precios'     },
@@ -405,6 +406,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [topSkus,     setTopSkus]     = useState<any[]>([])
   const [inv,         setInv]         = useState<any>(null)
   const [innov,       setInnov]       = useState<any>(null)
+  const [calidad,     setCalidad]     = useState<any>(null)
   const [cob,         setCob]         = useState<any>(null)
   const [cobSort,     setCobSort]     = useState<'gap' | 'actual' | 'maxima'>('gap')
   const [cobVista,    setCobVista]    = useState<'numerica' | 'ponderada'>('numerica')
@@ -599,6 +601,11 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       setL('innovaciones', true)
       fetch(`/api/comercial/ejecucion/walmart/innovaciones?${qs}`)
         .then(r => r.json()).then(setInnov).finally(() => setL('innovaciones', false))
+
+    } else if (section === 'calidad') {
+      setL('calidad', true)
+      fetch(`/api/comercial/ejecucion/walmart/calidad-inventario?${qs}`)
+        .then(r => r.json()).then(setCalidad).finally(() => setL('calidad', false))
     }
   }, [section, div, filterKey, topN, evolTopN, evolSubcat]) // eslint-disable-line
 
@@ -2149,6 +2156,175 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     )
   }
 
+  // ── Calidad Inventario ──────────────────────────────────────────────────
+  function Calidad() {
+    const L = isL('calidad')
+    if (L || !calidad) return <div className="space-y-4"><CardSkeleton cols={4} /><ChartSkeleton /></div>
+    if (!calidad.rows || calidad.rows.length === 0) {
+      return (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
+          <p className="text-4xl mb-3">📦</p>
+          <p className="text-base font-semibold text-gray-700 mb-1">Sin datos de inventario</p>
+          <p className="text-sm text-gray-400 max-w-sm mx-auto">
+            No hay snapshot de inventario cargado para {paisNombre} con los filtros seleccionados.
+          </p>
+        </div>
+      )
+    }
+
+    const t = calidad.total
+    const universo = calidad.universo_pdvs
+    const chartData = calidad.rows.slice(0, 15).map((r: any) => ({
+      producto: (r.descripcion ?? r.sku ?? '').split(' ').slice(0, 4).join(' '),
+      sku: r.sku,
+      'Menos de 3':   r.menos_de_3,
+      'Entre 3 y 10': r.entre_3_y_10,
+      'Mayor a 10':   r.mayor_a_10,
+    }))
+
+    const pctCritico   = t.total_pdvs > 0 ? (t.menos_de_3 / t.total_pdvs) * 100 : 0
+    const pctSaludable = t.total_pdvs > 0 ? (t.mayor_a_10 / t.total_pdvs) * 100 : 0
+
+    return (
+      <div className="space-y-5">
+        {/* Header + KPIs */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Calidad de Inventario · Walmart {paisNombre}
+              </p>
+              <h2 className="text-base font-bold text-gray-800 mt-0.5">Nivel de inventario por SKU</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Snapshot al <strong>{calidad.fecha ?? '—'}</strong> · Universo: <strong>{universo}</strong> PDVs.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <div className="rounded-xl border border-red-100 bg-red-50/60 p-4">
+              <p className="text-[10px] font-semibold text-red-500 uppercase tracking-widest mb-1">🚨 Stock crítico (&lt;3)</p>
+              <p className="text-2xl font-bold text-red-700">{t.menos_de_3}</p>
+              <p className="text-[10px] text-red-600 mt-0.5">{pctCritico.toFixed(1)}% de los PDVs con stock</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-4">
+              <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-widest mb-1">⚠️ Stock medio (3–10)</p>
+              <p className="text-2xl font-bold text-amber-700">{t.entre_3_y_10}</p>
+              <p className="text-[10px] text-amber-600 mt-0.5">{t.total_pdvs > 0 ? ((t.entre_3_y_10 / t.total_pdvs) * 100).toFixed(1) : '0'}% de los PDVs con stock</p>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-widest mb-1">✓ Stock saludable (&gt;10)</p>
+              <p className="text-2xl font-bold text-emerald-700">{t.mayor_a_10}</p>
+              <p className="text-[10px] text-emerald-600 mt-0.5">{pctSaludable.toFixed(1)}% de los PDVs con stock</p>
+            </div>
+            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+              <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-widest mb-1">Cobertura efectiva</p>
+              <p className="text-2xl font-bold text-blue-700">{(calidad.cobertura_efectiva ?? 0).toFixed(1)}%</p>
+              <p className="text-[10px] text-blue-600 mt-0.5">{calidad.pdvs_con_stock ?? 0} / {universo} PDVs con al menos 1 SKU</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart apilado */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">Distribución de PDVs por Nivel de Stock</h3>
+              <p className="text-[11px] text-gray-400">Cantidad de PDVs con inventario por producto (top 15)</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500"/> Menos de 3</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Entre 3 y 10</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> Mayor a 10</span>
+            </div>
+          </div>
+          <div className="h-[380px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 80 }}>
+                <defs>
+                  <linearGradient id="gradCalCritico" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f87171" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradCalMedio" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradCalSaludable" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="producto" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+                  angle={-30} textAnchor="end" interval={0} height={80} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="Menos de 3"   stackId="a" fill="url(#gradCalCritico)"   radius={[0,0,0,0]} maxBarSize={40} />
+                <Bar dataKey="Entre 3 y 10" stackId="a" fill="url(#gradCalMedio)"     radius={[0,0,0,0]} maxBarSize={40} />
+                <Bar dataKey="Mayor a 10"   stackId="a" fill="url(#gradCalSaludable)" radius={[8,8,0,0]} maxBarSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Tabla nivel inventario (ordenable) */}
+        <CalidadDetalleTable
+          rows={calidad.rows}
+          total={t}
+          universo={universo}
+          coberturaEfectiva={calidad.cobertura_efectiva ?? 0}
+        />
+
+        {/* Tabla % composición */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-bold text-gray-800">Composición % del Stock por Producto</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Distribución porcentual de los PDVs con stock</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-semibold">Producto</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-red-600">% &lt; 3</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-amber-600">% 3–10</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-emerald-600">% &gt; 10</th>
+                  <th className="px-3 py-2.5 text-left font-semibold">Barra composición</th>
+                </tr>
+              </thead>
+              <tbody>
+                {calidad.rows.map((r: any, i: number) => (
+                  <tr key={r.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                    <td className="px-4 py-2.5 font-medium text-gray-800 max-w-[240px] truncate" title={r.descripcion ?? ''}>
+                      {r.descripcion ?? r.sku}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-red-600 font-semibold">{r.pct_menos_de_3.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-amber-600 font-semibold">{r.pct_entre_3_y_10.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 font-semibold">{r.pct_mayor_a_10.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 w-[280px]">
+                      <div className="flex w-full h-3 rounded-full overflow-hidden bg-gray-100">
+                        <div className="bg-red-500 h-full"     style={{ width: `${r.pct_menos_de_3}%`   }} title={`Menos de 3: ${r.pct_menos_de_3.toFixed(1)}%`} />
+                        <div className="bg-amber-500 h-full"   style={{ width: `${r.pct_entre_3_y_10}%` }} title={`Entre 3 y 10: ${r.pct_entre_3_y_10.toFixed(1)}%`} />
+                        <div className="bg-emerald-500 h-full" style={{ width: `${r.pct_mayor_a_10}%`   }} title={`Mayor a 10: ${r.pct_mayor_a_10.toFixed(1)}%`} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-gray-400 px-6 py-2 border-t border-gray-100 bg-gray-50">
+            Réplica del reporte "CALIDAD INVENTARIO BORDEN" adaptado a Walmart CA. Fuente: fact_inventario_walmart_pdv (inv_mano).
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   const renderSection = () => {
@@ -2157,6 +2333,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       case 'evolucion':       return Evolucion()
       case 'cobertura':       return Cobertura()
       case 'inventarios':     return Inventarios()
+      case 'calidad':         return Calidad()
       case 'pareto':          return Pareto()
       case 'pedidos':         return <ProximamentePlaceholder section="pedidos" />
       case 'ofertas':         return inv?.disponible ? Inventarios() : <ProximamentePlaceholder section="ofertas" />
@@ -2209,6 +2386,98 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       >
         {renderSection()}
       </EjecucionLayout>
+  )
+}
+
+/* ═════ Sub-componente: Detalle Calidad Inventario (ordenable) ═════ */
+function CalidadDetalleTable({
+  rows,
+  total,
+  universo,
+  coberturaEfectiva,
+}: {
+  rows: any[]
+  total: any
+  universo: number
+  coberturaEfectiva: number
+}) {
+  type Col = 'descripcion' | 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10' | 'total_pdvs' | 'cobertura_pct'
+  const { toggleSort, sorted, SortArrow } = useTableSort<any, Col>(
+    rows, 'total_pdvs', 'desc',
+    {
+      descripcion:   (a, b) => (a.descripcion ?? a.sku ?? '').localeCompare(b.descripcion ?? b.sku ?? ''),
+      menos_de_3:    (a, b) => (a.menos_de_3    ?? 0) - (b.menos_de_3    ?? 0),
+      entre_3_y_10:  (a, b) => (a.entre_3_y_10  ?? 0) - (b.entre_3_y_10  ?? 0),
+      mayor_a_10:    (a, b) => (a.mayor_a_10    ?? 0) - (b.mayor_a_10    ?? 0),
+      total_pdvs:    (a, b) => (a.total_pdvs    ?? 0) - (b.total_pdvs    ?? 0),
+      cobertura_pct: (a, b) => (a.cobertura_pct ?? 0) - (b.cobertura_pct ?? 0),
+    },
+  )
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-50">
+        <h3 className="text-sm font-bold text-gray-800">Nivel Inventario — Detalle por Producto</h3>
+        <p className="text-[11px] text-gray-400 mt-0.5"># de PDVs por nivel de stock · cobertura vs universo total ({universo} PDVs)</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+            <tr>
+              <SortableTh onClick={() => toggleSort('descripcion')} arrow={<SortArrow col="descripcion"/>} className="px-4 py-2.5">Producto</SortableTh>
+              <SortableTh onClick={() => toggleSort('menos_de_3')} arrow={<SortArrow col="menos_de_3"/>} align="right" className="px-3 py-2.5 text-red-600">Menos de 3</SortableTh>
+              <SortableTh onClick={() => toggleSort('entre_3_y_10')} arrow={<SortArrow col="entre_3_y_10"/>} align="right" className="px-3 py-2.5 text-amber-600">Entre 3 y 10</SortableTh>
+              <SortableTh onClick={() => toggleSort('mayor_a_10')} arrow={<SortArrow col="mayor_a_10"/>} align="right" className="px-3 py-2.5 text-emerald-600">Mayor a 10</SortableTh>
+              <SortableTh onClick={() => toggleSort('total_pdvs')} arrow={<SortArrow col="total_pdvs"/>} align="right" className="px-3 py-2.5 bg-gray-100">Total PDVs</SortableTh>
+              <SortableTh onClick={() => toggleSort('cobertura_pct')} arrow={<SortArrow col="cobertura_pct"/>} align="right" className="px-3 py-2.5 bg-blue-50 text-blue-700">Cobertura %</SortableTh>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((r, i) => (
+              <tr key={r.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                <td className="px-4 py-2.5 font-medium text-gray-800">
+                  {r.descripcion ?? r.sku}
+                  <span className="ml-2 text-[10px] text-gray-400 font-mono">{r.sku}</span>
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  {r.menos_de_3 > 0
+                    ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-red-100 text-red-700">{r.menos_de_3}</span>
+                    : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  {r.entre_3_y_10 > 0
+                    ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-amber-100 text-amber-700">{r.entre_3_y_10}</span>
+                    : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  {r.mayor_a_10 > 0
+                    ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-700">{r.mayor_a_10}</span>
+                    : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums bg-gray-50/60 font-bold text-gray-800">{r.total_pdvs}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums bg-blue-50/40">
+                  <div className="flex items-center justify-end gap-2">
+                    <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
+                      <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${Math.min(100, r.cobertura_pct)}%` }} />
+                    </div>
+                    <span className="font-bold text-blue-700 min-w-[42px]">{r.cobertura_pct.toFixed(1)}%</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            <tr className="bg-gray-900 text-white font-bold">
+              <td className="px-4 py-2.5">TOTAL <span className="text-[9px] font-normal text-gray-400 ml-1">(suma por SKU)</span></td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{total.menos_de_3}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{total.entre_3_y_10}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{total.mayor_a_10}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{total.total_pdvs}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-blue-300" title="Cobertura efectiva: PDVs distintos con al menos 1 SKU con stock / universo total">
+                {coberturaEfectiva.toFixed(1)}% <span className="text-[9px] font-normal text-gray-400">efectiva</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }
 

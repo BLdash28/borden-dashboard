@@ -3,6 +3,7 @@ import { showError } from '@/lib/toast'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { RefreshCw, Download, ChevronDown, ChevronRight } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
+import { KpiCard } from '@/components/ejecucion/shared'
 
 const STORAGE_KEY = 'bl_sellin_v1'
 function readStorage() {
@@ -539,18 +540,12 @@ export default function SellInPage() {
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 border-l-4 border-l-amber-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1 md:mb-2">Ingresos Totales</p>
-          <p className="text-xl md:text-2xl font-bold text-gray-800">{loading ? '...' : fmt(kpi?.total_ingresos ?? 0)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 border-l-4 border-l-blue-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1 md:mb-2">Cajas Totales</p>
-          <p className="text-xl md:text-2xl font-bold text-gray-800">{loading ? '...' : fmtN(kpi?.total_unidades ?? 0)}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 border-l-4 border-l-green-500">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1 md:mb-2">Clientes Activos</p>
-          <p className="text-xl md:text-2xl font-bold text-gray-800">{loading ? '...' : (kpi?.total_clientes ?? 0).toLocaleString()}</p>
-        </div>
+        <KpiCard label="Ingresos Totales" borderLeftColor="#f59e0b"
+          value={loading ? '...' : fmt(kpi?.total_ingresos ?? 0)} />
+        <KpiCard label="Cajas Totales" borderLeftColor="#3b82f6"
+          value={loading ? '...' : fmtN(kpi?.total_unidades ?? 0)} />
+        <KpiCard label="Clientes Activos" borderLeftColor="#10b981"
+          value={loading ? '...' : (kpi?.total_clientes ?? 0).toLocaleString()} />
       </div>
 
       {/* Tabla */}
