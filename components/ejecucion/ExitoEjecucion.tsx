@@ -385,6 +385,7 @@ export default function ExitoEjecucion() {
   // Toggle Vista para chart Ventas mensuales
   const [ventasVista,   setVentasVista]   = useState<'mensual' | 'diaria'>('mensual')
   const [ventasDiaria,  setVentasDiaria]  = useState<{ dia_str: string; mes: number; dia: number; valor_usd: number; valor_cop: number; unidades: number }[]>([])
+  const [ventasDiariaPorSku, setVentasDiariaPorSku] = useState<{ sku: string; descripcion: string | null; points: { fecha: string; dia_str: string; valor_usd: number; valor_cop: number; unidades: number }[] }[]>([])
   const [ventasDiariaLoading, setVentasDiariaLoading] = useState(false)
   // Sort para tabla Top SKUs Inventarios
   const [calidadDetalle, setCalidadDetalle] = useState<{
@@ -603,7 +604,7 @@ export default function ExitoEjecucion() {
   }, [section, div, filterKey, topN]) // eslint-disable-line
 
   // Reset diaria al cambiar filtros globales para forzar refetch
-  useEffect(() => { setVentasDiaria([]); setTendencia(null); loadedRef.current.tendencia = false }, [filterKey])
+  useEffect(() => { setVentasDiaria([]); setVentasDiariaPorSku([]); setTendencia(null); loadedRef.current.tendencia = false }, [filterKey])
 
   // Reset diaria comparativo al cambiar SKUs o filtros
   useEffect(() => { setCompDaily1([]); setCompDaily2([]) }, [compSku1, compSku2, filterKey])
@@ -619,8 +620,8 @@ export default function ExitoEjecucion() {
     const qs = buildFilterQS(extraCat)
     fetch(`/api/comercial/ejecucion/co/exito/daily?${qs}`)
       .then(r => r.json())
-      .then(d => setVentasDiaria(d.rows ?? []))
-      .catch(() => setVentasDiaria([]))
+      .then(d => { setVentasDiaria(d.rows ?? []); setVentasDiariaPorSku(d.por_sku ?? []) })
+      .catch(() => { setVentasDiaria([]); setVentasDiariaPorSku([]) })
       .finally(() => setVentasDiariaLoading(false))
   }, [section, ventasVista, filterKey, currentCat]) // eslint-disable-line
 
@@ -1414,6 +1415,7 @@ export default function ExitoEjecucion() {
           ) : (
             <TendenciaDiariaChart
               rows={ventasDiaria}
+              porSku={skuSel.length > 0 ? ventasDiariaPorSku : []}
               metricas={tendMetricas}
               moneda={moneda}
               loading={ventasDiariaLoading}

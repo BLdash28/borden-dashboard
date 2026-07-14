@@ -41,6 +41,12 @@ export type TendDailyRow = {
   valor_cop: number
   unidades: number
 }
+export type TendDailyPoint = TendDailyRow & { fecha?: string }
+export type TendDailyBySku = {
+  sku: string
+  descripcion: string | null
+  points: TendDailyPoint[]
+}
 
 // ─── Constantes visuales ────────────────────────────────────────────────────
 
@@ -265,7 +271,7 @@ export function TendenciaMensualChart({
 // ─── Componente Diaria ──────────────────────────────────────────────────────
 
 export function TendenciaDiariaChart({
-  rows, metricas, moneda, loading, height = 320, header,
+  rows, metricas, moneda, loading, height = 320, header, porSku = [],
 }: {
   rows: TendDailyRow[]
   metricas: TendMetrica[]
@@ -273,51 +279,91 @@ export function TendenciaDiariaChart({
   loading: boolean
   height?: number
   header?: ReactNode
+  porSku?: TendDailyBySku[]
 }) {
   if (loading) return <div style={{ height }} className="mt-3 flex items-center justify-center text-xs text-gray-400">Cargando data diaria…</div>
   if (!rows.length) return <div style={{ height }} className="mt-3 flex items-center justify-center text-xs text-gray-400">Sin datos diarios.</div>
 
   const isCop = moneda === 'cop'
-  const data = rows.map(r => {
-    const valor  = isCop ? r.valor_cop : r.valor_usd
-    const precio = r.unidades > 0 ? valor / r.unidades : 0
-    return { dia_str: r.dia_str, m_valor: valor, m_unidades: r.unidades, m_precio: precio }
-  })
+  const usePerSku = porSku.length > 0
+  const metricaSingle: TendMetrica = usePerSku ? (metricas[0] ?? 'valor') : 'valor'
+  const pickMetricSku = (p: TendDailyPoint) => {
+    if (metricaSingle === 'unidades') return p.unidades
+    const v = isCop ? p.valor_cop : p.valor_usd
+    if (metricaSingle === 'precio') return p.unidades > 0 ? v / p.unidades : 0
+    return v
+  }
+
+  // Data: si per-sku, pivot por dia_str con columnas sku_<X>. Si no, aggregate normal.
+  const data = usePerSku
+    ? (() => {
+        // Set unión de todos los dia_str de todas las SKUs, ordenados por fecha
+        const set = new Map<string, string>()   // dia_str → fecha (para sort)
+        porSku.forEach(s => s.points.forEach(p => set.set(p.dia_str, p.fecha ?? p.dia_str)))
+        const dias = [...set.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([k]) => k)
+        return dias.map(d => {
+          const row: Record<string, unknown> = { dia_str: d }
+          porSku.forEach(s => {
+            const pt = s.points.find(p => p.dia_str === d)
+            row[`sku_${s.sku}`] = pt ? pickMetricSku(pt) : 0
+          })
+          return row
+        })
+      })()
+    : rows.map(r => {
+        const valor  = isCop ? r.valor_cop : r.valor_usd
+        const precio = r.unidades > 0 ? valor / r.unidades : 0
+        return { dia_str: r.dia_str, m_valor: valor, m_unidades: r.unidades, m_precio: precio }
+      })
 
   return (
     <>
       {header ?? (
         <p className="text-[10px] text-gray-400 mt-2 mb-1">
-          Ventas diarias · {metricas.map(m => METRICA_META[m].label).join(' + ')}
+          Ventas diarias · {usePerSku
+            ? `${METRICA_META[metricaSingle].label} · ${porSku.length} SKU${porSku.length > 1 ? 's' : ''}`
+            : metricas.map(m => METRICA_META[m].label).join(' + ')}
         </p>
       )}
       <div style={{ height }} className="mt-2">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="20%" barGap={2}>
             <defs>
-              {metricas.map(m => {
-                const meta = METRICA_META[m]
-                if (meta.kind === 'area') {
-                  return (
-                    <linearGradient key={m} id={`${meta.gradId}Dia`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor={meta.color} stopOpacity={0.35}/>
-                      <stop offset="60%"  stopColor={meta.color} stopOpacity={0.08}/>
-                      <stop offset="100%" stopColor={meta.color} stopOpacity={0}/>
-                    </linearGradient>
-                  )
-                }
-                return (
-                  <linearGradient key={m} id={`${meta.gradId}Dia`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={meta.color} stopOpacity={1}/>
-                    <stop offset="100%" stopColor={meta.color} stopOpacity={0.75}/>
-                  </linearGradient>
-                )
-              })}
+              {usePerSku
+                ? porSku.map((s, i) => {
+                    const c = SKU_LINE_COLORS[i % SKU_LINE_COLORS.length]
+                    return (
+                      <linearGradient key={s.sku} id={`gradSkuDia_${s.sku}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={c} stopOpacity={1}/>
+                        <stop offset="100%" stopColor={c} stopOpacity={0.75}/>
+                      </linearGradient>
+                    )
+                  })
+                : metricas.map(m => {
+                    const meta = METRICA_META[m]
+                    if (meta.kind === 'area') {
+                      return (
+                        <linearGradient key={m} id={`${meta.gradId}Dia`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%"   stopColor={meta.color} stopOpacity={0.35}/>
+                          <stop offset="60%"  stopColor={meta.color} stopOpacity={0.08}/>
+                          <stop offset="100%" stopColor={meta.color} stopOpacity={0}/>
+                        </linearGradient>
+                      )
+                    }
+                    return (
+                      <linearGradient key={m} id={`${meta.gradId}Dia`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={meta.color} stopOpacity={1}/>
+                        <stop offset="100%" stopColor={meta.color} stopOpacity={0.75}/>
+                      </linearGradient>
+                    )
+                  })}
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis dataKey="dia_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
               interval={Math.max(0, Math.floor(data.length / 20) - 1)} />
-            <YAxis yAxisId="left" tickFormatter={(v) => fmtValor(Number(v), isCop)} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="left"
+              tickFormatter={(v) => usePerSku && metricaSingle === 'unidades' ? fmtUds(Number(v)) : usePerSku && metricaSingle === 'precio' ? fmtPrecio(Number(v), isCop) : fmtValor(Number(v), isCop)}
+              tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
             <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => fmtUds(Number(v))} tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false} />
             <YAxis yAxisId="hidden" hide />
             <Tooltip
@@ -325,26 +371,47 @@ export function TendenciaDiariaChart({
               contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
               formatter={(v: unknown, name: string, entry: { dataKey?: string | number }) => {
                 const dk = String(entry?.dataKey ?? '')
-                const m = (dk.startsWith('m_') ? dk.slice(2) : 'valor') as TendMetrica
-                return [tipMetric(v, m, isCop), name]
+                if (dk.startsWith('m_')) {
+                  const m = dk.slice(2) as TendMetrica
+                  return [tipMetric(v, m, isCop), name]
+                }
+                return [tipMetric(v, metricaSingle, isCop), name]
               }}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
-            {metricas.map(m => {
-              const meta = METRICA_META[m]
-              const name = meta.label + (m === 'valor' ? ` (${moneda.toUpperCase()})` : m === 'precio' ? ` (${moneda.toUpperCase()})` : '')
-              if (meta.kind === 'bar') {
-                return (
-                  <Bar key={m} yAxisId={axisKey(m)} dataKey={`m_${m}`} name={name}
-                    fill={`url(#${meta.gradId}Dia)`} radius={[6,6,0,0]} maxBarSize={20} />
-                )
-              }
-              return (
-                <Area key={m} yAxisId={axisKey(m)} type="monotone" dataKey={`m_${m}`} name={name}
-                  stroke={meta.color} strokeWidth={2.5} fill={`url(#${meta.gradId}Dia)`} dot={false}
-                  activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: meta.color }} connectNulls />
-              )
-            })}
+            {usePerSku
+              ? porSku.map((s, i) => {
+                  const name = s.descripcion ? `${s.sku} · ${s.descripcion}` : s.sku
+                  const c = SKU_LINE_COLORS[i % SKU_LINE_COLORS.length]
+                  const kind = METRICA_META[metricaSingle].kind
+                  if (kind === 'bar') {
+                    return (
+                      <Bar key={s.sku} yAxisId="left" dataKey={`sku_${s.sku}`} name={name}
+                        fill={`url(#gradSkuDia_${s.sku})`} radius={[4,4,0,0]} maxBarSize={12} />
+                    )
+                  }
+                  return (
+                    <Line key={s.sku} yAxisId="left" type="monotone" dataKey={`sku_${s.sku}`} name={name}
+                      stroke={c} strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: c }} connectNulls />
+                  )
+                })
+              : metricas.map(m => {
+                  const meta = METRICA_META[m]
+                  const name = meta.label + (m === 'valor' ? ` (${moneda.toUpperCase()})` : m === 'precio' ? ` (${moneda.toUpperCase()})` : '')
+                  if (meta.kind === 'bar') {
+                    return (
+                      <Bar key={m} yAxisId={axisKey(m)} dataKey={`m_${m}`} name={name}
+                        fill={`url(#${meta.gradId}Dia)`} radius={[6,6,0,0]} maxBarSize={20} />
+                    )
+                  }
+                  return (
+                    <Area key={m} yAxisId={axisKey(m)} type="monotone" dataKey={`m_${m}`} name={name}
+                      stroke={meta.color} strokeWidth={2.5} fill={`url(#${meta.gradId}Dia)`} dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: meta.color }} connectNulls />
+                  )
+                })}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
