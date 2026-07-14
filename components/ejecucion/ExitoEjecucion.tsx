@@ -1344,11 +1344,18 @@ export default function ExitoEjecucion() {
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> Precio / Und</span>
               </>)}
             </div>
+            {/* Legend adicional para Mensual: valor (bars) + unidades (áreas) */}
+            {ventasVista === 'mensual' && (
+              <div className="flex items-center gap-3 text-[10px] text-gray-400 mt-1 ml-auto justify-end">
+                <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-slate-400"/><span className="w-3 h-2 rounded-sm bg-amber-500"/> Venta ({monLabel})</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300 border border-slate-400"/><span className="w-2 h-2 rounded-full bg-blue-400 border border-blue-600"/> Unidades</span>
+              </div>
+            )}
           </div>
           {ventasVista === 'mensual' ? (
-            <div className="h-[300px] mt-3">
+            <div className="h-[320px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthlyVal} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
+                <ComposedChart data={monthlyVal} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
                   <defs>
                     <linearGradient id="gradExitoEvoVent25" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
@@ -1358,26 +1365,47 @@ export default function ExitoEjecucion() {
                       <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
                       <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
                     </linearGradient>
+                    <linearGradient id="gradExitoEvoUds25M" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.35}/>
+                      <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="gradExitoEvoUds26M" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#2563eb" stopOpacity={0.35}/>
+                      <stop offset="100%" stopColor="#2563eb" stopOpacity={0}/>
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+                  {/* Eje izq: valor (bars) */}
+                  <YAxis yAxisId="val" tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+                  {/* Eje der: unidades (areas) */}
+                  <YAxis yAxisId="uds" orientation="right"
+                    tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
+                    tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false} />
                   <Tooltip
-                    formatter={(v: unknown) => [tipVal(v), '']}
+                    formatter={(v: unknown, name: string) => {
+                      if (String(name).startsWith('Und')) return [fmtNum(Number(v)), name]
+                      return [tipVal(v), name]
+                    }}
                     cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Bar dataKey="val2025" name={`2025 ${monLabel}`} fill="url(#gradExitoEvoVent25)" radius={[8,8,0,0]} maxBarSize={36}>
-                    <LabelList dataKey="val2025" position="top"
-                      formatter={fmtLblVal}
+                  <Bar yAxisId="val" dataKey="val2025" name={`2025 ${monLabel}`} fill="url(#gradExitoEvoVent25)" radius={[8,8,0,0]} maxBarSize={36}>
+                    <LabelList dataKey="val2025" position="top" formatter={fmtLblVal}
                       style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                   </Bar>
-                  <Bar dataKey="val2026" name={`2026 ${monLabel}`} fill="url(#gradExitoEvoVent26)" radius={[8,8,0,0]} maxBarSize={36}>
-                    <LabelList dataKey="val2026" position="top"
-                      formatter={fmtLblVal}
+                  <Bar yAxisId="val" dataKey="val2026" name={`2026 ${monLabel}`} fill="url(#gradExitoEvoVent26)" radius={[8,8,0,0]} maxBarSize={36}>
+                    <LabelList dataKey="val2026" position="top" formatter={fmtLblVal}
                       style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                   </Bar>
-                </BarChart>
+                  {/* Unidades como áreas gradient — eje derecho */}
+                  <Area yAxisId="uds" type="monotone" dataKey="uds2025" name="Und 2025"
+                    stroke="#94a3b8" strokeWidth={2} fill="url(#gradExitoEvoUds25M)" dot={false}
+                    activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#94a3b8' }} connectNulls />
+                  <Area yAxisId="uds" type="monotone" dataKey="uds2026" name="Und 2026"
+                    stroke="#2563eb" strokeWidth={2.5} fill="url(#gradExitoEvoUds26M)" dot={false}
+                    activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }} connectNulls />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           ) : (() => {
@@ -1461,54 +1489,6 @@ export default function ExitoEjecucion() {
               </>
             )
           })()}
-        </div>
-
-        {/* Chart 2: Unidades mensuales — barras comparativas */}
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-          <div className="flex items-center justify-between mb-1">
-            <div>
-              <h4 className="text-sm font-bold text-gray-800">Unidades vendidas</h4>
-              <p className="text-[11px] text-gray-400">Comparativo 2025 vs 2026</p>
-            </div>
-            <div className="flex items-center gap-3 text-[11px]">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> 2026</span>
-            </div>
-          </div>
-          <div className="h-[300px] mt-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthly} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
-                <defs>
-                  <linearGradient id="gradExitoEvoUds25" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                  </linearGradient>
-                  <linearGradient id="gradExitoEvoUds26" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={yFmtUds} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(v: unknown) => [tipUds(v), '']}
-                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                />
-                <Bar dataKey="uds2025" name="2025 Und" fill="url(#gradExitoEvoUds25)" radius={[8,8,0,0]} maxBarSize={36}>
-                  <LabelList dataKey="uds2025" position="top"
-                    formatter={fmtLblUds}
-                    style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
-                </Bar>
-                <Bar dataKey="uds2026" name="2026 Und" fill="url(#gradExitoEvoUds26)" radius={[8,8,0,0]} maxBarSize={36}>
-                  <LabelList dataKey="uds2026" position="top"
-                    formatter={fmtLblUds}
-                    style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
         </div>
 
         {/* Chart 3: Growth MoM % */}
