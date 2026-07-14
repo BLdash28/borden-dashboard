@@ -540,7 +540,7 @@ export default function ExitoEjecucion() {
     //  para que cambiar el toggle Mensual/Diaria no re-dispare kpis/pareto/etc.)
 
     // Tendencia mensual continua (jun-25 → jul-26) — sección Evolución Ventas
-    if (section === 'evolucion' && !loadedRef.current.tendencia) {
+    if ((section === 'evolucion' || section === 'resumen') && !loadedRef.current.tendencia) {
       loadedRef.current.tendencia = true
       fetch(`/api/comercial/ejecucion/co/exito/tendencia-mensual?${qs}`)
         .then(r => r.json())
@@ -810,69 +810,28 @@ export default function ExitoEjecucion() {
           </div>
         )}
 
-        {/* Evolución Sell-Out — barras */}
-        {monthly.length > 0 && (() => {
-          // Redondear al siguiente múltiplo "bonito" (paso = magnitud/2).
-          // Ej: max=434M → magnitud=100M, paso=50M, ceil = 450M
-          const niceMax = (v: number): number | undefined => {
-            if (v <= 0) return undefined
-            const mag  = Math.pow(10, Math.floor(Math.log10(v)))
-            const step = mag / 2
-            return Math.ceil(v / step) * step
-          }
-          const maxEvol = Math.max(
-            ...monthly.map(m => Math.max(m.v2025 ?? 0, m.v2026 ?? 0)),
-            0,
-          )
-          const evolMax = niceMax(maxEvol)
-          return (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-1">
-              <div>
-                <h3 className="text-sm font-bold text-gray-800">Evolución Sell-Out</h3>
-                <p className="text-[11px] text-gray-400">2025 · 2026 ({moneda.toUpperCase()})</p>
-              </div>
-              <div className="flex items-center gap-3 text-[11px]">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-slate-400"/> 2025</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> 2026</span>
-              </div>
+        {/* Evolución Sell-Out — timeline continuo desde el primer mes con data */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">Evolución Sell-Out</h3>
+              <p className="text-[11px] text-gray-400">
+                Timeline continuo · {moneda.toUpperCase()}
+                {tendencia?.desde && tendencia?.hasta && (
+                  <span className="ml-1.5 text-gray-400">· {tendencia.desde} → {tendencia.hasta}</span>
+                )}
+              </p>
             </div>
-            <div className="h-[240px] mt-3">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
-                  <defs>
-                    <linearGradient id="gradBar2025" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#94a3b8" stopOpacity={0.9}/>
-                      <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.75}/>
-                    </linearGradient>
-                    <linearGradient id="gradBar2026" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={yTick} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}
-                    domain={evolMax ? [0, evolMax] : [0, 'auto']} />
-                  <Tooltip
-                    formatter={(v: any, name: string) => [fmtVal(Number(v)), name]}
-                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                  />
-                  <Bar dataKey="v2025" name="2025" fill="url(#gradBar2025)" radius={[8,8,0,0]} maxBarSize={38}>
-                    <LabelList dataKey="v2025" position="top" formatter={fmtBarLbl}
-                      style={{ fontSize: 9, fill: '#64748b', fontWeight: 600 }} />
-                  </Bar>
-                  <Bar dataKey="v2026" name="2026" fill="url(#gradBar2026)" radius={[8,8,0,0]} maxBarSize={38}>
-                    <LabelList dataKey="v2026" position="top" formatter={fmtBarLbl}
-                      style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+            <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} />
           </div>
-          )
-        })()}
+          <TendenciaMensualChart
+            tendencia={tendencia}
+            metricas={tendMetricas}
+            moneda={moneda}
+            skuFilter={skuSel}
+            height={260}
+          />
+        </div>
 
         {/* Chart Sell-Out vs Sell-In vs Devoluciones — lineal con gradient */}
         {sellin && monthly.length > 0 && (() => {
