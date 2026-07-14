@@ -154,8 +154,11 @@ export function TendenciaMensualChart({
   const chartData = tendencia.labels.map((l, i) => {
     const row: Record<string, unknown> = { mes_str: l.mes_str, ano: l.ano, mes: l.mes }
     if (usePerSku) {
+      // Cuando hay per-SKU + multi-metric: 1 columna por combinación (SKU × métrica)
       tendencia.por_sku.forEach(s => {
-        row[`sku_${s.sku}`] = pickMetric(s.points[i], metricaSingle)
+        metricas.forEach(m => {
+          row[`sku_${s.sku}_m_${m}`] = pickMetric(s.points[i], m)
+        })
       })
     } else {
       metricas.forEach(m => {
@@ -170,9 +173,8 @@ export function TendenciaMensualChart({
       {header ?? (
         <p className="text-[10px] text-gray-400 mt-2 mb-1">
           Rango: {tendencia.desde} → {tendencia.hasta}
-          {usePerSku
-            ? ` · ${METRICA_META[metricaSingle].label} · ${tendencia.por_sku.length} SKU${tendencia.por_sku.length > 1 ? 's' : ''}`
-            : ` · ${metricas.map(m => METRICA_META[m].label).join(' + ')}`}
+          {` · ${metricas.map(m => METRICA_META[m].label).join(' + ')}`}
+          {usePerSku && ` · ${tendencia.por_sku.length} SKU${tendencia.por_sku.length > 1 ? 's' : ''}`}
         </p>
       )}
       <div style={{ height }} className="mt-2">
@@ -180,14 +182,15 @@ export function TendenciaMensualChart({
           <ComposedChart data={chartData} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="18%" barGap={3}>
             <defs>
               {usePerSku
-                ? tendencia.por_sku.map((s, i) => {
+                ? tendencia.por_sku.flatMap((s, i) => {
                     const c = SKU_LINE_COLORS[i % SKU_LINE_COLORS.length]
-                    return (
-                      <linearGradient key={s.sku} id={`gradSku_${s.sku}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={c} stopOpacity={1}/>
-                        <stop offset="100%" stopColor={c} stopOpacity={0.75}/>
+                    return metricas.map(m => (
+                      <linearGradient key={`${s.sku}_${m}`} id={`gradSku_${s.sku}_${m}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={c} stopOpacity={METRICA_META[m].kind === 'area' ? 0.35 : 1}/>
+                        <stop offset={METRICA_META[m].kind === 'area' ? '60%' : '100%'} stopColor={c} stopOpacity={METRICA_META[m].kind === 'area' ? 0.08 : 0.75}/>
+                        {METRICA_META[m].kind === 'area' && <stop offset="100%" stopColor={c} stopOpacity={0}/>}
                       </linearGradient>
-                    )
+                    ))
                   })
                 : metricas.map(m => {
                     const meta = METRICA_META[m]
@@ -211,7 +214,14 @@ export function TendenciaMensualChart({
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
             <YAxis yAxisId="left"
-              tickFormatter={(v) => metricaSingle === 'unidades' && usePerSku ? fmtUds(Number(v)) : metricaSingle === 'precio' && usePerSku ? fmtPrecio(Number(v), isCop) : fmtValor(Number(v), isCop)}
+              tickFormatter={(v) => {
+                // En per-SKU: si SOLO hay unidades, usar fmtUds; si SOLO precio, usar fmtPrecio; si no, valor
+                if (usePerSku && metricas.length === 1) {
+                  if (metricas[0] === 'unidades') return fmtUds(Number(v))
+                  if (metricas[0] === 'precio')   return fmtPrecio(Number(v), isCop)
+                }
+                return fmtValor(Number(v), isCop)
+              }}
               tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
             <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => fmtUds(Number(v))} tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false} />
             <YAxis yAxisId="hidden" hide />
@@ -220,6 +230,9 @@ export function TendenciaMensualChart({
               contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
               formatter={(v: unknown, name: string, entry: { dataKey?: string | number }) => {
                 const dk = String(entry?.dataKey ?? '')
+                // Formato "sku_<X>_m_<metrica>" o "m_<metrica>"
+                const skuMetric = dk.match(/^sku_.+_m_(valor|unidades|precio)$/)
+                if (skuMetric) return [tipMetric(v, skuMetric[1] as TendMetrica, isCop), name]
                 if (dk.startsWith('m_')) {
                   const m = dk.slice(2) as TendMetrica
                   return [tipMetric(v, m, isCop), name]
@@ -229,22 +242,26 @@ export function TendenciaMensualChart({
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             {usePerSku
-              ? tendencia.por_sku.map((s, i) => {
-                  const name = s.descripcion ? `${s.sku} · ${s.descripcion}` : s.sku
+              ? tendencia.por_sku.flatMap((s, i) => {
+                  const shortName = s.descripcion ? `${s.sku} · ${s.descripcion.slice(0, 40)}` : s.sku
                   const c = SKU_LINE_COLORS[i % SKU_LINE_COLORS.length]
-                  const kind = METRICA_META[metricaSingle].kind
-                  if (kind === 'bar') {
+                  return metricas.map(m => {
+                    const meta = METRICA_META[m]
+                    const suffix = metricas.length > 1 ? ` · ${meta.label}` : ''
+                    const name = shortName + suffix
+                    const dk = `sku_${s.sku}_m_${m}`
+                    if (meta.kind === 'bar') {
+                      return (
+                        <Bar key={dk} yAxisId={axisKey(m)} dataKey={dk} name={name}
+                          fill={`url(#gradSku_${s.sku}_${m})`} radius={[6,6,0,0]} maxBarSize={22} />
+                      )
+                    }
                     return (
-                      <Bar key={s.sku} yAxisId="left" dataKey={`sku_${s.sku}`} name={name}
-                        fill={`url(#gradSku_${s.sku})`} radius={[6,6,0,0]} maxBarSize={22} />
+                      <Area key={dk} yAxisId={axisKey(m)} type="monotone" dataKey={dk} name={name}
+                        stroke={c} strokeWidth={2.5} fill={`url(#gradSku_${s.sku}_${m})`} dot={false}
+                        activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: c }} connectNulls />
                     )
-                  }
-                  return (
-                    <Line key={s.sku} yAxisId="left" type="monotone" dataKey={`sku_${s.sku}`} name={name}
-                      stroke={c} strokeWidth={2.5}
-                      dot={{ r: 3, strokeWidth: 2, fill: '#fff', stroke: c }}
-                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: c }} connectNulls />
-                  )
+                  })
                 })
               : metricas.map(m => {
                   const meta = METRICA_META[m]
@@ -287,25 +304,26 @@ export function TendenciaDiariaChart({
   const isCop = moneda === 'cop'
   const usePerSku = porSku.length > 0
   const metricaSingle: TendMetrica = usePerSku ? (metricas[0] ?? 'valor') : 'valor'
-  const pickMetricSku = (p: TendDailyPoint) => {
-    if (metricaSingle === 'unidades') return p.unidades
+  const pickMetricSkuFor = (p: TendDailyPoint, m: TendMetrica) => {
+    if (m === 'unidades') return p.unidades
     const v = isCop ? p.valor_cop : p.valor_usd
-    if (metricaSingle === 'precio') return p.unidades > 0 ? v / p.unidades : 0
+    if (m === 'precio') return p.unidades > 0 ? v / p.unidades : 0
     return v
   }
 
-  // Data: si per-sku, pivot por dia_str con columnas sku_<X>. Si no, aggregate normal.
+  // Data: per-sku × métrica pivot; sin per-sku, aggregate normal.
   const data = usePerSku
     ? (() => {
-        // Set unión de todos los dia_str de todas las SKUs, ordenados por fecha
-        const set = new Map<string, string>()   // dia_str → fecha (para sort)
+        const set = new Map<string, string>()
         porSku.forEach(s => s.points.forEach(p => set.set(p.dia_str, p.fecha ?? p.dia_str)))
         const dias = [...set.entries()].sort((a, b) => a[1].localeCompare(b[1])).map(([k]) => k)
         return dias.map(d => {
           const row: Record<string, unknown> = { dia_str: d }
           porSku.forEach(s => {
             const pt = s.points.find(p => p.dia_str === d)
-            row[`sku_${s.sku}`] = pt ? pickMetricSku(pt) : 0
+            metricas.forEach(m => {
+              row[`sku_${s.sku}_m_${m}`] = pt ? pickMetricSkuFor(pt, m) : 0
+            })
           })
           return row
         })
@@ -320,9 +338,8 @@ export function TendenciaDiariaChart({
     <>
       {header ?? (
         <p className="text-[10px] text-gray-400 mt-2 mb-1">
-          Ventas diarias · {usePerSku
-            ? `${METRICA_META[metricaSingle].label} · ${porSku.length} SKU${porSku.length > 1 ? 's' : ''}`
-            : metricas.map(m => METRICA_META[m].label).join(' + ')}
+          Ventas diarias · {metricas.map(m => METRICA_META[m].label).join(' + ')}
+          {usePerSku && ` · ${porSku.length} SKU${porSku.length > 1 ? 's' : ''}`}
         </p>
       )}
       <div style={{ height }} className="mt-2">
@@ -330,14 +347,15 @@ export function TendenciaDiariaChart({
           <ComposedChart data={data} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="20%" barGap={2}>
             <defs>
               {usePerSku
-                ? porSku.map((s, i) => {
+                ? porSku.flatMap((s, i) => {
                     const c = SKU_LINE_COLORS[i % SKU_LINE_COLORS.length]
-                    return (
-                      <linearGradient key={s.sku} id={`gradSkuDia_${s.sku}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={c} stopOpacity={1}/>
-                        <stop offset="100%" stopColor={c} stopOpacity={0.75}/>
+                    return metricas.map(m => (
+                      <linearGradient key={`${s.sku}_${m}`} id={`gradSkuDia_${s.sku}_${m}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={c} stopOpacity={METRICA_META[m].kind === 'area' ? 0.35 : 1}/>
+                        <stop offset={METRICA_META[m].kind === 'area' ? '60%' : '100%'} stopColor={c} stopOpacity={METRICA_META[m].kind === 'area' ? 0.08 : 0.75}/>
+                        {METRICA_META[m].kind === 'area' && <stop offset="100%" stopColor={c} stopOpacity={0}/>}
                       </linearGradient>
-                    )
+                    ))
                   })
                 : metricas.map(m => {
                     const meta = METRICA_META[m]
@@ -362,7 +380,13 @@ export function TendenciaDiariaChart({
             <XAxis dataKey="dia_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
               interval={Math.max(0, Math.floor(data.length / 20) - 1)} />
             <YAxis yAxisId="left"
-              tickFormatter={(v) => usePerSku && metricaSingle === 'unidades' ? fmtUds(Number(v)) : usePerSku && metricaSingle === 'precio' ? fmtPrecio(Number(v), isCop) : fmtValor(Number(v), isCop)}
+              tickFormatter={(v) => {
+                if (usePerSku && metricas.length === 1) {
+                  if (metricas[0] === 'unidades') return fmtUds(Number(v))
+                  if (metricas[0] === 'precio')   return fmtPrecio(Number(v), isCop)
+                }
+                return fmtValor(Number(v), isCop)
+              }}
               tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
             <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => fmtUds(Number(v))} tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false} />
             <YAxis yAxisId="hidden" hide />
@@ -371,6 +395,8 @@ export function TendenciaDiariaChart({
               contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
               formatter={(v: unknown, name: string, entry: { dataKey?: string | number }) => {
                 const dk = String(entry?.dataKey ?? '')
+                const skuMetric = dk.match(/^sku_.+_m_(valor|unidades|precio)$/)
+                if (skuMetric) return [tipMetric(v, skuMetric[1] as TendMetrica, isCop), name]
                 if (dk.startsWith('m_')) {
                   const m = dk.slice(2) as TendMetrica
                   return [tipMetric(v, m, isCop), name]
@@ -380,22 +406,26 @@ export function TendenciaDiariaChart({
             />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             {usePerSku
-              ? porSku.map((s, i) => {
-                  const name = s.descripcion ? `${s.sku} · ${s.descripcion}` : s.sku
+              ? porSku.flatMap((s, i) => {
+                  const shortName = s.descripcion ? `${s.sku} · ${s.descripcion.slice(0, 40)}` : s.sku
                   const c = SKU_LINE_COLORS[i % SKU_LINE_COLORS.length]
-                  const kind = METRICA_META[metricaSingle].kind
-                  if (kind === 'bar') {
+                  return metricas.map(m => {
+                    const meta = METRICA_META[m]
+                    const suffix = metricas.length > 1 ? ` · ${meta.label}` : ''
+                    const name = shortName + suffix
+                    const dk = `sku_${s.sku}_m_${m}`
+                    if (meta.kind === 'bar') {
+                      return (
+                        <Bar key={dk} yAxisId={axisKey(m)} dataKey={dk} name={name}
+                          fill={`url(#gradSkuDia_${s.sku}_${m})`} radius={[4,4,0,0]} maxBarSize={12} />
+                      )
+                    }
                     return (
-                      <Bar key={s.sku} yAxisId="left" dataKey={`sku_${s.sku}`} name={name}
-                        fill={`url(#gradSkuDia_${s.sku})`} radius={[4,4,0,0]} maxBarSize={12} />
+                      <Area key={dk} yAxisId={axisKey(m)} type="monotone" dataKey={dk} name={name}
+                        stroke={c} strokeWidth={2} fill={`url(#gradSkuDia_${s.sku}_${m})`} dot={false}
+                        activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: c }} connectNulls />
                     )
-                  }
-                  return (
-                    <Line key={s.sku} yAxisId="left" type="monotone" dataKey={`sku_${s.sku}`} name={name}
-                      stroke={c} strokeWidth={2}
-                      dot={false}
-                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: c }} connectNulls />
-                  )
+                  })
                 })
               : metricas.map(m => {
                   const meta = METRICA_META[m]
