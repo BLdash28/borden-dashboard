@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import {
-  BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  BarChart, Bar, AreaChart, Area, ComposedChart,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, LabelList,
 } from 'recharts'
 import FiltroMulti from '@/components/ui/FiltroMulti'
@@ -315,21 +316,21 @@ export default function SensacionEjecucion() {
                       </div>
                     </div>
 
-                    {/* Chart Sell-Out mensual */}
+                    {/* Chart Sell-Out mensual — valor (bars) + unidades (areas) */}
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
                         <div>
                           <h3 className="text-sm font-bold text-gray-800">Sell-Out Mensual · Walmart CR</h3>
-                          <p className="text-[11px] text-gray-400">2025 vs 2026 · USD</p>
+                          <p className="text-[11px] text-gray-400">Valor (barras) + Unidades (área) · USD</p>
                         </div>
                         <div className="flex items-center gap-3 text-[11px]">
-                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
-                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"/> 2026</span>
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-slate-400"/><span className="w-3 h-2 rounded-sm bg-blue-500"/> Valor</span>
+                          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300 border border-slate-400"/><span className="w-2 h-2 rounded-full bg-emerald-500 border border-emerald-700"/> Unidades</span>
                         </div>
                       </div>
-                      <div className="h-[260px] mt-3">
+                      <div className="h-[280px] mt-3">
                         <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={wmMonthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={4}>
+                          <ComposedChart data={wmMonthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={4}>
                             <defs>
                               <linearGradient id="gradSensaWM25" x1="0" y1="0" x2="0" y2="1">
                                 <stop offset="0%" stopColor="#94a3b8" stopOpacity={1}/>
@@ -339,17 +340,39 @@ export default function SensacionEjecucion() {
                                 <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
                                 <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
                               </linearGradient>
+                              <linearGradient id="gradSensaWMUds25" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.35}/>
+                                <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                              </linearGradient>
+                              <linearGradient id="gradSensaWMUds26" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%"   stopColor="#10b981" stopOpacity={0.35}/>
+                                <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
+                              </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
                             <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
-                            <YAxis tickFormatter={(v: any) => '$' + (Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : Math.round(Number(v)))}
+                            <YAxis yAxisId="val"
+                              tickFormatter={(v: any) => '$' + (Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : Math.round(Number(v)))}
                               tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}/>
-                            <Tooltip formatter={(v: unknown) => [fmt$Full(Number(v)), '']}
+                            <YAxis yAxisId="uds" orientation="right"
+                              tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
+                              tick={{ fontSize: 10, fill: '#059669' }} width={55} axisLine={false} tickLine={false}/>
+                            <Tooltip
+                              formatter={(v: unknown, name: string) => {
+                                if (String(name).startsWith('Und')) return [Math.round(Number(v)).toLocaleString('en-US'), name]
+                                return [fmt$Full(Number(v)), name]
+                              }}
                               cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                               contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
-                            <Bar dataKey="y2025" name="2025" fill="url(#gradSensaWM25)" radius={[8,8,0,0]} maxBarSize={28}/>
-                            <Bar dataKey="y2026" name="2026" fill="url(#gradSensaWM26)" radius={[8,8,0,0]} maxBarSize={28}/>
-                          </BarChart>
+                            <Bar yAxisId="val" dataKey="y2025" name="2025" fill="url(#gradSensaWM25)" radius={[8,8,0,0]} maxBarSize={28}/>
+                            <Bar yAxisId="val" dataKey="y2026" name="2026" fill="url(#gradSensaWM26)" radius={[8,8,0,0]} maxBarSize={28}/>
+                            <Area yAxisId="uds" type="monotone" dataKey="uds2025" name="Und 2025"
+                              stroke="#94a3b8" strokeWidth={2} fill="url(#gradSensaWMUds25)" dot={false}
+                              activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#94a3b8' }} connectNulls/>
+                            <Area yAxisId="uds" type="monotone" dataKey="uds2026" name="Und 2026"
+                              stroke="#10b981" strokeWidth={2.5} fill="url(#gradSensaWMUds26)" dot={false}
+                              activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#10b981' }} connectNulls/>
+                          </ComposedChart>
                         </ResponsiveContainer>
                       </div>
                     </div>

@@ -791,22 +791,22 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           </div>
         )}
 
-        {/* Monthly area chart */}
+        {/* Sell-Out Mensual — valor (bars) + unidades (areas) en composite */}
         {monthly.length > 0 && (
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-            <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
               <div>
                 <h3 className="text-sm font-bold text-gray-800">Sell-Out Mensual — 2025 / 2026</h3>
-                <p className="text-[11px] text-gray-400">Evolución comparativa por año</p>
+                <p className="text-[11px] text-gray-400">Valor (barras) + Unidades (área)</p>
               </div>
               <div className="flex items-center gap-3 text-[11px]">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-slate-400"/><span className="w-3 h-2 rounded-sm bg-amber-500"/> Valor</span>
+                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300 border border-slate-400"/><span className="w-2 h-2 rounded-full bg-blue-400 border border-blue-600"/> Unidades</span>
               </div>
             </div>
-            <div className="h-[240px] mt-3">
+            <div className="h-[280px] mt-3">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={monthly} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
+                <ComposedChart data={monthly} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
                   <defs>
                     <linearGradient id="wmGradSO2026" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
@@ -816,27 +816,46 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                       <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
                       <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
                     </linearGradient>
+                    <linearGradient id="wmGradSOUds25" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.35}/>
+                      <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="wmGradSOUds26" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor="#2563eb" stopOpacity={0.35}/>
+                      <stop offset="100%" stopColor="#2563eb" stopOpacity={0}/>
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="val" tickFormatter={fmt$}
+                    tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="uds" orientation="right"
+                    tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
+                    tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false} />
                   <Tooltip
-                    formatter={(v: any, name: string) => [fmtFull(v), name]}
+                    formatter={(v: any, name: string) => {
+                      if (String(name).startsWith('Und')) return [Math.round(Number(v)).toLocaleString('en-US'), name]
+                      return [fmtFull(v), name]
+                    }}
                     labelFormatter={(label: string) => label}
                     cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                     contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                   />
-                  <Bar dataKey="y2025" name="2025" fill="url(#wmGradSO2025)" radius={[8,8,0,0]} maxBarSize={36}>
-                    <LabelList dataKey="y2025" position="top"
-                      formatter={fmtLblUsd}
+                  <Bar yAxisId="val" dataKey="y2025" name="2025" fill="url(#wmGradSO2025)" radius={[8,8,0,0]} maxBarSize={36}>
+                    <LabelList dataKey="y2025" position="top" formatter={fmtLblUsd}
                       style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
                   </Bar>
-                  <Bar dataKey="y2026" name="2026" fill="url(#wmGradSO2026)" radius={[8,8,0,0]} maxBarSize={36}>
-                    <LabelList dataKey="y2026" position="top"
-                      formatter={fmtLblUsd}
+                  <Bar yAxisId="val" dataKey="y2026" name="2026" fill="url(#wmGradSO2026)" radius={[8,8,0,0]} maxBarSize={36}>
+                    <LabelList dataKey="y2026" position="top" formatter={fmtLblUsd}
                       style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
                   </Bar>
-                </BarChart>
+                  <Area yAxisId="uds" type="monotone" dataKey="u2025" name="Und 2025"
+                    stroke="#94a3b8" strokeWidth={2} fill="url(#wmGradSOUds25)" dot={false}
+                    activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#94a3b8' }} connectNulls />
+                  <Area yAxisId="uds" type="monotone" dataKey="u2026" name="Und 2026"
+                    stroke="#2563eb" strokeWidth={2.5} fill="url(#wmGradSOUds26)" dot={false}
+                    activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }} connectNulls />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           </div>

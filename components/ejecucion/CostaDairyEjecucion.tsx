@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw, AlertTriangle } from 'lucide-react'
 import {
-  LineChart, Line, BarChart, Bar, ComposedChart,
+  LineChart, Line, BarChart, Bar, ComposedChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell,
 } from 'recharts'
 
@@ -243,17 +243,41 @@ function Resumen({ kpi, canales, monthly, zonas }: { kpi: Kpi; canales: Canal[];
 
       {monthly.length > 0 && (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-4">Evolución Mensual {kpi.primera_fecha?.slice(0,4)}</h3>
-          <ResponsiveContainer width="100%" height={260}>
-            <ComposedChart data={monthly}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-              <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
-              <YAxis yAxisId="crc" tickFormatter={fmtCRC} tick={{ fontSize: 10 }} width={60} />
-              <YAxis yAxisId="uds" orientation="right" tickFormatter={fmtNum} tick={{ fontSize: 10 }} width={45} />
-              <Tooltip formatter={(v: any, name: string) => name === 'Unidades' ? fmtNum(v) : fmtCRCFull(v)} />
-              <Legend wrapperStyle={{ fontSize: 11 }}/>
-              <Bar yAxisId="crc" dataKey="crc" name="Ventas CRC" fill="#c8873a" radius={[3,3,0,0]} />
-              <Line yAxisId="uds" type="monotone" dataKey="uds" name="Unidades" stroke="#1d4ed8" strokeWidth={2} dot={{ r: 4 }} />
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h3 className="text-sm font-semibold text-gray-700">Evolución Mensual {kpi.primera_fecha?.slice(0,4)}</h3>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-amber-500"/> Ventas CRC</span>
+              <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500 border border-blue-700"/> Unidades</span>
+            </div>
+          </div>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={monthly} margin={{ top: 10, right: 12, left: 0, bottom: 0 }} barCategoryGap="20%">
+              <defs>
+                <linearGradient id="gradCDCRC" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
+                  <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
+                </linearGradient>
+                <linearGradient id="gradCDUds" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stopColor="#2563eb" stopOpacity={0.35}/>
+                  <stop offset="100%" stopColor="#2563eb" stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="crc" tickFormatter={fmtCRC}
+                tick={{ fontSize: 10, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="uds" orientation="right"
+                tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
+                tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false} />
+              <Tooltip
+                formatter={(v: any, name: string) => name === 'Unidades' ? [fmtNum(v), name] : [fmtCRCFull(v), name]}
+                cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+              />
+              <Bar yAxisId="crc" dataKey="crc" name="Ventas CRC" fill="url(#gradCDCRC)" radius={[6,6,0,0]} maxBarSize={32} />
+              <Area yAxisId="uds" type="monotone" dataKey="uds" name="Unidades"
+                stroke="#2563eb" strokeWidth={2.5} fill="url(#gradCDUds)" dot={false}
+                activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }} connectNulls />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
