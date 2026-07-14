@@ -47,6 +47,15 @@ export default function SensacionEjecucion() {
   const [cadenas,    setCadenas]    = useState<string[]>([])
   const [productos,  setProductos]  = useState<string[]>([])
   const [data,       setData]       = useState<Data | null>(null)
+  const [wmSellout, setWmSellout] = useState<{
+    ytd_2026: number; uds_2026: number
+    ytd_2025: number; uds_2025: number
+    delta_ytd: number | null
+    ultimo_mes: number; ultimo_mes_nombre: string
+    monthly: { mes: number; mes_nombre: string; y2025: number; y2026: number | null; uds2025: number; uds2026: number | null }[]
+    por_producto: { codigo_barras: string; descripcion: string; usd: number; uds: number; pdvs: number }[]
+    top_pdvs: { punto_venta: string; cadena: string; usd: number; uds: number }[]
+  } | null>(null)
   const [opts,       setOpts]       = useState<Opts>({ cadenas: [], productos: [] })
   const [loading,    setLoading]    = useState(false)
 
@@ -64,6 +73,12 @@ export default function SensacionEjecucion() {
       .then(r => r.json()).then(setData)
       .finally(() => setLoading(false))
   }, [cadenas, productos])
+
+  // Walmart CR sellout de helados (fetch única vez — no depende de filtros de Sensación)
+  useEffect(() => {
+    fetch('/api/comercial/sell-in/licenciamiento/walmart-helados')
+      .then(r => r.json()).then(setWmSellout).catch(() => {})
+  }, [])
 
   const isUsd = moneda === 'usd'
   const fmtVal = (v: number) => isUsd ? fmt$(v) : fmtCRC(v)
@@ -261,6 +276,86 @@ export default function SensacionEjecucion() {
                   </div>
                 </div>
               </div>
+
+              {/* ── Sell-Out Walmart CR ── */}
+              {wmSellout && wmSellout.ytd_2026 > 0 && (() => {
+                const wmMonthly = wmSellout.monthly.filter(m => (m.y2025 && m.y2025 > 0) || (m.y2026 && m.y2026 > 0))
+                const ratioSISO = data && data.ytd_2026 > 0 ? (wmSellout.ytd_2026 / data.ytd_2026) * 100 : null
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 pt-2 border-t border-gray-100">
+                      <h2 className="text-sm font-bold text-gray-800 uppercase tracking-widest">Sell-Out · Walmart CR</h2>
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">RETAIL</span>
+                      <span className="text-[10px] text-gray-400">Hasta {wmSellout.ultimo_mes_nombre || '—'} 2026 · USD</span>
+                    </div>
+
+                    {/* KPIs Sell-Out */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl shadow-sm p-4">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Sell-Out YTD 2026 (USD)</p>
+                        <p className="text-xl font-bold text-blue-700">${fmtNum(wmSellout.ytd_2026)}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">Hasta {wmSellout.ultimo_mes_nombre || '—'}</p>
+                      </div>
+                      <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Unidades YTD</p>
+                        <p className="text-xl font-bold text-gray-800">{fmtNum(wmSellout.uds_2026)}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">{wmSellout.uds_2025 > 0 ? `${fmtNum(wmSellout.uds_2025)} en 2025 mismo período` : 'Sin comparativo 2025'}</p>
+                      </div>
+                      <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">vs YTD 2025</p>
+                        <p className={`text-xl font-bold ${wmSellout.delta_ytd === null ? 'text-gray-400' : wmSellout.delta_ytd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {wmSellout.delta_ytd === null ? '—' : `${wmSellout.delta_ytd > 0 ? '+' : ''}${wmSellout.delta_ytd.toFixed(1)}%`}
+                        </p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">${fmtNum(wmSellout.ytd_2025)} en 2025</p>
+                      </div>
+                      <div className="bg-white border border-gray-100 rounded-xl shadow-sm p-4">
+                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Ratio Sell-Out / Sell-In</p>
+                        <p className="text-xl font-bold text-gray-800">{ratioSISO !== null ? `${ratioSISO.toFixed(0)}%` : '—'}</p>
+                        <p className="text-[10px] text-gray-500 mt-0.5">Del Sell-In llega a POS</p>
+                      </div>
+                    </div>
+
+                    {/* Chart Sell-Out mensual */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                      <div className="flex items-center justify-between mb-1">
+                        <div>
+                          <h3 className="text-sm font-bold text-gray-800">Sell-Out Mensual · Walmart CR</h3>
+                          <p className="text-[11px] text-gray-400">2025 vs 2026 · USD</p>
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px]">
+                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
+                          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"/> 2026</span>
+                        </div>
+                      </div>
+                      <div className="h-[260px] mt-3">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={wmMonthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%" barGap={4}>
+                            <defs>
+                              <linearGradient id="gradSensaWM25" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#94a3b8" stopOpacity={1}/>
+                                <stop offset="100%" stopColor="#cbd5e1" stopOpacity={0.85}/>
+                              </linearGradient>
+                              <linearGradient id="gradSensaWM26" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
+                                <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                            <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
+                            <YAxis tickFormatter={(v: any) => '$' + (Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : Math.round(Number(v)))}
+                              tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}/>
+                            <Tooltip formatter={(v: unknown) => [fmt$Full(Number(v)), '']}
+                              cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                              contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
+                            <Bar dataKey="y2025" name="2025" fill="url(#gradSensaWM25)" radius={[8,8,0,0]} maxBarSize={28}/>
+                            <Bar dataKey="y2026" name="2026" fill="url(#gradSensaWM26)" radius={[8,8,0,0]} maxBarSize={28}/>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
             </div>
           )}
 
