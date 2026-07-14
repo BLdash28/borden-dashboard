@@ -1383,60 +1383,82 @@ export default function ExitoEjecucion() {
           ) : (() => {
             const diariaSeries = ventasDiaria.map(r => ({
               dia_str: r.dia_str,
-              valor: isCop ? r.valor_cop : r.valor_usd,
-              precio: r.unidades > 0 ? (isCop ? r.valor_cop : r.valor_usd) / r.unidades : 0,
+              valor:    isCop ? r.valor_cop : r.valor_usd,
+              unidades: r.unidades,
+              precio:   r.unidades > 0 ? (isCop ? r.valor_cop : r.valor_usd) / r.unidades : 0,
             }))
             return (
-              <div className="h-[300px] mt-3">
-                {ventasDiariaLoading ? (
-                  <div className="h-full flex items-center justify-center text-xs text-gray-400">Cargando data diaria…</div>
-                ) : diariaSeries.length === 0 ? (
-                  <div className="h-full flex items-center justify-center text-xs text-gray-400">Sin datos diarios.</div>
-                ) : (
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={diariaSeries} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-                      <defs>
-                        <linearGradient id="gradExitoEvoDia" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.35}/>
-                          <stop offset="60%"  stopColor="#c8873a" stopOpacity={0.08}/>
-                          <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
-                        </linearGradient>
-                        <linearGradient id="gradExitoEvoPrecio" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%"   stopColor="#10b981" stopOpacity={0.35}/>
-                          <stop offset="60%"  stopColor="#10b981" stopOpacity={0.08}/>
-                          <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="dia_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
-                        interval={Math.max(0, Math.floor(diariaSeries.length / 20) - 1)} />
-                      <YAxis yAxisId="left" tickFormatter={yFmtVal}
-                        tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="right" orientation="right" tickFormatter={yFmtVal}
-                        tick={{ fontSize: 10, fill: '#059669' }} width={70} axisLine={false} tickLine={false} />
-                      <Tooltip
-                        formatter={(v: unknown, name: string) => {
-                          if (name === 'Precio / Und') {
-                            const n = Number(v)
-                            const fmt = isCop
-                              ? '$ ' + Math.round(n).toLocaleString('es-CO')
-                              : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                            return [fmt, name]
-                          }
-                          return [tipVal(v), name]
-                        }}
-                        contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                      />
-                      <Area yAxisId="left" type="monotone" dataKey="valor" name={`Venta (${monLabel})`}
-                        stroke="#c8873a" strokeWidth={2.5} fill="url(#gradExitoEvoDia)" dot={false}
-                        activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
-                      <Area yAxisId="right" type="monotone" dataKey="precio" name="Precio / Und"
-                        stroke="#10b981" strokeWidth={2.5} fill="url(#gradExitoEvoPrecio)" dot={false}
-                        activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#10b981' }} connectNulls />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                )}
-              </div>
+              <>
+                <div className="flex items-center gap-3 text-[11px] mt-2 mb-1">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500"/> Unidades</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Venta ({monLabel})</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> Precio / Und</span>
+                </div>
+                <div className="h-[320px] mt-2">
+                  {ventasDiariaLoading ? (
+                    <div className="h-full flex items-center justify-center text-xs text-gray-400">Cargando data diaria…</div>
+                  ) : diariaSeries.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-xs text-gray-400">Sin datos diarios.</div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={diariaSeries} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                        <defs>
+                          <linearGradient id="gradExitoEvoDiaUds" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
+                            <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
+                          </linearGradient>
+                          <linearGradient id="gradExitoEvoDia" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.35}/>
+                            <stop offset="60%"  stopColor="#c8873a" stopOpacity={0.08}/>
+                            <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="gradExitoEvoPrecio" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%"   stopColor="#10b981" stopOpacity={0.35}/>
+                            <stop offset="60%"  stopColor="#10b981" stopOpacity={0.08}/>
+                            <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="dia_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+                          interval={Math.max(0, Math.floor(diariaSeries.length / 20) - 1)} />
+                        {/* Eje izq: unidades (bars) — escala principal */}
+                        <YAxis yAxisId="uds" orientation="left"
+                          tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
+                          tick={{ fontSize: 10, fill: '#1e40af' }} width={55} axisLine={false} tickLine={false} />
+                        {/* Eje der 1: valor (area amber) */}
+                        <YAxis yAxisId="valor" orientation="right"
+                          tickFormatter={yFmtVal}
+                          tick={{ fontSize: 10, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+                        {/* Eje der 2: precio Und (area verde) — oculto para no saturar */}
+                        <YAxis yAxisId="precio" orientation="right" hide />
+                        <Tooltip
+                          formatter={(v: unknown, name: string) => {
+                            if (name === 'Precio / Und') {
+                              const n = Number(v)
+                              const fmt = isCop
+                                ? '$ ' + Math.round(n).toLocaleString('es-CO')
+                                : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                              return [fmt, name]
+                            }
+                            if (name === 'Unidades') return [fmtNum(Number(v)), name]
+                            return [tipVal(v), name]
+                          }}
+                          cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                        />
+                        <Bar yAxisId="uds" dataKey="unidades" name="Unidades"
+                          fill="url(#gradExitoEvoDiaUds)" radius={[4,4,0,0]} maxBarSize={16} />
+                        <Area yAxisId="valor" type="monotone" dataKey="valor" name={`Venta (${monLabel})`}
+                          stroke="#c8873a" strokeWidth={2.5} fill="url(#gradExitoEvoDia)" dot={false}
+                          activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
+                        <Area yAxisId="precio" type="monotone" dataKey="precio" name="Precio / Und"
+                          stroke="#10b981" strokeWidth={2.5} fill="url(#gradExitoEvoPrecio)" dot={false}
+                          activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#10b981' }} connectNulls />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </>
             )
           })()}
         </div>

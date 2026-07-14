@@ -85,9 +85,32 @@ type WalmartHelados = {
   top_pdvs: { punto_venta: string; cadena: string; usd: number; uds: number }[]
 }
 
+const STORAGE_KEY = 'bl_licenciamiento_v1'
+
 export default function SellInLicenciamiento() {
-  const [tipo, setTipo] = useState<'helados'|'colombia'>('colombia')
-  const [moneda, setMoneda] = useState<'cop'|'usd'>('cop')
+  // Persistir tipo/moneda seleccionados (localStorage). Lazy init lee el valor
+  // ANTES del primer render — así el fetch de la sección correcta arranca sin
+  // tener que esperar un useEffect que restaure el estado.
+  const [tipo, setTipo] = useState<'helados'|'colombia'>(() => {
+    if (typeof window === 'undefined') return 'colombia'
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      const s = raw ? JSON.parse(raw) : null
+      return s?.tipo === 'helados' ? 'helados' : 'colombia'
+    } catch { return 'colombia' }
+  })
+  const [moneda, setMoneda] = useState<'cop'|'usd'>(() => {
+    if (typeof window === 'undefined') return 'cop'
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      const s = raw ? JSON.parse(raw) : null
+      return s?.moneda === 'usd' ? 'usd' : 'cop'
+    } catch { return 'cop' }
+  })
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ tipo, moneda })) } catch {}
+  }, [tipo, moneda])
   const [monedaHel, setMonedaHel] = useState<'usd'|'crc'>('usd')
   const [data, setData] = useState<SellInData | null>(null)
   const [helados, setHelados] = useState<SensacionData | null>(null)
