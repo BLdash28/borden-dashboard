@@ -81,7 +81,7 @@ await c.query(`
     codigo_barras     TEXT,
     descripcion       TEXT,
     categoria         TEXT DEFAULT 'Helados',
-    subcategoria      TEXT DEFAULT 'Helados 320gr',
+    subcategoria      TEXT DEFAULT 'Helados',
     venta_con_iva_crc NUMERIC(14,2) DEFAULT 0,
     venta_neta_crc    NUMERIC(14,2) DEFAULT 0,
     venta_neta_usd    NUMERIC(14,4) DEFAULT 0,

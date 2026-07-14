@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import FiltroMulti from '@/components/ui/FiltroMulti'
+import { useTableSort, SortableTh } from '@/components/ui/table-sort'
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid,
@@ -429,24 +430,7 @@ export default function TendenciasPage() {
               </div>
               <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
                 <h3 className="text-sm font-semibold text-gray-700 mb-4">Detalle Categorías</h3>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-gray-100 text-gray-400 uppercase text-[11px] tracking-wider">
-                      <th className="text-left py-2 pr-3">Categoría</th>
-                      <th className="text-right py-2 px-2">Valor USD</th>
-                      <th className="text-right py-2 pl-2">Unidades</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.por_categoria.map((r: any, i: number) => (
-                      <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
-                        <td className="py-2 pr-3 font-medium text-gray-700">{r.categoria}</td>
-                        <td className="text-right py-2 px-2 font-mono text-gray-800 font-semibold">{fmtFull(r.valor)}</td>
-                        <td className="text-right py-2 pl-2 text-gray-500">{fmtNum(r.unidades)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <CategoriasDetalleTable rows={data.por_categoria} />
               </div>
             </div>
           )}
@@ -456,52 +440,105 @@ export default function TendenciasPage() {
             <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 md:p-5">
               <h3 className="text-sm font-semibold text-gray-700 mb-1">Top 10 SKUs · 2026 vs 2025</h3>
               <p className="text-xs text-gray-400 mb-4">Agrupado por código de barras</p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs min-w-[680px]">
-                  <thead>
-                    <tr className="border-b border-gray-100 text-gray-400 uppercase text-[11px] tracking-wider">
-                      <th className="text-left py-2 pr-2">#</th>
-                      <th className="text-left py-2 pr-3">Descripción</th>
-                      <th className="text-left py-2 pr-3">Categoría</th>
-                      <th className="text-right py-2 px-2">2025 USD</th>
-                      <th className="text-right py-2 px-2">2026 USD</th>
-                      <th className="text-right py-2 px-2">Var $</th>
-                      <th className="text-right py-2 px-2">Var %</th>
-                      <th className="text-right py-2 pl-2">Uds 2026</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.top_skus.map((r: any, i: number) => {
-                      const vp: number | null = r.var_pct
-                      const color = vp == null ? 'text-gray-400' : vp >= 0 ? 'text-emerald-600' : 'text-red-500'
-                      const varAbs = r.valor_2026 - r.valor_2025
-                      return (
-                        <tr key={i} className="border-b border-gray-50 hover:bg-amber-50/30 transition-colors">
-                          <td className="py-2.5 pr-2 text-gray-300 font-mono">{String(i+1).padStart(2,'0')}</td>
-                          <td className="py-2.5 pr-3 font-medium text-gray-800 max-w-[200px] truncate">{r.descripcion}</td>
-                          <td className="py-2.5 pr-3 text-gray-500">{r.categoria}</td>
-                          <td className="text-right py-2.5 px-2 font-mono text-gray-500">{fmtUsd(r.valor_2025)}</td>
-                          <td className="text-right py-2.5 px-2 font-mono font-semibold text-gray-800">{fmtUsd(r.valor_2026)}</td>
-                          <td className={`text-right py-2.5 px-2 font-mono font-semibold ${color}`}>
-                            {varAbs >= 0 ? '+' : ''}{fmtUsd(varAbs)}
-                          </td>
-                          <td className={`text-right py-2.5 px-2 font-semibold ${color}`}>
-                            <span className="flex items-center justify-end gap-0.5">
-                              {vp != null && (vp >= 0 ? <TrendingUp size={10}/> : <TrendingDown size={10}/>)}
-                              {fmtPct(vp)}
-                            </span>
-                          </td>
-                          <td className="text-right py-2.5 pl-2 text-gray-500">{fmtNum(r.uds_2026)}</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <TopSkusTendenciasTable rows={data.top_skus} />
             </div>
           )}
         </>
       )}
+    </div>
+  )
+}
+
+/* ═════ Sub-componente: Detalle Categorías (ordenable) ═════ */
+function CategoriasDetalleTable({ rows }: { rows: any[] }) {
+  type Col = 'categoria' | 'valor' | 'unidades'
+  const { toggleSort, sorted, SortArrow } = useTableSort<any, Col>(
+    rows, 'valor', 'desc',
+    {
+      categoria: (a, b) => (a.categoria ?? '').localeCompare(b.categoria ?? ''),
+      valor:     (a, b) => (a.valor ?? 0) - (b.valor ?? 0),
+      unidades:  (a, b) => (a.unidades ?? 0) - (b.unidades ?? 0),
+    },
+  )
+  return (
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="border-b border-gray-100 text-gray-400 uppercase text-[11px] tracking-wider">
+          <SortableTh onClick={() => toggleSort('categoria')} arrow={<SortArrow col="categoria"/>} className="py-2 pr-3">Categoría</SortableTh>
+          <SortableTh onClick={() => toggleSort('valor')} arrow={<SortArrow col="valor"/>} align="right" className="py-2 px-2">Valor USD</SortableTh>
+          <SortableTh onClick={() => toggleSort('unidades')} arrow={<SortArrow col="unidades"/>} align="right" className="py-2 pl-2">Unidades</SortableTh>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((r: any, i: number) => (
+          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
+            <td className="py-2 pr-3 font-medium text-gray-700">{r.categoria}</td>
+            <td className="text-right py-2 px-2 font-mono text-gray-800 font-semibold">{fmtFull(r.valor)}</td>
+            <td className="text-right py-2 pl-2 text-gray-500">{fmtNum(r.unidades)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+}
+
+/* ═════ Sub-componente: Top SKUs Tendencias (ordenable) ═════ */
+function TopSkusTendenciasTable({ rows }: { rows: any[] }) {
+  type Col = 'descripcion' | 'categoria' | 'valor_2025' | 'valor_2026' | 'var_abs' | 'var_pct' | 'uds_2026'
+  const { toggleSort, sorted, SortArrow } = useTableSort<any, Col>(
+    rows, 'valor_2026', 'desc',
+    {
+      descripcion: (a, b) => (a.descripcion ?? '').localeCompare(b.descripcion ?? ''),
+      categoria:   (a, b) => (a.categoria ?? '').localeCompare(b.categoria ?? ''),
+      valor_2025:  (a, b) => (a.valor_2025 ?? 0) - (b.valor_2025 ?? 0),
+      valor_2026:  (a, b) => (a.valor_2026 ?? 0) - (b.valor_2026 ?? 0),
+      var_abs:     (a, b) => ((a.valor_2026 ?? 0) - (a.valor_2025 ?? 0)) - ((b.valor_2026 ?? 0) - (b.valor_2025 ?? 0)),
+      var_pct:     (a, b) => (a.var_pct ?? -Infinity) - (b.var_pct ?? -Infinity),
+      uds_2026:    (a, b) => (a.uds_2026 ?? 0) - (b.uds_2026 ?? 0),
+    },
+  )
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs min-w-[680px]">
+        <thead>
+          <tr className="border-b border-gray-100 text-gray-400 uppercase text-[11px] tracking-wider">
+            <th className="text-left py-2 pr-2">#</th>
+            <SortableTh onClick={() => toggleSort('descripcion')} arrow={<SortArrow col="descripcion"/>} className="py-2 pr-3">Descripción</SortableTh>
+            <SortableTh onClick={() => toggleSort('categoria')} arrow={<SortArrow col="categoria"/>} className="py-2 pr-3">Categoría</SortableTh>
+            <SortableTh onClick={() => toggleSort('valor_2025')} arrow={<SortArrow col="valor_2025"/>} align="right" className="py-2 px-2">2025 USD</SortableTh>
+            <SortableTh onClick={() => toggleSort('valor_2026')} arrow={<SortArrow col="valor_2026"/>} align="right" className="py-2 px-2">2026 USD</SortableTh>
+            <SortableTh onClick={() => toggleSort('var_abs')} arrow={<SortArrow col="var_abs"/>} align="right" className="py-2 px-2">Var $</SortableTh>
+            <SortableTh onClick={() => toggleSort('var_pct')} arrow={<SortArrow col="var_pct"/>} align="right" className="py-2 px-2">Var %</SortableTh>
+            <SortableTh onClick={() => toggleSort('uds_2026')} arrow={<SortArrow col="uds_2026"/>} align="right" className="py-2 pl-2">Uds 2026</SortableTh>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((r: any, i: number) => {
+            const vp: number | null = r.var_pct
+            const color = vp == null ? 'text-gray-400' : vp >= 0 ? 'text-emerald-600' : 'text-red-500'
+            const varAbs = r.valor_2026 - r.valor_2025
+            return (
+              <tr key={i} className="border-b border-gray-50 hover:bg-amber-50/30 transition-colors">
+                <td className="py-2.5 pr-2 text-gray-300 font-mono">{String(i+1).padStart(2,'0')}</td>
+                <td className="py-2.5 pr-3 font-medium text-gray-800 max-w-[200px] truncate">{r.descripcion}</td>
+                <td className="py-2.5 pr-3 text-gray-500">{r.categoria}</td>
+                <td className="text-right py-2.5 px-2 font-mono text-gray-500">{fmtUsd(r.valor_2025)}</td>
+                <td className="text-right py-2.5 px-2 font-mono font-semibold text-gray-800">{fmtUsd(r.valor_2026)}</td>
+                <td className={`text-right py-2.5 px-2 font-mono font-semibold ${color}`}>
+                  {varAbs >= 0 ? '+' : ''}{fmtUsd(varAbs)}
+                </td>
+                <td className={`text-right py-2.5 px-2 font-semibold ${color}`}>
+                  <span className="flex items-center justify-end gap-0.5">
+                    {vp != null && (vp >= 0 ? <TrendingUp size={10}/> : <TrendingDown size={10}/>)}
+                    {fmtPct(vp)}
+                  </span>
+                </td>
+                <td className="text-right py-2.5 pl-2 text-gray-500">{fmtNum(r.uds_2026)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
     </div>
   )
 }

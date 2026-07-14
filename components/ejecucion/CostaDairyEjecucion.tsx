@@ -5,6 +5,7 @@ import {
   LineChart, Line, BarChart, Bar, ComposedChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell,
 } from 'recharts'
+import { useTableSort, SortableTh } from '@/components/ui/table-sort'
 
 const SECTIONS = [
   { key: 'resumen',     label: 'Resumen'         },
@@ -377,6 +378,18 @@ function Canales({ canales, subcanales, totalCrc }: { canales: Canal[]; subcanal
 }
 
 function Clientes({ clientes }: { clientes: Cliente[] }) {
+  type Col = 'nom_cliente' | 'canal' | 'zona' | 'crc' | 'uds' | 'dias_compra'
+  const { toggleSort, sorted, SortArrow } = useTableSort<Cliente, Col>(
+    clientes, 'crc', 'desc',
+    {
+      nom_cliente: (a, b) => (a.nom_cliente ?? '').localeCompare(b.nom_cliente ?? ''),
+      canal:       (a, b) => (a.canal ?? '').localeCompare(b.canal ?? ''),
+      zona:        (a, b) => (a.zona ?? '').localeCompare(b.zona ?? ''),
+      crc:         (a, b) => (a.crc ?? 0) - (b.crc ?? 0),
+      uds:         (a, b) => (a.uds ?? 0) - (b.uds ?? 0),
+      dias_compra: (a, b) => (a.dias_compra ?? 0) - (b.dias_compra ?? 0),
+    },
+  )
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-50">
@@ -388,16 +401,16 @@ function Clientes({ clientes }: { clientes: Cliente[] }) {
           <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
             <tr>
               <th className="px-3 py-2 text-left">#</th>
-              <th className="px-3 py-2 text-left">Cliente</th>
-              <th className="px-3 py-2 text-left">Canal</th>
-              <th className="px-3 py-2 text-left">Zona</th>
-              <th className="px-3 py-2 text-right">Ventas CRC</th>
-              <th className="px-3 py-2 text-right">Unidades</th>
-              <th className="px-3 py-2 text-right">Días compra</th>
+              <SortableTh onClick={() => toggleSort('nom_cliente')} arrow={<SortArrow col="nom_cliente"/>} className="px-3 py-2">Cliente</SortableTh>
+              <SortableTh onClick={() => toggleSort('canal')} arrow={<SortArrow col="canal"/>} className="px-3 py-2">Canal</SortableTh>
+              <SortableTh onClick={() => toggleSort('zona')} arrow={<SortArrow col="zona"/>} className="px-3 py-2">Zona</SortableTh>
+              <SortableTh onClick={() => toggleSort('crc')} arrow={<SortArrow col="crc"/>} align="right" className="px-3 py-2">Ventas CRC</SortableTh>
+              <SortableTh onClick={() => toggleSort('uds')} arrow={<SortArrow col="uds"/>} align="right" className="px-3 py-2">Unidades</SortableTh>
+              <SortableTh onClick={() => toggleSort('dias_compra')} arrow={<SortArrow col="dias_compra"/>} align="right" className="px-3 py-2">Días compra</SortableTh>
             </tr>
           </thead>
           <tbody>
-            {clientes.map((c, i) => (
+            {sorted.map((c, i) => (
               <tr key={c.cod_cliente} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                 <td className="px-3 py-2 text-gray-400">{i + 1}</td>
                 <td className="px-3 py-2 text-gray-800">
@@ -424,6 +437,22 @@ function Clientes({ clientes }: { clientes: Cliente[] }) {
 }
 
 function SkusTabla({ skus, totalCrc }: { skus: Sku[]; totalCrc: number }) {
+  type Col = 'cod_articulo' | 'sku' | 'des_articulo' | 'categoria' | 'crc' | 'uds' | 'bultos' | 'share_pct' | 'cum_share' | 'notas_credito'
+  const { toggleSort, sorted, SortArrow } = useTableSort<Sku, Col>(
+    skus, 'crc', 'desc',
+    {
+      cod_articulo:  (a, b) => (a.cod_articulo ?? '').localeCompare(b.cod_articulo ?? ''),
+      sku:           (a, b) => (a.sku ?? '').localeCompare(b.sku ?? ''),
+      des_articulo:  (a, b) => (a.des_articulo ?? '').localeCompare(b.des_articulo ?? ''),
+      categoria:     (a, b) => (a.categoria ?? '').localeCompare(b.categoria ?? ''),
+      crc:           (a, b) => (a.crc ?? 0) - (b.crc ?? 0),
+      uds:           (a, b) => (a.uds ?? 0) - (b.uds ?? 0),
+      bultos:        (a, b) => (a.bultos ?? 0) - (b.bultos ?? 0),
+      share_pct:     (a, b) => (a.share_pct ?? 0) - (b.share_pct ?? 0),
+      cum_share:     (a, b) => (a.cum_share ?? 0) - (b.cum_share ?? 0),
+      notas_credito: (a, b) => (a.notas_credito ?? 0) - (b.notas_credito ?? 0),
+    },
+  )
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <div className="px-5 py-4 border-b border-gray-50">
@@ -434,20 +463,20 @@ function SkusTabla({ skus, totalCrc }: { skus: Sku[]; totalCrc: number }) {
         <table className="w-full text-xs">
           <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
             <tr>
-              <th className="px-3 py-2 text-left">Cód. CD</th>
-              <th className="px-3 py-2 text-left">SKU Borden</th>
-              <th className="px-3 py-2 text-left">Descripción</th>
-              <th className="px-3 py-2 text-left">Categoría</th>
-              <th className="px-3 py-2 text-right">Ventas CRC</th>
-              <th className="px-3 py-2 text-right">Unidades</th>
-              <th className="px-3 py-2 text-right">Bultos</th>
-              <th className="px-3 py-2 text-right">Share</th>
-              <th className="px-3 py-2 text-right">Acum.</th>
-              <th className="px-3 py-2 text-right">N/C</th>
+              <SortableTh onClick={() => toggleSort('cod_articulo')} arrow={<SortArrow col="cod_articulo"/>} className="px-3 py-2">Cód. CD</SortableTh>
+              <SortableTh onClick={() => toggleSort('sku')} arrow={<SortArrow col="sku"/>} className="px-3 py-2">SKU Borden</SortableTh>
+              <SortableTh onClick={() => toggleSort('des_articulo')} arrow={<SortArrow col="des_articulo"/>} className="px-3 py-2">Descripción</SortableTh>
+              <SortableTh onClick={() => toggleSort('categoria')} arrow={<SortArrow col="categoria"/>} className="px-3 py-2">Categoría</SortableTh>
+              <SortableTh onClick={() => toggleSort('crc')} arrow={<SortArrow col="crc"/>} align="right" className="px-3 py-2">Ventas CRC</SortableTh>
+              <SortableTh onClick={() => toggleSort('uds')} arrow={<SortArrow col="uds"/>} align="right" className="px-3 py-2">Unidades</SortableTh>
+              <SortableTh onClick={() => toggleSort('bultos')} arrow={<SortArrow col="bultos"/>} align="right" className="px-3 py-2">Bultos</SortableTh>
+              <SortableTh onClick={() => toggleSort('share_pct')} arrow={<SortArrow col="share_pct"/>} align="right" className="px-3 py-2">Share</SortableTh>
+              <SortableTh onClick={() => toggleSort('cum_share')} arrow={<SortArrow col="cum_share"/>} align="right" className="px-3 py-2">Acum.</SortableTh>
+              <SortableTh onClick={() => toggleSort('notas_credito')} arrow={<SortArrow col="notas_credito"/>} align="right" className="px-3 py-2">N/C</SortableTh>
             </tr>
           </thead>
           <tbody>
-            {skus.map((s, i) => (
+            {sorted.map((s, i) => (
               <tr key={s.cod_articulo} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} ${s.crc < 0 ? 'opacity-60' : ''}`}>
                 <td className="px-3 py-2 font-mono text-[11px] text-gray-700">{s.cod_articulo}</td>
                 <td className="px-3 py-2 font-mono text-[11px] text-amber-700">{s.sku ?? <span className="text-gray-300">—</span>}</td>

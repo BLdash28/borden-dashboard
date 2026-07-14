@@ -9,6 +9,7 @@ import {
   ResponsiveContainer, Legend, Cell, ReferenceLine,
 } from 'recharts'
 import InnovacionesSection from './InnovacionesSection'
+import { useTableSort, SortableTh } from '@/components/ui/table-sort'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -2109,43 +2110,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           ) : topSkus.length === 0 ? (
             <p className="text-center text-gray-300 py-8 text-sm">Sin datos</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 text-gray-400 uppercase tracking-widest text-[10px]">
-                    <th className="text-center px-3 py-2.5 w-8">#</th>
-                    <th className="text-left px-4 py-2.5">Descripción</th>
-                    <th className="text-left px-3 py-2.5">Cat.</th>
-                    <th className="text-right px-4 py-2.5">Valor 2026</th>
-                    <th className="text-right px-4 py-2.5">Unidades</th>
-                    <th className="text-right px-4 py-2.5">Share</th>
-                    <th className="text-right px-4 py-2.5">vs 2025</th>
-                    <th className="text-right px-4 py-2.5">Acum.</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {topSkus.map((r, i) => (
-                    <tr key={i} className={`hover:bg-gray-50/60 ${r.cum_share > 95 ? 'opacity-50' : r.cum_share > 80 ? 'opacity-75' : ''}`}>
-                      <td className="px-3 py-2.5 text-center text-gray-400 font-mono">{i + 1}</td>
-                      <td className="px-4 py-2.5 font-medium text-gray-700"><span className="text-gray-400 mr-1.5 font-normal">{r.sku}</span>{r.descripcion}</td>
-                      <td className="px-3 py-2.5 text-gray-400">{r.categoria}</td>
-                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-700">{fmtFull(r.valor_2026)}</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-500">{r.uni_2026.toLocaleString('en-US')}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
-                            <div className="h-1.5 rounded-full bg-amber-400" style={{ width: `${r.share_pct}%` }} />
-                          </div>
-                          <span className="font-mono text-gray-500">{r.share_pct.toFixed(1)}%</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-right">{r.delta !== null ? <Delta d={r.delta} /> : <span className="text-gray-300">—</span>}</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-400">{r.cum_share.toFixed(1)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <TopSkusDetailTable rows={topSkus} fmtFull={fmtFull} />
           )}
         </div>
       </div>
@@ -2287,6 +2252,62 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         {renderSection()}
       </div>
 
+    </div>
+  )
+}
+
+/* ═════ Sub-componente: Detalle Top SKUs Pareto (ordenable) ═════ */
+function TopSkusDetailTable({ rows, fmtFull }: { rows: any[]; fmtFull: (v: number) => string }) {
+  type Col = 'descripcion' | 'categoria' | 'valor_2026' | 'uni_2026' | 'share_pct' | 'delta' | 'cum_share'
+  const { toggleSort, sorted, SortArrow } = useTableSort<any, Col>(
+    rows, 'valor_2026', 'desc',
+    {
+      descripcion: (a, b) => (a.descripcion ?? '').localeCompare(b.descripcion ?? ''),
+      categoria:   (a, b) => (a.categoria ?? '').localeCompare(b.categoria ?? ''),
+      valor_2026:  (a, b) => (a.valor_2026 ?? 0) - (b.valor_2026 ?? 0),
+      uni_2026:    (a, b) => (a.uni_2026 ?? 0) - (b.uni_2026 ?? 0),
+      share_pct:   (a, b) => (a.share_pct ?? 0) - (b.share_pct ?? 0),
+      delta:       (a, b) => (a.delta ?? -Infinity) - (b.delta ?? -Infinity),
+      cum_share:   (a, b) => (a.cum_share ?? 0) - (b.cum_share ?? 0),
+    },
+  )
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-50 text-gray-400 uppercase tracking-widest text-[10px]">
+            <th className="text-center px-3 py-2.5 w-8">#</th>
+            <SortableTh onClick={() => toggleSort('descripcion')} arrow={<SortArrow col="descripcion"/>} className="px-4 py-2.5">Descripción</SortableTh>
+            <SortableTh onClick={() => toggleSort('categoria')} arrow={<SortArrow col="categoria"/>} className="px-3 py-2.5">Cat.</SortableTh>
+            <SortableTh onClick={() => toggleSort('valor_2026')} arrow={<SortArrow col="valor_2026"/>} align="right" className="px-4 py-2.5">Valor 2026</SortableTh>
+            <SortableTh onClick={() => toggleSort('uni_2026')} arrow={<SortArrow col="uni_2026"/>} align="right" className="px-4 py-2.5">Unidades</SortableTh>
+            <SortableTh onClick={() => toggleSort('share_pct')} arrow={<SortArrow col="share_pct"/>} align="right" className="px-4 py-2.5">Share</SortableTh>
+            <SortableTh onClick={() => toggleSort('delta')} arrow={<SortArrow col="delta"/>} align="right" className="px-4 py-2.5">vs 2025</SortableTh>
+            <SortableTh onClick={() => toggleSort('cum_share')} arrow={<SortArrow col="cum_share"/>} align="right" className="px-4 py-2.5">Acum.</SortableTh>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {sorted.map((r, i) => (
+            <tr key={i} className={`hover:bg-gray-50/60 ${r.cum_share > 95 ? 'opacity-50' : r.cum_share > 80 ? 'opacity-75' : ''}`}>
+              <td className="px-3 py-2.5 text-center text-gray-400 font-mono">{i + 1}</td>
+              <td className="px-4 py-2.5 font-medium text-gray-700"><span className="text-gray-400 mr-1.5 font-normal">{r.sku}</span>{r.descripcion}</td>
+              <td className="px-3 py-2.5 text-gray-400">{r.categoria}</td>
+              <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-700">{fmtFull(r.valor_2026)}</td>
+              <td className="px-4 py-2.5 text-right font-mono text-gray-500">{r.uni_2026.toLocaleString('en-US')}</td>
+              <td className="px-4 py-2.5 text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
+                    <div className="h-1.5 rounded-full bg-amber-400" style={{ width: `${r.share_pct}%` }} />
+                  </div>
+                  <span className="font-mono text-gray-500">{r.share_pct.toFixed(1)}%</span>
+                </div>
+              </td>
+              <td className="px-4 py-2.5 text-right">{r.delta !== null ? <Delta d={r.delta} /> : <span className="text-gray-300">—</span>}</td>
+              <td className="px-4 py-2.5 text-right font-mono text-gray-400">{r.cum_share.toFixed(1)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

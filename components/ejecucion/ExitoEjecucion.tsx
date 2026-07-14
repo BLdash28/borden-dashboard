@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { RefreshCw, TrendingUp, TrendingDown, Minus, Download, SlidersHorizontal, X } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
+import { useTableSort, SortableTh } from '@/components/ui/table-sort'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
   PieChart, Pie,
@@ -344,6 +345,28 @@ export default function ExitoEjecucion() {
   const [moneda,       setMoneda]       = useState<'cop' | 'usd'>('cop')
   const [topN,         setTopN]         = useState(13)
   const [loading,      setLoading]      = useState<Record<string, boolean>>({})
+  // Comparativo Pareto: dos SKUs a comparar lado a lado
+  const [compSku1, setCompSku1] = useState<string>('')
+  const [compSku2, setCompSku2] = useState<string>('')
+  const [compVista, setCompVista] = useState<'mensual' | 'diaria'>('mensual')
+  type DailyRow = { fecha: string; dia_str: string; mes: number; dia: number; valor_usd: number; valor_cop: number; unidades: number }
+  const [compDaily1, setCompDaily1] = useState<DailyRow[]>([])
+  const [compDaily2, setCompDaily2] = useState<DailyRow[]>([])
+  const [compDailyLoading, setCompDailyLoading] = useState(false)
+
+  // Ventas mensuales: nueva tendencia continua (jun-25 → jul-26) + toggle metrica
+  type TendPoint = { ano: number; mes: number; mes_str: string; valor_usd: number; valor_cop: number; unidades: number; precio_usd: number; precio_cop: number }
+  type TendData = { desde: string | null; hasta: string | null; labels: { ano: number; mes: number; mes_str: string }[]; total: TendPoint[]; por_sku: { sku: string; descripcion: string; points: TendPoint[] }[] }
+  const [tendencia, setTendencia] = useState<TendData | null>(null)
+  type TendMetrica = 'valor' | 'unidades' | 'precio'
+  const [tendMetricas, setTendMetricas] = useState<TendMetrica[]>(['valor'])
+  const toggleTendMetrica = (m: TendMetrica) => {
+    setTendMetricas(prev => {
+      const has = prev.includes(m)
+      if (has && prev.length === 1) return prev // no dejar array vacío
+      return has ? prev.filter(x => x !== m) : [...prev, m]
+    })
+  }
 
   // Data
   const [kpis,    setKpis]    = useState<KpisData | null>(null)
@@ -363,8 +386,6 @@ export default function ExitoEjecucion() {
   const [ventasDiaria,  setVentasDiaria]  = useState<{ dia_str: string; mes: number; dia: number; valor_usd: number; valor_cop: number; unidades: number }[]>([])
   const [ventasDiariaLoading, setVentasDiariaLoading] = useState(false)
   // Sort para tabla Top SKUs Inventarios
-  const [invSortCol, setInvSortCol] = useState<'pdvs' | 'quiebres' | 'uds'>('uds')
-  const [invSortDir, setInvSortDir] = useState<'asc' | 'desc'>('desc')
   const [calidadDetalle, setCalidadDetalle] = useState<{
     sku: string
     descripcion: string | null
@@ -499,7 +520,7 @@ export default function ExitoEjecucion() {
         .finally(() => setL('pareto', false))
     }
 
-    if ((section === 'seguimiento' || section === 'evolucion') && !loadedRef.current.seg) {
+    if ((section === 'seguimiento' || section === 'evolucion' || section === 'pareto') && !loadedRef.current.seg) {
       loadedRef.current.seg = true
       setL('seg', true)
       const qsg = buildFilterQS({ ano: '2026' })
@@ -513,14 +534,16 @@ export default function ExitoEjecucion() {
         .then(r => r.json()).then(setDevTabla).catch(() => {})
     }
 
-    // Fetch diaria — cuando el usuario elige vista=diaria en Ventas mensuales
-    if (section === 'evolucion' && ventasVista === 'diaria' && ventasDiaria.length === 0 && !ventasDiariaLoading) {
-      setVentasDiariaLoading(true)
-      fetch(`/api/comercial/ejecucion/co/exito/daily?${qs}`)
+    // (Los fetchs de daily y compDaily se movieron a effects dedicados abajo
+    //  para que cambiar el toggle Mensual/Diaria no re-dispare kpis/pareto/etc.)
+
+    // Tendencia mensual continua (jun-25 → jul-26) — sección Evolución Ventas
+    if (section === 'evolucion' && !loadedRef.current.tendencia) {
+      loadedRef.current.tendencia = true
+      fetch(`/api/comercial/ejecucion/co/exito/tendencia-mensual?${qs}`)
         .then(r => r.json())
-        .then(d => setVentasDiaria(d.rows ?? []))
-        .catch(() => setVentasDiaria([]))
-        .finally(() => setVentasDiariaLoading(false))
+        .then(setTendencia)
+        .catch(() => {})
     }
 
 
@@ -576,10 +599,51 @@ export default function ExitoEjecucion() {
         .then(r => r.json()).then(setCalidad)
         .finally(() => setL('calidad', false))
     }
-  }, [section, div, filterKey, topN, ventasVista]) // eslint-disable-line
+  }, [section, div, filterKey, topN]) // eslint-disable-line
 
   // Reset diaria al cambiar filtros globales para forzar refetch
-  useEffect(() => { setVentasDiaria([]) }, [filterKey])
+  useEffect(() => { setVentasDiaria([]); setTendencia(null); loadedRef.current.tendencia = false }, [filterKey])
+
+  // Reset diaria comparativo al cambiar SKUs o filtros
+  useEffect(() => { setCompDaily1([]); setCompDaily2([]) }, [compSku1, compSku2, filterKey])
+
+  // Effect dedicado: fetch de la serie diaria (Ventas mensuales) cuando el toggle
+  // cambia a "diaria" — aislado del resto para no re-disparar kpis/pareto/etc.
+  useEffect(() => {
+    if (section !== 'evolucion') return
+    if (ventasVista !== 'diaria') return
+    if (ventasDiaria.length > 0 || ventasDiariaLoading) return
+    setVentasDiariaLoading(true)
+    const extraCat: Record<string, string> = currentCat ? { categoria: currentCat } : {}
+    const qs = buildFilterQS(extraCat)
+    fetch(`/api/comercial/ejecucion/co/exito/daily?${qs}`)
+      .then(r => r.json())
+      .then(d => setVentasDiaria(d.rows ?? []))
+      .catch(() => setVentasDiaria([]))
+      .finally(() => setVentasDiariaLoading(false))
+  }, [section, ventasVista, filterKey, currentCat]) // eslint-disable-line
+
+  // Effect dedicado: fetch de la serie diaria por SKU (Comparativo Pareto)
+  useEffect(() => {
+    if (section !== 'pareto') return
+    if (compVista !== 'diaria') return
+    if (!compSku1 || !compSku2) return
+    if (compDaily1.length > 0 || compDailyLoading) return
+    setCompDailyLoading(true)
+    const extraCat: Record<string, string> = currentCat ? { categoria: currentCat } : {}
+    const qsBase = buildFilterQS(extraCat)
+    const buildQs = (sku: string) => {
+      const q = new URLSearchParams(qsBase)
+      q.set('skus', sku)
+      return q.toString()
+    }
+    Promise.all([
+      fetch(`/api/comercial/ejecucion/co/exito/daily?${buildQs(compSku1)}`).then(r => r.json()).catch(() => ({ rows: [] })),
+      fetch(`/api/comercial/ejecucion/co/exito/daily?${buildQs(compSku2)}`).then(r => r.json()).catch(() => ({ rows: [] })),
+    ])
+      .then(([a, b]) => { setCompDaily1(a.rows ?? []); setCompDaily2(b.rows ?? []) })
+      .finally(() => setCompDailyLoading(false))
+  }, [section, compVista, compSku1, compSku2, filterKey, currentCat]) // eslint-disable-line
 
   // Cargar KPIs al primer mount (usa filtros si ya estaban guardados)
   useEffect(() => {
@@ -1327,7 +1391,7 @@ export default function ExitoEjecucion() {
                 )
               })()}
             </div>
-            <div className="flex items-center gap-3 text-[11px]">
+            <div className="flex items-center gap-3 text-[11px] flex-wrap">
               <div className="flex rounded-lg border border-gray-200 overflow-hidden">
                 {(['mensual','diaria'] as const).map(v => (
                   <button key={v} onClick={() => setVentasVista(v)}
@@ -1336,159 +1400,35 @@ export default function ExitoEjecucion() {
                   </button>
                 ))}
               </div>
-              {ventasVista === 'mensual' ? (<>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> 2026</span>
-              </>) : (<>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> Venta 2026</span>
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> Precio / Und</span>
-              </>)}
-            </div>
-            {/* Legend adicional para Mensual: valor (bars) + unidades (áreas) */}
-            {ventasVista === 'mensual' && (
-              <div className="flex items-center gap-3 text-[10px] text-gray-400 mt-1 ml-auto justify-end">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded-sm bg-slate-400"/><span className="w-3 h-2 rounded-sm bg-amber-500"/> Venta ({monLabel})</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-slate-300 border border-slate-400"/><span className="w-2 h-2 rounded-full bg-blue-400 border border-blue-600"/> Unidades</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {(['valor','unidades','precio'] as const).map(m => {
+                  const active = tendMetricas.includes(m)
+                  return (
+                    <button key={m} onClick={() => toggleTendMetrica(m)}
+                      title="Click para agregar / quitar (multi-selección)"
+                      className={`px-3 py-1 font-semibold transition-colors ${active ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                      {m === 'valor' ? 'Ventas' : m === 'unidades' ? 'Unidades' : 'Precio prom'}
+                    </button>
+                  )
+                })}
               </div>
-            )}
+            </div>
           </div>
           {ventasVista === 'mensual' ? (
-            <div className="h-[320px] mt-3">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={monthlyVal} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
-                  <defs>
-                    <linearGradient id="gradExitoEvoVent25" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                    </linearGradient>
-                    <linearGradient id="gradExitoEvoVent26" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
-                    </linearGradient>
-                    <linearGradient id="gradExitoEvoUds25M" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.35}/>
-                      <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
-                    </linearGradient>
-                    <linearGradient id="gradExitoEvoUds26M" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor="#2563eb" stopOpacity={0.35}/>
-                      <stop offset="100%" stopColor="#2563eb" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                  {/* Eje izq: valor (bars) */}
-                  <YAxis yAxisId="val" tickFormatter={yFmtVal} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
-                  {/* Eje der: unidades (areas) */}
-                  <YAxis yAxisId="uds" orientation="right"
-                    tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
-                    tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    formatter={(v: unknown, name: string) => {
-                      if (String(name).startsWith('Und')) return [fmtNum(Number(v)), name]
-                      return [tipVal(v), name]
-                    }}
-                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                  />
-                  <Bar yAxisId="val" dataKey="val2025" name={`2025 ${monLabel}`} fill="url(#gradExitoEvoVent25)" radius={[8,8,0,0]} maxBarSize={36}>
-                    <LabelList dataKey="val2025" position="top" formatter={fmtLblVal}
-                      style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
-                  </Bar>
-                  <Bar yAxisId="val" dataKey="val2026" name={`2026 ${monLabel}`} fill="url(#gradExitoEvoVent26)" radius={[8,8,0,0]} maxBarSize={36}>
-                    <LabelList dataKey="val2026" position="top" formatter={fmtLblVal}
-                      style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
-                  </Bar>
-                  {/* Unidades como áreas gradient — eje derecho */}
-                  <Area yAxisId="uds" type="monotone" dataKey="uds2025" name="Und 2025"
-                    stroke="#94a3b8" strokeWidth={2} fill="url(#gradExitoEvoUds25M)" dot={false}
-                    activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#94a3b8' }} connectNulls />
-                  <Area yAxisId="uds" type="monotone" dataKey="uds2026" name="Und 2026"
-                    stroke="#2563eb" strokeWidth={2.5} fill="url(#gradExitoEvoUds26M)" dot={false}
-                    activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }} connectNulls />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (() => {
-            const diariaSeries = ventasDiaria.map(r => ({
-              dia_str: r.dia_str,
-              valor:    isCop ? r.valor_cop : r.valor_usd,
-              unidades: r.unidades,
-              precio:   r.unidades > 0 ? (isCop ? r.valor_cop : r.valor_usd) / r.unidades : 0,
-            }))
-            return (
-              <>
-                <div className="flex items-center gap-3 text-[11px] mt-2 mb-1">
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-blue-500"/> Unidades</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Venta ({monLabel})</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> Precio / Und</span>
-                </div>
-                <div className="h-[320px] mt-2">
-                  {ventasDiariaLoading ? (
-                    <div className="h-full flex items-center justify-center text-xs text-gray-400">Cargando data diaria…</div>
-                  ) : diariaSeries.length === 0 ? (
-                    <div className="h-full flex items-center justify-center text-xs text-gray-400">Sin datos diarios.</div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <ComposedChart data={diariaSeries} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-                        <defs>
-                          <linearGradient id="gradExitoEvoDiaUds" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#3b82f6" stopOpacity={1}/>
-                            <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
-                          </linearGradient>
-                          <linearGradient id="gradExitoEvoDia" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.35}/>
-                            <stop offset="60%"  stopColor="#c8873a" stopOpacity={0.08}/>
-                            <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
-                          </linearGradient>
-                          <linearGradient id="gradExitoEvoPrecio" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="#10b981" stopOpacity={0.35}/>
-                            <stop offset="60%"  stopColor="#10b981" stopOpacity={0.08}/>
-                            <stop offset="100%" stopColor="#10b981" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="dia_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
-                          interval={Math.max(0, Math.floor(diariaSeries.length / 20) - 1)} />
-                        {/* Eje izq: unidades (bars) — escala principal */}
-                        <YAxis yAxisId="uds" orientation="left"
-                          tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
-                          tick={{ fontSize: 10, fill: '#1e40af' }} width={55} axisLine={false} tickLine={false} />
-                        {/* Eje der 1: valor (area amber) */}
-                        <YAxis yAxisId="valor" orientation="right"
-                          tickFormatter={yFmtVal}
-                          tick={{ fontSize: 10, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
-                        {/* Eje der 2: precio Und (area verde) — oculto para no saturar */}
-                        <YAxis yAxisId="precio" orientation="right" hide />
-                        <Tooltip
-                          formatter={(v: unknown, name: string) => {
-                            if (name === 'Precio / Und') {
-                              const n = Number(v)
-                              const fmt = isCop
-                                ? '$ ' + Math.round(n).toLocaleString('es-CO')
-                                : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                              return [fmt, name]
-                            }
-                            if (name === 'Unidades') return [fmtNum(Number(v)), name]
-                            return [tipVal(v), name]
-                          }}
-                          cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                        />
-                        <Bar yAxisId="uds" dataKey="unidades" name="Unidades"
-                          fill="url(#gradExitoEvoDiaUds)" radius={[4,4,0,0]} maxBarSize={16} />
-                        <Area yAxisId="valor" type="monotone" dataKey="valor" name={`Venta (${monLabel})`}
-                          stroke="#c8873a" strokeWidth={2.5} fill="url(#gradExitoEvoDia)" dot={false}
-                          activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
-                        <Area yAxisId="precio" type="monotone" dataKey="precio" name="Precio / Und"
-                          stroke="#10b981" strokeWidth={2.5} fill="url(#gradExitoEvoPrecio)" dot={false}
-                          activeDot={{ r: 4, strokeWidth: 2, fill: '#fff', stroke: '#10b981' }} connectNulls />
-                      </ComposedChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </>
-            )
-          })()}
+            <TendenciaMensualChart
+              tendencia={tendencia}
+              metricas={tendMetricas}
+              moneda={moneda}
+              skuFilter={skuSel}
+            />
+          ) : (
+            <TendenciaDiariaChart
+              rows={ventasDiaria}
+              metricas={tendMetricas}
+              moneda={moneda}
+              loading={ventasDiariaLoading}
+            />
+          )}
         </div>
 
         {/* Chart 3: Growth MoM % */}
@@ -1771,45 +1711,25 @@ export default function ExitoEjecucion() {
           ) : topSkus.length === 0 ? (
             <p className="text-center text-gray-300 py-8 text-sm">Sin datos</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 text-gray-400 uppercase tracking-widest text-[10px]">
-                    <th className="text-center px-3 py-2.5 w-8">#</th>
-                    <th className="text-left px-4 py-2.5">Descripción</th>
-                    <th className="text-left px-3 py-2.5">Cat.</th>
-                    <th className="text-right px-4 py-2.5">Valor 2026 ({moneda.toUpperCase()})</th>
-                    <th className="text-right px-4 py-2.5">Unidades</th>
-                    <th className="text-right px-4 py-2.5">Share</th>
-                    <th className="text-right px-4 py-2.5">vs 2025</th>
-                    <th className="text-right px-4 py-2.5">Acum.</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {topSkus.map((r, i) => (
-                    <tr key={i} className={`hover:bg-gray-50/60 ${r.cum_share > 95 ? 'opacity-50' : r.cum_share > 80 ? 'opacity-75' : ''}`}>
-                      <td className="px-3 py-2.5 text-center text-gray-400 font-mono">{i + 1}</td>
-                      <td className="px-4 py-2.5 font-medium text-gray-700"><span className="text-gray-400 mr-1.5 font-normal">{r.sku}</span>{r.descripcion}</td>
-                      <td className="px-3 py-2.5 text-gray-400">{r.categoria}</td>
-                      <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-700">{fmtVal(skuVal(r))}</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-500">{r.uni_2026.toLocaleString('en-US')}</td>
-                      <td className="px-4 py-2.5 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
-                            <div className="h-1.5 rounded-full bg-amber-400" style={{ width: `${r.share_pct}%` }} />
-                          </div>
-                          <span className="font-mono text-gray-500">{r.share_pct.toFixed(1)}%</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-2.5 text-right">{r.delta !== null ? <Delta d={r.delta} /> : <span className="text-gray-300">—</span>}</td>
-                      <td className="px-4 py-2.5 text-right font-mono text-gray-400">{r.cum_share.toFixed(1)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ParetoTopSkusTable rows={topSkus} moneda={moneda} fmtVal={fmtVal} skuVal={skuVal} />
           )}
         </div>
+
+        {!L && topSkus.length > 0 && (
+          <ComparativoSkus
+            rows={topSkus}
+            moneda={moneda}
+            fmtVal={fmtVal}
+            skuVal={skuVal}
+            skuVal25={skuVal25}
+            seg={seg}
+            sku1={compSku1} setSku1={setCompSku1}
+            sku2={compSku2} setSku2={setCompSku2}
+            vista={compVista} setVista={setCompVista}
+            daily1={compDaily1} daily2={compDaily2}
+            dailyLoading={compDailyLoading}
+          />
+        )}
       </div>
     )
   }
@@ -2367,94 +2287,7 @@ export default function ExitoEjecucion() {
         </div>
 
         {/* Top SKUs por inventario */}
-        {(() => {
-          type SortCol = 'pdvs' | 'quiebres' | 'uds'
-          const sortCol = invSortCol
-          const sortDir = invSortDir
-          const toggleSort = (col: SortCol) => {
-            if (col === sortCol) setInvSortDir(d => d === 'asc' ? 'desc' : 'asc')
-            else { setInvSortCol(col); setInvSortDir('desc') }
-          }
-          const SortArrow = ({ col }: { col: SortCol }) => {
-            const isActive = sortCol === col
-            const btn = (dir: 'desc' | 'asc', lbl: string) => (
-              <button
-                onClick={(e) => { e.stopPropagation(); setInvSortCol(col); setInvSortDir(dir) }}
-                className={`px-1.5 rounded text-[9px] font-bold leading-none py-0.5 border ${
-                  isActive && sortDir === dir
-                    ? 'bg-amber-500 text-white border-amber-500'
-                    : 'bg-white text-gray-400 border-gray-200 hover:bg-gray-50'
-                }`}
-                title={`Ordenar ${dir === 'desc' ? 'de mayor a menor' : 'de menor a mayor'}`}>
-                {lbl}
-              </button>
-            )
-            return (
-              <span className="inline-flex items-center gap-1 ml-1.5 align-middle">
-                {btn('desc', '▼ Mayor')}
-                {btn('asc',  '▲ Menor')}
-              </span>
-            )
-          }
-          const sortedSkus = [...inv.top_skus].sort((a, b) => {
-            const va = (a[sortCol] ?? 0) as number
-            const vb = (b[sortCol] ?? 0) as number
-            return sortDir === 'desc' ? vb - va : va - vb
-          })
-          return (
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-              <div className="px-5 py-4 border-b border-gray-50">
-                <h3 className="text-sm font-semibold text-gray-700">Top SKUs · por inventario</h3>
-                <p className="text-[11px] text-gray-400 mt-0.5">Click en cualquier fila para ver el detalle por PDV.</p>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
-                    <tr>
-                      <th className="px-3 py-2 text-left">#</th>
-                      <th className="px-3 py-2 text-left">SKU</th>
-                      <th className="px-3 py-2 text-left">Descripción</th>
-                      <th className="px-3 py-2 text-left">Categoría</th>
-                      <th className="px-3 py-2 text-left">Subcategoría</th>
-                      <th className="px-3 py-2 text-right select-none cursor-pointer hover:text-amber-700"
-                          onClick={() => toggleSort('pdvs')} title="Ordenar por PDVs">
-                        PDVs<SortArrow col="pdvs" />
-                      </th>
-                      <th className="px-3 py-2 text-right select-none cursor-pointer hover:text-amber-700"
-                          onClick={() => toggleSort('quiebres')} title="Ordenar por quiebres">
-                        Quiebres<SortArrow col="quiebres" />
-                      </th>
-                      <th className="px-3 py-2 text-right select-none cursor-pointer hover:text-amber-700"
-                          onClick={() => toggleSort('uds')} title="Ordenar por unidades">
-                        Unidades<SortArrow col="uds" />
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedSkus.map((s, i) => (
-                      <tr key={s.sku ?? s.ean13 ?? i}
-                          onClick={() => openDetallePDVs(s.sku ?? s.plu ?? '', s.descripcion, 'todos')}
-                          className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} cursor-pointer hover:bg-amber-50/60 transition-colors`}>
-                        <td className="px-3 py-2 text-gray-400">{i + 1}</td>
-                        <td className="px-3 py-2 font-mono text-[11px] text-amber-700">{s.sku ?? '—'}</td>
-                        <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate">{s.descripcion}</td>
-                        <td className="px-3 py-2 text-gray-500 text-[11px]">{s.categoria ?? '—'}</td>
-                        <td className="px-3 py-2 text-gray-500 text-[11px]">{s.subcategoria ?? '—'}</td>
-                        <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{s.pdvs}</td>
-                        <td className="px-3 py-2 text-right tabular-nums">
-                          {s.quiebres > 0
-                            ? <span className="text-red-600 font-semibold">{s.quiebres}</span>
-                            : <span className="text-gray-300">0</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold text-gray-800 tabular-nums">{fmtNum(s.uds)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )
-        })()}
+        <InvTopSkusTable rows={inv.top_skus} onRowClick={(s) => openDetallePDVs(s.sku ?? s.plu ?? '', s.descripcion, 'todos')} />
       </div>
     )
   }
@@ -3284,36 +3117,7 @@ export default function ExitoEjecucion() {
         {/* Top SKUs */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">Top SKUs por Venta — YTD 2026</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-gray-50 text-gray-600">
-                <tr>
-                  <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">#</th>
-                  <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Descripción</th>
-                  <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Categoría</th>
-                  <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">Subcategoría</th>
-                  <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Unidades</th>
-                  <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Venta {useUsd ? 'USD' : 'COP'}</th>
-                  <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Utilidad COP</th>
-                  <th className="px-3 py-2 text-right font-semibold uppercase tracking-wider">Margen %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topSkus.map((s, i) => (
-                  <tr key={s.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                    <td className="px-3 py-2 text-gray-400 tabular-nums">{i + 1}</td>
-                    <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate" title={s.descripcion ?? ''}>{s.descripcion ?? s.sku}</td>
-                    <td className="px-3 py-2 text-gray-500">{s.categoria ?? '—'}</td>
-                    <td className="px-3 py-2 text-gray-500">{s.subcategoria ?? '—'}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtNum(s.uds)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{useUsd ? fmtFull(s.usd) : fmtCOP(s.cop)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{fmtCOP(s.ut)}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{s.margen_pct !== null ? `${s.margen_pct.toFixed(1)}%` : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <SellInTopSkusTable rows={topSkus} useUsd={useUsd} />
           {top_skus.length > 15 && (
             <p className="text-[10px] text-gray-400 mt-2">Mostrando 15 de {top_skus.length} SKUs con Sell-In.</p>
           )}
@@ -3668,7 +3472,7 @@ export default function ExitoEjecucion() {
 
           {/* Sección expandible con los 5 multi-select */}
           {showFiltros && (
-            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               <MultiSelect
                 label="Cadena"
                 placeholder="Todas"
@@ -3704,20 +3508,22 @@ export default function ExitoEjecucion() {
                   .filter(o => deptoSel.length === 0 || (o.departamento && deptoSel.includes(o.departamento)))
                   .map(o => ({ value: o.value, label: o.value }))}
               />
-              <MultiSelect
-                label="SKU / Producto"
-                placeholder="Todos"
-                selectAllLabel="Todos los SKUs"
-                value={skuSel}
-                onChange={setSkuSel}
-                options={(filtrosOpts?.skus ?? [])
-                  // Restringir por subcategoría si hay seleccionadas
-                  .filter(o => subcatSel.length === 0 || (o.subcategoria && subcatSel.includes(o.subcategoria)))
-                  .map(o => ({
-                    value: o.value,
-                    label: o.descripcion ? `${o.value} · ${o.descripcion.slice(0, 32)}` : o.value,
-                  }))}
-              />
+              <div className="col-span-2 lg:col-span-2">
+                <MultiSelect
+                  label="SKU / Producto"
+                  placeholder="Todos"
+                  selectAllLabel="Todos los SKUs"
+                  value={skuSel}
+                  onChange={setSkuSel}
+                  options={(filtrosOpts?.skus ?? [])
+                    // Restringir por subcategoría si hay seleccionadas
+                    .filter(o => subcatSel.length === 0 || (o.subcategoria && subcatSel.includes(o.subcategoria)))
+                    .map(o => ({
+                      value: o.value,
+                      label: o.descripcion ? `${o.value} · ${o.descripcion}` : o.value,
+                    }))}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -3876,6 +3682,782 @@ export default function ExitoEjecucion() {
         </div>
       )}
 
+    </div>
+  )
+}
+
+/* ═════ Sub-componente: Sell-In Top SKUs (ordenable) ═════ */
+function SellInTopSkusTable({ rows, useUsd }: { rows: SellInSku[]; useUsd: boolean }) {
+  type Col = 'descripcion' | 'categoria' | 'subcategoria' | 'uds' | 'cop' | 'ut' | 'margen_pct'
+  const { toggleSort, sorted, SortArrow } = useTableSort<SellInSku, Col>(
+    rows, 'cop', 'desc',
+    {
+      descripcion:  (a, b) => (a.descripcion ?? a.sku).localeCompare(b.descripcion ?? b.sku),
+      categoria:    (a, b) => (a.categoria ?? '').localeCompare(b.categoria ?? ''),
+      subcategoria: (a, b) => (a.subcategoria ?? '').localeCompare(b.subcategoria ?? ''),
+      uds:          (a, b) => (a.uds ?? 0) - (b.uds ?? 0),
+      cop:          (a, b) => (a.cop ?? 0) - (b.cop ?? 0),
+      ut:           (a, b) => (a.ut ?? 0) - (b.ut ?? 0),
+      margen_pct:   (a, b) => (a.margen_pct ?? -Infinity) - (b.margen_pct ?? -Infinity),
+    },
+  )
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead className="bg-gray-50 text-gray-600">
+          <tr>
+            <th className="px-3 py-2 text-left font-semibold uppercase tracking-wider">#</th>
+            <SortableTh onClick={() => toggleSort('descripcion')} arrow={<SortArrow col="descripcion"/>} className="px-3 py-2 uppercase tracking-wider">Descripción</SortableTh>
+            <SortableTh onClick={() => toggleSort('categoria')} arrow={<SortArrow col="categoria"/>} className="px-3 py-2 uppercase tracking-wider">Categoría</SortableTh>
+            <SortableTh onClick={() => toggleSort('subcategoria')} arrow={<SortArrow col="subcategoria"/>} className="px-3 py-2 uppercase tracking-wider">Subcategoría</SortableTh>
+            <SortableTh onClick={() => toggleSort('uds')} arrow={<SortArrow col="uds"/>} align="right" className="px-3 py-2 uppercase tracking-wider">Unidades</SortableTh>
+            <SortableTh onClick={() => toggleSort('cop')} arrow={<SortArrow col="cop"/>} align="right" className="px-3 py-2 uppercase tracking-wider">Venta {useUsd ? 'USD' : 'COP'}</SortableTh>
+            <SortableTh onClick={() => toggleSort('ut')} arrow={<SortArrow col="ut"/>} align="right" className="px-3 py-2 uppercase tracking-wider">Utilidad COP</SortableTh>
+            <SortableTh onClick={() => toggleSort('margen_pct')} arrow={<SortArrow col="margen_pct"/>} align="right" className="px-3 py-2 uppercase tracking-wider">Margen %</SortableTh>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((s, i) => (
+            <tr key={s.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+              <td className="px-3 py-2 text-gray-400 tabular-nums">{i + 1}</td>
+              <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate" title={s.descripcion ?? ''}>{s.descripcion ?? s.sku}</td>
+              <td className="px-3 py-2 text-gray-500">{s.categoria ?? '—'}</td>
+              <td className="px-3 py-2 text-gray-500">{s.subcategoria ?? '—'}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{fmtNum(s.uds)}</td>
+              <td className="px-3 py-2 text-right tabular-nums font-semibold">{useUsd ? fmtFull(s.usd) : fmtCOP(s.cop)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{fmtCOP(s.ut)}</td>
+              <td className="px-3 py-2 text-right tabular-nums">{s.margen_pct !== null ? `${s.margen_pct.toFixed(1)}%` : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+/* ═════ Sub-componente: Top SKUs inventario (ordenable) ═════ */
+function InvTopSkusTable({
+  rows, onRowClick,
+}: {
+  rows: InvTopSku[]
+  onRowClick: (s: InvTopSku) => void
+}) {
+  type Col = 'pdvs' | 'quiebres' | 'uds'
+  const { toggleSort, sorted, SortArrow } = useTableSort<InvTopSku, Col>(
+    rows, 'uds', 'desc',
+    {
+      pdvs:     (a, b) => (a.pdvs ?? 0) - (b.pdvs ?? 0),
+      quiebres: (a, b) => (a.quiebres ?? 0) - (b.quiebres ?? 0),
+      uds:      (a, b) => (a.uds ?? 0) - (b.uds ?? 0),
+    },
+  )
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-5 py-4 border-b border-gray-50">
+        <h3 className="text-sm font-semibold text-gray-700">Top SKUs · por inventario</h3>
+        <p className="text-[11px] text-gray-400 mt-0.5">Click en cualquier fila para ver el detalle por PDV.</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+            <tr>
+              <th className="px-3 py-2 text-left">#</th>
+              <th className="px-3 py-2 text-left">SKU</th>
+              <th className="px-3 py-2 text-left">Descripción</th>
+              <th className="px-3 py-2 text-left">Categoría</th>
+              <th className="px-3 py-2 text-left">Subcategoría</th>
+              <SortableTh onClick={() => toggleSort('pdvs')} arrow={<SortArrow col="pdvs"/>} align="right" className="px-3 py-2">PDVs</SortableTh>
+              <SortableTh onClick={() => toggleSort('quiebres')} arrow={<SortArrow col="quiebres"/>} align="right" className="px-3 py-2">Quiebres</SortableTh>
+              <SortableTh onClick={() => toggleSort('uds')} arrow={<SortArrow col="uds"/>} align="right" className="px-3 py-2">Unidades</SortableTh>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((s, i) => (
+              <tr key={s.sku ?? s.ean13 ?? i}
+                  onClick={() => onRowClick(s)}
+                  className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} cursor-pointer hover:bg-amber-50/60 transition-colors`}>
+                <td className="px-3 py-2 text-gray-400">{i + 1}</td>
+                <td className="px-3 py-2 font-mono text-[11px] text-amber-700">{s.sku ?? '—'}</td>
+                <td className="px-3 py-2 text-gray-800 max-w-[280px] truncate">{s.descripcion}</td>
+                <td className="px-3 py-2 text-gray-500 text-[11px]">{s.categoria ?? '—'}</td>
+                <td className="px-3 py-2 text-gray-500 text-[11px]">{s.subcategoria ?? '—'}</td>
+                <td className="px-3 py-2 text-right text-gray-700 tabular-nums">{s.pdvs}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {s.quiebres > 0
+                    ? <span className="text-red-600 font-semibold">{s.quiebres}</span>
+                    : <span className="text-gray-300">0</span>}
+                </td>
+                <td className="px-3 py-2 text-right font-semibold text-gray-800 tabular-nums">{fmtNum(s.uds)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
+/* ═════ Sub-componente: Detalle Top SKUs Pareto (ordenable) ═════ */
+function ParetoTopSkusTable({
+  rows, moneda, fmtVal, skuVal,
+}: {
+  rows: TopSku[]
+  moneda: 'usd' | 'cop'
+  fmtVal: (v: number) => string
+  skuVal: (r: TopSku) => number
+}) {
+  type Col = 'descripcion' | 'categoria' | 'valor_2026' | 'uni_2026' | 'share_pct' | 'delta' | 'cum_share'
+  const { toggleSort, sorted, SortArrow } = useTableSort<TopSku, Col>(
+    rows, 'valor_2026', 'desc',
+    {
+      descripcion: (a, b) => (a.descripcion ?? '').localeCompare(b.descripcion ?? ''),
+      categoria:   (a, b) => (a.categoria ?? '').localeCompare(b.categoria ?? ''),
+      valor_2026:  (a, b) => skuVal(a) - skuVal(b),
+      uni_2026:    (a, b) => (a.uni_2026 ?? 0) - (b.uni_2026 ?? 0),
+      share_pct:   (a, b) => (a.share_pct ?? 0) - (b.share_pct ?? 0),
+      delta:       (a, b) => (a.delta ?? -Infinity) - (b.delta ?? -Infinity),
+      cum_share:   (a, b) => (a.cum_share ?? 0) - (b.cum_share ?? 0),
+    },
+  )
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="bg-gray-50 text-gray-400 uppercase tracking-widest text-[10px]">
+            <th className="text-center px-3 py-2.5 w-8">#</th>
+            <SortableTh onClick={() => toggleSort('descripcion')} arrow={<SortArrow col="descripcion"/>} className="px-4 py-2.5">Descripción</SortableTh>
+            <SortableTh onClick={() => toggleSort('categoria')} arrow={<SortArrow col="categoria"/>} className="px-3 py-2.5">Cat.</SortableTh>
+            <SortableTh onClick={() => toggleSort('valor_2026')} arrow={<SortArrow col="valor_2026"/>} align="right" className="px-4 py-2.5">Valor 2026 ({moneda.toUpperCase()})</SortableTh>
+            <SortableTh onClick={() => toggleSort('uni_2026')} arrow={<SortArrow col="uni_2026"/>} align="right" className="px-4 py-2.5">Unidades</SortableTh>
+            <SortableTh onClick={() => toggleSort('share_pct')} arrow={<SortArrow col="share_pct"/>} align="right" className="px-4 py-2.5">Share</SortableTh>
+            <SortableTh onClick={() => toggleSort('delta')} arrow={<SortArrow col="delta"/>} align="right" className="px-4 py-2.5">vs 2025</SortableTh>
+            <SortableTh onClick={() => toggleSort('cum_share')} arrow={<SortArrow col="cum_share"/>} align="right" className="px-4 py-2.5">Acum.</SortableTh>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {sorted.map((r, i) => (
+            <tr key={i} className={`hover:bg-gray-50/60 ${r.cum_share > 95 ? 'opacity-50' : r.cum_share > 80 ? 'opacity-75' : ''}`}>
+              <td className="px-3 py-2.5 text-center text-gray-400 font-mono">{i + 1}</td>
+              <td className="px-4 py-2.5 font-medium text-gray-700"><span className="text-gray-400 mr-1.5 font-normal">{r.sku}</span>{r.descripcion}</td>
+              <td className="px-3 py-2.5 text-gray-400">{r.categoria}</td>
+              <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-700">{fmtVal(skuVal(r))}</td>
+              <td className="px-4 py-2.5 text-right font-mono text-gray-500">{r.uni_2026.toLocaleString('en-US')}</td>
+              <td className="px-4 py-2.5 text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
+                    <div className="h-1.5 rounded-full bg-amber-400" style={{ width: `${r.share_pct}%` }} />
+                  </div>
+                  <span className="font-mono text-gray-500">{r.share_pct.toFixed(1)}%</span>
+                </div>
+              </td>
+              <td className="px-4 py-2.5 text-right">{r.delta !== null ? <Delta d={r.delta} /> : <span className="text-gray-300">—</span>}</td>
+              <td className="px-4 py-2.5 text-right font-mono text-gray-400">{r.cum_share.toFixed(1)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+type DailyRowSku = { fecha: string; dia_str: string; mes: number; dia: number; valor_usd: number; valor_cop: number; unidades: number }
+
+/* ═════ Sub-componente: Tendencia mensual continua (Evolución Ventas) ═════ */
+type TendPointExt = { ano: number; mes: number; mes_str: string; valor_usd: number; valor_cop: number; unidades: number; precio_usd: number; precio_cop: number }
+type TendDataExt = { desde: string | null; hasta: string | null; labels: { ano: number; mes: number; mes_str: string }[]; total: TendPointExt[]; por_sku: { sku: string; descripcion: string; points: TendPointExt[] }[] }
+
+const SKU_LINE_COLORS = ['#f59e0b', '#2563eb', '#10b981', '#dc2626', '#8b5cf6', '#0891b2', '#ea580c', '#65a30d']
+
+type MetricaTend = 'valor' | 'unidades' | 'precio'
+type MetricaKind = 'bar' | 'area'
+const METRICA_META: Record<MetricaTend, { label: string; color: string; gradId: string; axis: 'left' | 'right' | 'hidden'; kind: MetricaKind }> = {
+  valor:    { label: 'Venta',       color: '#3b82f6', gradId: 'gradMetricaValor',  axis: 'left',   kind: 'area' },
+  unidades: { label: 'Unidades',    color: '#10b981', gradId: 'gradMetricaUds',    axis: 'right',  kind: 'bar'  },
+  precio:   { label: 'Precio / Und',color: '#059669', gradId: 'gradMetricaPrecio', axis: 'hidden', kind: 'area' },
+}
+
+function fmtValor(n: number, isCop: boolean) {
+  if (!isFinite(n)) return '$0'
+  if (isCop) return n >= 1e9 ? '$' + (n/1e9).toFixed(1) + 'B' : n >= 1e6 ? '$' + (n/1e6).toFixed(1) + 'M' : n >= 1e3 ? '$' + (n/1e3).toFixed(0) + 'K' : '$' + n.toFixed(0)
+  return n >= 1e6 ? '$' + (n/1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + (n/1e3).toFixed(1) + 'K' : '$' + n.toFixed(0)
+}
+function fmtUds(n: number) {
+  if (!isFinite(n)) return '0'
+  return n >= 1000 ? (n/1000).toFixed(0) + 'K' : String(Math.round(n))
+}
+function fmtPrecio(n: number, isCop: boolean) {
+  if (!isFinite(n)) return '$0'
+  return isCop
+    ? '$ ' + Math.round(n).toLocaleString('es-CO')
+    : '$' + n.toFixed(2)
+}
+function tipMetric(v: unknown, key: MetricaTend, isCop: boolean) {
+  const n = Number(v)
+  if (key === 'unidades') return Number.isFinite(n) ? n.toLocaleString('en-US') + ' uds' : '—'
+  if (key === 'precio')   return fmtPrecio(n, isCop)
+  return isCop
+    ? '$ ' + Math.round(n).toLocaleString('es-CO')
+    : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function TendenciaMensualChart({
+  tendencia, metricas, moneda, skuFilter,
+}: {
+  tendencia: TendDataExt | null
+  metricas: MetricaTend[]
+  moneda: 'usd' | 'cop'
+  skuFilter: string[]
+}) {
+  if (!tendencia) {
+    return <div className="h-[320px] mt-3 flex items-center justify-center text-xs text-gray-400">Cargando tendencia mensual…</div>
+  }
+  if (!tendencia.labels?.length) {
+    return <div className="h-[320px] mt-3 flex items-center justify-center text-xs text-gray-400">Sin datos disponibles.</div>
+  }
+
+  const isCop = moneda === 'cop'
+  const pickMetric = (p: TendPointExt, m: MetricaTend) => {
+    if (m === 'unidades') return p.unidades
+    if (m === 'precio')   return isCop ? p.precio_cop : p.precio_usd
+    return isCop ? p.valor_cop : p.valor_usd
+  }
+
+  const usePerSku = skuFilter.length > 0 && (tendencia.por_sku?.length ?? 0) > 0
+  // Cuando hay filtro por SKU, la métrica es una sola (la primera seleccionada) — se compara por SKU
+  const metricaSingle: MetricaTend = usePerSku ? (metricas[0] ?? 'valor') : 'valor'
+
+  // Data pivotada: fila por mes, columnas por SKU (si per-sku) o por métrica seleccionada (si total)
+  const chartData = tendencia.labels.map((l, i) => {
+    const row: Record<string, unknown> = { mes_str: l.mes_str, ano: l.ano, mes: l.mes }
+    if (usePerSku) {
+      tendencia.por_sku.forEach(s => {
+        row[`sku_${s.sku}`] = pickMetric(s.points[i], metricaSingle)
+      })
+    } else {
+      metricas.forEach(m => {
+        row[`m_${m}`] = pickMetric(tendencia.total[i], m)
+      })
+    }
+    return row
+  })
+
+  const axisKey = (m: MetricaTend): string => METRICA_META[m].axis === 'right' ? 'right' : (METRICA_META[m].axis === 'hidden' ? 'hidden' : 'left')
+
+  const rangeLabel = `Rango: ${tendencia.desde} → ${tendencia.hasta}`
+
+  return (
+    <>
+      <p className="text-[10px] text-gray-400 mt-2 mb-1">
+        {rangeLabel}
+        {usePerSku
+          ? ` · ${METRICA_META[metricaSingle].label} · ${tendencia.por_sku.length} SKU${tendencia.por_sku.length > 1 ? 's' : ''}`
+          : ` · ${metricas.map(m => METRICA_META[m].label).join(' + ')}`}
+      </p>
+      <div className="h-[320px] mt-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={chartData} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="18%" barGap={3}>
+            <defs>
+              {usePerSku
+                ? tendencia.por_sku.map((s, i) => {
+                    const c = SKU_LINE_COLORS[i % SKU_LINE_COLORS.length]
+                    return (
+                      <linearGradient key={s.sku} id={`gradSku_${s.sku}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={c} stopOpacity={1}/>
+                        <stop offset="100%" stopColor={c} stopOpacity={0.75}/>
+                      </linearGradient>
+                    )
+                  })
+                : metricas.map(m => {
+                    const meta = METRICA_META[m]
+                    if (meta.kind === 'area') {
+                      // Área con fill fade a transparente (efecto "línea con halo")
+                      return (
+                        <linearGradient key={m} id={meta.gradId} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%"   stopColor={meta.color} stopOpacity={0.35}/>
+                          <stop offset="60%"  stopColor={meta.color} stopOpacity={0.08}/>
+                          <stop offset="100%" stopColor={meta.color} stopOpacity={0}/>
+                        </linearGradient>
+                      )
+                    }
+                    return (
+                      <linearGradient key={m} id={meta.gradId} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={meta.color} stopOpacity={1}/>
+                        <stop offset="100%" stopColor={meta.color} stopOpacity={0.75}/>
+                      </linearGradient>
+                    )
+                  })}
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="left"
+              tickFormatter={(v) => metricaSingle === 'unidades' && usePerSku ? fmtUds(Number(v)) : metricaSingle === 'precio' && usePerSku ? fmtPrecio(Number(v), isCop) : fmtValor(Number(v), isCop)}
+              tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => fmtUds(Number(v))} tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="hidden" hide />
+            <Tooltip
+              cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+              contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+              formatter={(v: unknown, name: string, entry: { dataKey?: string | number }) => {
+                const dk = String(entry?.dataKey ?? '')
+                if (dk.startsWith('m_')) {
+                  const m = dk.slice(2) as MetricaTend
+                  return [tipMetric(v, m, isCop), name]
+                }
+                return [tipMetric(v, metricaSingle, isCop), name]
+              }}
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            {usePerSku
+              ? tendencia.por_sku.map((s, i) => {
+                  const name = s.descripcion ? `${s.sku} · ${s.descripcion}` : s.sku
+                  const c = SKU_LINE_COLORS[i % SKU_LINE_COLORS.length]
+                  const kind = METRICA_META[metricaSingle].kind
+                  if (kind === 'bar') {
+                    return (
+                      <Bar key={s.sku} yAxisId="left" dataKey={`sku_${s.sku}`} name={name}
+                        fill={`url(#gradSku_${s.sku})`} radius={[6,6,0,0]} maxBarSize={22} />
+                    )
+                  }
+                  return (
+                    <Line key={s.sku} yAxisId="left" type="monotone" dataKey={`sku_${s.sku}`} name={name}
+                      stroke={c} strokeWidth={2.5}
+                      dot={{ r: 3, strokeWidth: 2, fill: '#fff', stroke: c }}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: c }} connectNulls />
+                  )
+                })
+              : metricas.map(m => {
+                  const meta = METRICA_META[m]
+                  const name = meta.label + (m === 'valor' ? ` (${moneda.toUpperCase()})` : m === 'precio' ? ` (${moneda.toUpperCase()})` : '')
+                  if (meta.kind === 'bar') {
+                    return (
+                      <Bar key={m} yAxisId={axisKey(m)} dataKey={`m_${m}`} name={name}
+                        fill={`url(#${meta.gradId})`} radius={[6,6,0,0]} maxBarSize={28} />
+                    )
+                  }
+                  return (
+                    <Area key={m} yAxisId={axisKey(m)} type="monotone" dataKey={`m_${m}`} name={name}
+                      stroke={meta.color} strokeWidth={2.5} fill={`url(#${meta.gradId})`} dot={false}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: meta.color }} connectNulls />
+                  )
+                })}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </>
+  )
+}
+
+/* ═════ Sub-componente: Ventas diarias con multi-metric ═════ */
+type DailyRowExt = { dia_str: string; mes: number; dia: number; valor_usd: number; valor_cop: number; unidades: number }
+function TendenciaDiariaChart({
+  rows, metricas, moneda, loading,
+}: {
+  rows: DailyRowExt[]
+  metricas: MetricaTend[]
+  moneda: 'usd' | 'cop'
+  loading: boolean
+}) {
+  if (loading) return <div className="h-[320px] mt-3 flex items-center justify-center text-xs text-gray-400">Cargando data diaria…</div>
+  if (!rows.length) return <div className="h-[320px] mt-3 flex items-center justify-center text-xs text-gray-400">Sin datos diarios.</div>
+
+  const isCop = moneda === 'cop'
+  const data = rows.map(r => {
+    const valor  = isCop ? r.valor_cop : r.valor_usd
+    const precio = r.unidades > 0 ? valor / r.unidades : 0
+    return { dia_str: r.dia_str, m_valor: valor, m_unidades: r.unidades, m_precio: precio }
+  })
+
+  const axisKey = (m: MetricaTend): string => METRICA_META[m].axis === 'right' ? 'right' : (METRICA_META[m].axis === 'hidden' ? 'hidden' : 'left')
+
+  return (
+    <>
+      <p className="text-[10px] text-gray-400 mt-2 mb-1">
+        Ventas diarias · {metricas.map(m => METRICA_META[m].label).join(' + ')}
+      </p>
+      <div className="h-[320px] mt-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="20%" barGap={2}>
+            <defs>
+              {metricas.map(m => {
+                const meta = METRICA_META[m]
+                if (meta.kind === 'area') {
+                  return (
+                    <linearGradient key={m} id={`${meta.gradId}Dia`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%"   stopColor={meta.color} stopOpacity={0.35}/>
+                      <stop offset="60%"  stopColor={meta.color} stopOpacity={0.08}/>
+                      <stop offset="100%" stopColor={meta.color} stopOpacity={0}/>
+                    </linearGradient>
+                  )
+                }
+                return (
+                  <linearGradient key={m} id={`${meta.gradId}Dia`} x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={meta.color} stopOpacity={1}/>
+                    <stop offset="100%" stopColor={meta.color} stopOpacity={0.75}/>
+                  </linearGradient>
+                )
+              })}
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="dia_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+              interval={Math.max(0, Math.floor(data.length / 20) - 1)} />
+            <YAxis yAxisId="left" tickFormatter={(v) => fmtValor(Number(v), isCop)} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => fmtUds(Number(v))} tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false} />
+            <YAxis yAxisId="hidden" hide />
+            <Tooltip
+              cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+              contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+              formatter={(v: unknown, name: string, entry: { dataKey?: string | number }) => {
+                const dk = String(entry?.dataKey ?? '')
+                const m = (dk.startsWith('m_') ? dk.slice(2) : 'valor') as MetricaTend
+                return [tipMetric(v, m, isCop), name]
+              }}
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            {metricas.map(m => {
+              const meta = METRICA_META[m]
+              const name = meta.label + (m === 'valor' ? ` (${moneda.toUpperCase()})` : m === 'precio' ? ` (${moneda.toUpperCase()})` : '')
+              if (meta.kind === 'bar') {
+                return (
+                  <Bar key={m} yAxisId={axisKey(m)} dataKey={`m_${m}`} name={name}
+                    fill={`url(#${meta.gradId}Dia)`} radius={[6,6,0,0]} maxBarSize={20} />
+                )
+              }
+              return (
+                <Area key={m} yAxisId={axisKey(m)} type="monotone" dataKey={`m_${m}`} name={name}
+                  stroke={meta.color} strokeWidth={2.5} fill={`url(#${meta.gradId}Dia)`} dot={false}
+                  activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: meta.color }} connectNulls />
+              )
+            })}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </>
+  )
+}
+
+/* ═════ Sub-componente: Comparativo de 2 SKUs (Pareto) ═════ */
+function ComparativoSkus({
+  rows, moneda, fmtVal, skuVal, skuVal25, seg,
+  sku1, setSku1, sku2, setSku2,
+  vista, setVista, daily1, daily2, dailyLoading,
+}: {
+  rows: TopSku[]
+  moneda: 'usd' | 'cop'
+  fmtVal: (v: number) => string
+  skuVal: (r: TopSku) => number
+  skuVal25: (r: TopSku) => number
+  seg: SegData | null
+  sku1: string; setSku1: (s: string) => void
+  sku2: string; setSku2: (s: string) => void
+  vista: 'mensual' | 'diaria'; setVista: (v: 'mensual' | 'diaria') => void
+  daily1: DailyRowSku[]; daily2: DailyRowSku[]
+  dailyLoading: boolean
+}) {
+  const opts = useMemo(
+    () => [...rows].sort((a, b) => skuVal(b) - skuVal(a)),
+    [rows, skuVal],
+  )
+  const r1 = rows.find(r => r.sku === sku1) ?? null
+  const r2 = rows.find(r => r.sku === sku2) ?? null
+
+  const swap = () => { const s = sku1; setSku1(sku2); setSku2(s) }
+  const clear = () => { setSku1(''); setSku2('') }
+
+  // Serie diaria merge (por fecha) — cuando vista=diaria y hay data
+  const dailyMerged = useMemo(() => {
+    if (vista !== 'diaria') return [] as { dia_str: string; fecha: string; A: number; B: number }[]
+    const map = new Map<string, { dia_str: string; fecha: string; A: number; B: number }>()
+    for (const d of daily1) map.set(d.fecha, { fecha: d.fecha, dia_str: d.dia_str, A: Number(d.unidades ?? 0), B: 0 })
+    for (const d of daily2) {
+      const cur = map.get(d.fecha)
+      if (cur) cur.B = Number(d.unidades ?? 0)
+      else map.set(d.fecha, { fecha: d.fecha, dia_str: d.dia_str, A: 0, B: Number(d.unidades ?? 0) })
+    }
+    return [...map.values()].sort((a, b) => a.fecha.localeCompare(b.fecha))
+  }, [vista, daily1, daily2])
+
+  // Serie mensual por SKU (desde seguimiento.por_producto), en la moneda actual
+  const monthlyByMes = useMemo(() => {
+    if (!r1 || !r2 || !seg?.por_producto?.length) return [] as { mes: number; mes_nombre: string; A: number; B: number }[]
+    const s1 = seg.por_producto.find(p => p.sku === r1.sku)
+    const s2 = seg.por_producto.find(p => p.sku === r2.sku)
+    if (!s1 && !s2) return []
+    const pick = (row: SegRow | undefined, m: number) => {
+      if (!row) return 0
+      return Number(row.mesesUnd?.[m] ?? 0)
+    }
+    const meses = new Set<number>()
+    ;[s1, s2].forEach(s => s && Object.keys(s.meses ?? {}).forEach(k => meses.add(Number(k))))
+    return [...meses].sort((a, b) => a - b).map(m => ({
+      mes: m, mes_nombre: MN12[m] ?? String(m),
+      A: pick(s1, m), B: pick(s2, m),
+    }))
+  }, [r1, r2, seg, moneda])
+
+  const winner = (a: number, b: number): 1 | 2 | 0 => a === b ? 0 : a > b ? 1 : 2
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+      <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
+        <div>
+          <h3 className="text-sm font-bold text-gray-800">Comparativo · SKU vs SKU</h3>
+          <p className="text-[11px] text-gray-400">Selecciona dos productos para compararlos lado a lado</p>
+        </div>
+        {(r1 || r2) && (
+          <div className="flex items-center gap-2">
+            <button onClick={swap} className="text-[11px] px-2.5 py-1 rounded-md border border-gray-200 text-gray-600 hover:bg-gray-50">⇄ Intercambiar</button>
+            <button onClick={clear} className="text-[11px] px-2.5 py-1 rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50">Limpiar</button>
+          </div>
+        )}
+      </div>
+
+      {/* Selectores */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+        <SkuSelect label="SKU A" value={sku1} onChange={setSku1} opts={opts} otherValue={sku2} accent="amber" />
+        <SkuSelect label="SKU B" value={sku2} onChange={setSku2} opts={opts} otherValue={sku1} accent="blue" />
+      </div>
+
+      {!r1 && !r2 && (
+        <div className="text-center py-10 text-gray-300 text-sm">Selecciona SKU A y SKU B para comenzar</div>
+      )}
+
+      {(r1 || r2) && (
+        <>
+          {/* Tarjetas lado a lado */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+            <CompCard r={r1} label="SKU A" accent="amber"
+              moneda={moneda} fmtVal={fmtVal} skuVal={skuVal} skuVal25={skuVal25}
+              other={r2} winner={winner} side={1} />
+            <CompCard r={r2} label="SKU B" accent="blue"
+              moneda={moneda} fmtVal={fmtVal} skuVal={skuVal} skuVal25={skuVal25}
+              other={r1} winner={winner} side={2} />
+          </div>
+
+          {/* Line chart comparativo — mensual o diaria */}
+          {r1 && r2 && (
+            <div>
+              <div className="flex items-center justify-between flex-wrap gap-3 mb-2">
+                <p className="text-[11px] uppercase tracking-widest text-gray-400">
+                  Comparación gráfica · {vista === 'mensual' ? 'evolución mensual' : 'evolución diaria'} 2026 (Unidades)
+                </p>
+                <div className="flex rounded-lg border border-gray-200 overflow-hidden text-[11px]">
+                  {(['mensual','diaria'] as const).map(v => (
+                    <button key={v} onClick={() => setVista(v)}
+                      className={`px-3 py-1 font-semibold transition-colors ${vista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                      {v === 'mensual' ? 'Mensual' : 'Diaria'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {vista === 'mensual' ? (
+                monthlyByMes.length === 0 ? (
+                  <div className="text-center py-10 text-gray-300 text-sm">
+                    Sin serie mensual disponible {seg ? '(SKUs sin ventas 2026)' : '(cargando seguimiento…)'}
+                  </div>
+                ) : (
+                  <>
+                  <div className="h-[260px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={monthlyByMes} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                        <defs>
+                          <linearGradient id="gradLineA" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%"   stopColor="#f59e0b" stopOpacity={1} />
+                            <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.9} />
+                          </linearGradient>
+                          <linearGradient id="gradLineB" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%"   stopColor="#2563eb" stopOpacity={1} />
+                            <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.9} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                        <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#f59e0b' }} width={60} axisLine={false} tickLine={false}
+                          tickFormatter={(v) => Number(v).toLocaleString('en-US')} />
+                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#2563eb' }} width={60} axisLine={false} tickLine={false}
+                          tickFormatter={(v) => Number(v).toLocaleString('en-US')} />
+                        <Tooltip
+                          cursor={{ stroke: '#cbd5e1', strokeDasharray: '3 3' }}
+                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                          formatter={(v: any) => Number(v).toLocaleString('en-US') + ' uds'}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Line yAxisId="left"  type="monotone" dataKey="A" name={r1.descripcion} stroke="url(#gradLineA)" strokeWidth={2.5}
+                          dot={{ r: 3, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }}
+                          activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }} />
+                        <Line yAxisId="right" type="monotone" dataKey="B" name={r2.descripcion} stroke="url(#gradLineB)" strokeWidth={2.5}
+                          dot={{ r: 3, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }}
+                          activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1 text-center">
+                    Eje izquierdo (ámbar) = SKU A · Eje derecho (azul) = SKU B — escalas independientes para comparar tendencia
+                  </p>
+                  </>
+                )
+              ) : (
+                dailyLoading ? (
+                  <div className="text-center py-10 text-gray-300 text-sm">Cargando serie diaria…</div>
+                ) : dailyMerged.length === 0 ? (
+                  <div className="text-center py-10 text-gray-300 text-sm">Sin ventas diarias 2026 para los SKUs seleccionados</div>
+                ) : (
+                  <>
+                  <div className="h-[260px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={dailyMerged} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+                        <defs>
+                          <linearGradient id="gradLineADay" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%"   stopColor="#f59e0b" stopOpacity={1} />
+                            <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.9} />
+                          </linearGradient>
+                          <linearGradient id="gradLineBDay" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%"   stopColor="#2563eb" stopOpacity={1} />
+                            <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.9} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="dia_str" tick={{ fontSize: 9, fill: '#64748b' }} axisLine={false} tickLine={false}
+                          interval={Math.max(0, Math.floor(dailyMerged.length / 12))} />
+                        <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#f59e0b' }} width={60} axisLine={false} tickLine={false}
+                          tickFormatter={(v) => Number(v).toLocaleString('en-US')} />
+                        <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#2563eb' }} width={60} axisLine={false} tickLine={false}
+                          tickFormatter={(v) => Number(v).toLocaleString('en-US')} />
+                        <Tooltip
+                          cursor={{ stroke: '#cbd5e1', strokeDasharray: '3 3' }}
+                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                          formatter={(v: any) => Number(v).toLocaleString('en-US') + ' uds'}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11 }} />
+                        <Line yAxisId="left"  type="monotone" dataKey="A" name={r1.descripcion} stroke="url(#gradLineADay)" strokeWidth={2}
+                          dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#f59e0b' }} />
+                        <Line yAxisId="right" type="monotone" dataKey="B" name={r2.descripcion} stroke="url(#gradLineBDay)" strokeWidth={2}
+                          dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1 text-center">
+                    Eje izquierdo (ámbar) = SKU A · Eje derecho (azul) = SKU B — escalas independientes
+                  </p>
+                  </>
+                )
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+function SkuSelect({
+  label, value, onChange, opts, otherValue, accent,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  opts: TopSku[]
+  otherValue: string
+  accent: 'amber' | 'blue'
+}) {
+  const ring = accent === 'amber' ? 'focus:ring-amber-400 border-amber-200' : 'focus:ring-blue-400 border-blue-200'
+  const dot  = accent === 'amber' ? 'bg-amber-500' : 'bg-blue-600'
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1 flex items-center gap-2">
+        <span className={`w-2 h-2 rounded-full ${dot}`} /> {label}
+      </p>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={`w-full text-sm rounded-lg border bg-white px-3 py-2 focus:outline-none focus:ring-2 ${ring}`}
+      >
+        <option value="">— selecciona un SKU —</option>
+        {opts.map(o => (
+          <option key={o.sku} value={o.sku} disabled={o.sku === otherValue}>
+            {o.sku} · {o.descripcion}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+function CompCard({
+  r, label, accent, moneda, fmtVal, skuVal, skuVal25, other, winner, side,
+}: {
+  r: TopSku | null
+  label: string
+  accent: 'amber' | 'blue'
+  moneda: 'usd' | 'cop'
+  fmtVal: (v: number) => string
+  skuVal: (r: TopSku) => number
+  skuVal25: (r: TopSku) => number
+  other: TopSku | null
+  winner: (a: number, b: number) => 1 | 2 | 0
+  side: 1 | 2
+}) {
+  const border = accent === 'amber' ? 'border-amber-200 bg-amber-50/40' : 'border-blue-200 bg-blue-50/40'
+  const dot    = accent === 'amber' ? 'bg-amber-500' : 'bg-blue-600'
+  const badge  = accent === 'amber' ? 'text-amber-700 bg-amber-100' : 'text-blue-700 bg-blue-100'
+  if (!r) {
+    return (
+      <div className={`rounded-xl border ${border} border-dashed p-4 text-center text-gray-300 text-xs`}>
+        <p className="mb-1 flex items-center justify-center gap-2 text-gray-400">
+          <span className={`w-2 h-2 rounded-full ${dot}`} /> {label}
+        </p>
+        <p className="py-6">Sin selección</p>
+      </div>
+    )
+  }
+  const isWin = (a: number, b: number | undefined) =>
+    b === undefined ? false : winner(a, b) === side
+
+  const val26 = skuVal(r)
+  const val25 = skuVal25(r)
+  const otherVal26 = other ? skuVal(other) : undefined
+  const otherVal25 = other ? skuVal25(other) : undefined
+  const otherUds   = other?.uni_2026
+  const otherShare = other?.share_pct
+  const otherDelta = other?.delta ?? undefined
+  const ticket = r.uni_2026 > 0 ? val26 / r.uni_2026 : 0
+  const otherTicket = other && other.uni_2026 > 0 ? skuVal(other) / other.uni_2026 : undefined
+
+  return (
+    <div className={`rounded-xl border ${border} p-4`}>
+      <div className="flex items-start justify-between mb-3 gap-2">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-widest text-gray-500 mb-1 flex items-center gap-2">
+            <span className={`w-2 h-2 rounded-full ${dot}`} /> {label}
+          </p>
+          <p className="text-sm font-semibold text-gray-800 leading-snug truncate" title={r.descripcion}>{r.descripcion}</p>
+          <p className="text-[11px] text-gray-400 font-mono">{r.sku} · {r.categoria}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        <MetricCell label={`Valor 26 ${moneda.toUpperCase()}`} value={fmtVal(val26)} win={isWin(val26, otherVal26)} badge={badge} />
+        <MetricCell label="Unidades" value={r.uni_2026.toLocaleString('en-US')} win={isWin(r.uni_2026, otherUds)} badge={badge} />
+        <MetricCell label={`Valor 25 ${moneda.toUpperCase()}`} value={fmtVal(val25)} win={isWin(val25, otherVal25)} badge={badge} />
+        <MetricCell label="Ticket prom." value={fmtVal(ticket)} win={isWin(ticket, otherTicket)} badge={badge} />
+        <MetricCell label="Share" value={`${r.share_pct.toFixed(1)}%`} win={isWin(r.share_pct, otherShare)} badge={badge} />
+        <MetricCell label="vs 2025" value={r.delta !== null ? <Delta d={r.delta} /> : <span className="text-gray-300">—</span>}
+          win={r.delta !== null && isWin(r.delta, otherDelta)} badge={badge} isNode />
+      </div>
+    </div>
+  )
+}
+
+function MetricCell({
+  label, value, win, badge, isNode,
+}: { label: string; value: React.ReactNode; win: boolean; badge: string; isNode?: boolean }) {
+  return (
+    <div className={`rounded-lg px-3 py-2 border ${win ? 'bg-white border-transparent shadow-sm' : 'bg-white/60 border-gray-100'}`}>
+      <div className="flex items-center justify-between mb-0.5">
+        <p className="text-[9px] uppercase tracking-widest text-gray-400">{label}</p>
+        {win && <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${badge}`}>▲</span>}
+      </div>
+      {isNode
+        ? <div className="text-sm font-semibold text-gray-800">{value}</div>
+        : <p className="text-sm font-semibold text-gray-800 font-mono">{value}</p>}
     </div>
   )
 }
