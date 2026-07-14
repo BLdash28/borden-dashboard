@@ -12,7 +12,7 @@ function readStorage() {
     if (!raw) return null
     return JSON.parse(raw) as {
       fAnos?: string[]; fMeses?: string[]; fPaises?: string[]; fCats?: string[]
-      fClientes?: string[]; fSkus?: string[]
+      fClientes?: string[]; fSkus?: string[]; fProveedor?: string[]
     }
   } catch { return null }
 }
@@ -35,6 +35,7 @@ interface SellInRow {
   pais:            string
   cliente:         string
   canal:           string
+  proveedor:       string
   orden_compra:    string
   ano:             number | null
   mes:             number | null
@@ -71,16 +72,18 @@ export default function SellInPage() {
   const [fMeses, setFMeses] = useState<string[]>([])
 
   // Filters
-  const [fPaises,   setFPaises]   = useState<string[]>([])
-  const [fCats,     setFCats]     = useState<string[]>([])
-  const [fClientes, setFClientes] = useState<string[]>([])
-  const [fSkus,     setFSkus]     = useState<string[]>([])
+  const [fPaises,    setFPaises]    = useState<string[]>([])
+  const [fCats,      setFCats]      = useState<string[]>([])
+  const [fClientes,  setFClientes]  = useState<string[]>([])
+  const [fSkus,      setFSkus]      = useState<string[]>([])
+  const [fProveedor, setFProveedor] = useState<string[]>([])
 
   // Options
-  const [paisOpts,    setPaisOpts]    = useState<string[]>([])
-  const [catOpts,     setCatOpts]     = useState<string[]>([])
-  const [clienteOpts, setClienteOpts] = useState<string[]>([])
-  const [skuOpts,     setSkuOpts]     = useState<string[]>([])
+  const [paisOpts,      setPaisOpts]      = useState<string[]>([])
+  const [catOpts,       setCatOpts]       = useState<string[]>([])
+  const [clienteOpts,   setClienteOpts]   = useState<string[]>([])
+  const [skuOpts,       setSkuOpts]       = useState<string[]>([])
+  const [proveedorOpts, setProveedorOpts] = useState<string[]>([])
 
   // Data
   const [rows,    setRows]    = useState<SellInRow[]>([])
@@ -103,20 +106,22 @@ export default function SellInPage() {
     // Hidratar filtros desde localStorage al montar (evita hydration mismatch
     // porque no leemos localStorage en el initializer de useState).
     const saved = readStorage()
-    const sAnos    = saved?.fAnos     ?? []
-    const sMeses   = saved?.fMeses    ?? []
-    const sPaises  = saved?.fPaises   ?? []
-    const sCats    = saved?.fCats     ?? []
-    const sClient  = saved?.fClientes ?? []
-    const sSkus    = saved?.fSkus     ?? []
+    const sAnos    = saved?.fAnos      ?? []
+    const sMeses   = saved?.fMeses     ?? []
+    const sPaises  = saved?.fPaises    ?? []
+    const sCats    = saved?.fCats      ?? []
+    const sClient  = saved?.fClientes  ?? []
+    const sSkus    = saved?.fSkus      ?? []
+    const sProv    = saved?.fProveedor ?? []
     if (sAnos.length)   setFAnos(sAnos)
     if (sMeses.length)  setFMeses(sMeses)
     if (sPaises.length) setFPaises(sPaises)
     if (sCats.length)   setFCats(sCats)
     if (sClient.length) setFClientes(sClient)
     if (sSkus.length)   setFSkus(sSkus)
+    if (sProv.length)   setFProveedor(sProv)
 
-    cargar(sAnos, sMeses, sPaises, sCats, sClient, sSkus, 1)
+    cargar(sAnos, sMeses, sPaises, sCats, sClient, sSkus, sProv, 1)
     fetch('/api/ventas/resumen?tipo=periodos')
       .then(r => r.json())
       .then(j => {
@@ -165,6 +170,13 @@ export default function SellInPage() {
     fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => setCatOpts(j.opts ?? []))
   }, [buildPeriodParams, fPaises])
 
+  // ── Proveedor: siempre disponible (respeta período + país) ─────────────────
+  useEffect(() => {
+    const p = buildPeriodParams(new URLSearchParams({ dim: 'proveedor' }))
+    if (fPaises.length) p.set('paises', fPaises.join(','))
+    fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => setProveedorOpts(j.opts ?? []))
+  }, [buildPeriodParams, fPaises])
+
   // ── NIVEL 2 producto — SKU: requiere Categoría ──────────────────────────────
   useEffect(() => {
     if (!fCats.length) { setSkuOpts([]); setFSkus([]); return }
@@ -183,16 +195,17 @@ export default function SellInPage() {
   const cargar = useCallback((
     anos: string[], meses: string[],
     paises: string[], cats: string[], clientes: string[], skus: string[],
-    pg: number
+    proveedores: string[], pg: number
   ) => {
     setLoading(true)
     const p = new URLSearchParams()
-    if (anos.length)     p.set('anos',       anos.join(','))
-    if (meses.length)    p.set('meses',      meses.join(','))
-    if (paises.length)   p.set('paises',     paises.join(','))
-    if (cats.length)     p.set('categorias', cats.join(','))
-    if (clientes.length) p.set('clientes',   clientes.join(','))
-    if (skus.length)     p.set('skus',       skus.join(','))
+    if (anos.length)        p.set('anos',        anos.join(','))
+    if (meses.length)       p.set('meses',       meses.join(','))
+    if (paises.length)      p.set('paises',      paises.join(','))
+    if (cats.length)        p.set('categorias',  cats.join(','))
+    if (clientes.length)    p.set('clientes',    clientes.join(','))
+    if (skus.length)        p.set('skus',        skus.join(','))
+    if (proveedores.length) p.set('proveedores', proveedores.join(','))
     p.set('page',         String(pg))
     p.set('pageSize',     String(PAGE_SIZE))
     p.set('granularidad', 'mes')   // fila por (SKU × cliente × mes × OC)
@@ -205,6 +218,7 @@ export default function SellInPage() {
           pais:            String(r.pais         ?? ''),
           cliente:         String(r.cliente      ?? ''),
           canal:           String(r.canal        ?? ''),
+          proveedor:       String(r.proveedor    ?? ''),
           orden_compra:    String(r.orden_compra ?? ''),
           ano:             r.ano != null ? Number(r.ano) : null,
           mes:             r.mes != null ? Number(r.mes) : null,
@@ -231,12 +245,12 @@ export default function SellInPage() {
 
   const saveStorage = (
     anos = fAnos, meses = fMeses, paises = fPaises, cats = fCats,
-    clientes = fClientes, skus = fSkus
+    clientes = fClientes, skus = fSkus, proveedores = fProveedor
   ) => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
         fAnos: anos, fMeses: meses, fPaises: paises, fCats: cats,
-        fClientes: clientes, fSkus: skus,
+        fClientes: clientes, fSkus: skus, fProveedor: proveedores,
       }))
     } catch {}
   }
@@ -245,19 +259,20 @@ export default function SellInPage() {
     anos     = fAnos,    meses    = fMeses,
     paises   = fPaises,  cats     = fCats,
     clientes = fClientes,
-    skus     = fSkus,    pg       = 1
+    skus     = fSkus,    proveedores = fProveedor,
+    pg       = 1
   ) => {
     setPage(pg)
-    saveStorage(anos, meses, paises, cats, clientes, skus)
-    cargar(anos, meses, paises, cats, clientes, skus, pg)
+    saveStorage(anos, meses, paises, cats, clientes, skus, proveedores)
+    cargar(anos, meses, paises, cats, clientes, skus, proveedores, pg)
   }
 
   const limpiar = () => {
     setFAnos([]); setFMeses([])
-    setFPaises([]); setFCats([]); setFClientes([]); setFSkus([])
+    setFPaises([]); setFCats([]); setFClientes([]); setFSkus([]); setFProveedor([])
     setPage(1)
     localStorage.removeItem(STORAGE_KEY)
-    cargar([], [], [], [], [], [], 1)
+    cargar([], [], [], [], [], [], [], 1)
   }
 
   // ── Sort ────────────────────────────────────────────────────────────────────
@@ -295,7 +310,8 @@ export default function SellInPage() {
       if (fPaises.length)   p.set('paises',     fPaises.join(','))
       if (fCats.length)     p.set('categorias', fCats.join(','))
       if (fClientes.length) p.set('clientes',   fClientes.join(','))
-      if (fSkus.length)     p.set('skus',       fSkus.join(','))
+      if (fSkus.length)      p.set('skus',        fSkus.join(','))
+      if (fProveedor.length) p.set('proveedores', fProveedor.join(','))
       p.set('all', 'true')
       p.set('granularidad', 'mes')   // fila por (SKU × cliente × mes × OC)
 
@@ -307,6 +323,7 @@ export default function SellInPage() {
         pais:            String(x.pais         ?? ''),
         cliente:         String(x.cliente      ?? ''),
         canal:           String(x.canal        ?? ''),
+        proveedor:       String(x.proveedor    ?? ''),
         orden_compra:    String(x.orden_compra ?? ''),
         sku:             String(x.sku          ?? ''),
         descripcion:     String(x.descripcion  ?? ''),
@@ -321,7 +338,7 @@ export default function SellInPage() {
       }))
       const gTotal = toNum(j.kpi?.total_ingresos) || allRows.reduce((s: number, x: { ingresos: number }) => s + x.ingresos, 0)
 
-      const headers = ['País','Cliente','Orden de Compra','SKU','Producto','Categoría','Subcategoría','Año','Mes','Cajas','Valor','Precio Caja','% Total']
+      const headers = ['País','Cliente','Proveedor','Orden de Compra','SKU','Producto','Categoría','Subcategoría','Año','Mes','Cajas','Valor','Precio Caja','% Total']
       const esc = (v: string | number) => {
         const s = String(v)
         return s.includes(',') || s.includes('"') || s.includes('\n')
@@ -330,7 +347,7 @@ export default function SellInPage() {
       const csvRows = [
         headers.join(','),
         ...allRows.map((x: {
-          pais: string; cliente: string; canal: string; orden_compra: string;
+          pais: string; cliente: string; canal: string; proveedor: string; orden_compra: string;
           sku: string; descripcion: string; categoria: string; subcategoria: string;
           ano: number | null; mes: number | null; fecha_max: string | null;
           cajas: number; ingresos: number; precio_promedio: number;
@@ -340,7 +357,7 @@ export default function SellInPage() {
           const mesOut = x.mes != null ? MESES[x.mes] ?? String(x.mes) : p2.mes
           const pct = gTotal > 0 ? (x.ingresos / gTotal) * 100 : 0
           return [
-            x.pais, x.cliente, x.orden_compra, x.sku, x.descripcion, x.categoria, x.subcategoria,
+            x.pais, x.cliente, x.proveedor, x.orden_compra, x.sku, x.descripcion, x.categoria, x.subcategoria,
             anoOut, mesOut,
             x.cajas.toFixed(0), x.ingresos.toFixed(2), x.precio_promedio.toFixed(4), pct.toFixed(2) + '%',
           ].map(esc).join(',')
@@ -488,7 +505,7 @@ export default function SellInPage() {
                 value={fSkus}
                 onChange={v => {
                   setFSkus(v)
-                  triggerCargar(fAnos, fMeses, fPaises, fCats, fClientes, v)
+                  triggerCargar(fAnos, fMeses, fPaises, fCats, fClientes, v, fProveedor)
                 }}
                 placeholder={fCats.length ? 'Todos los SKUs' : '—'}
               />
@@ -496,6 +513,25 @@ export default function SellInPage() {
             {/* spacer para alinear con la fila de arriba */}
             <div className="flex items-center self-end pb-2 text-transparent text-sm select-none">›</div>
             <div className="flex-1 min-w-[160px]" />
+          </div>
+        </div>
+
+        {/* Proveedor */}
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Proveedor</p>
+          <div className="flex items-start gap-1.5 flex-wrap">
+            <div className="flex-1 min-w-[160px] max-w-sm">
+              <MultiSelect
+                label="Proveedor"
+                options={proveedorOpts.map(p => ({ value: p, label: p }))}
+                value={fProveedor}
+                onChange={v => {
+                  setFProveedor(v)
+                  triggerCargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, v)
+                }}
+                placeholder="Todos los proveedores"
+              />
+            </div>
           </div>
         </div>
         </div>{/* end collapsible filtros */}
@@ -554,6 +590,7 @@ export default function SellInPage() {
                       <tr className="text-gray-400 uppercase tracking-widest border-b border-gray-100">
                         <th className="text-left py-2 pr-3">País</th>
                         <th className="text-left py-2 pr-3">Cliente</th>
+                        <th className="text-left py-2 pr-3 whitespace-nowrap">Proveedor</th>
                         <th className="text-left py-2 pr-6 w-1 whitespace-nowrap">OC</th>
                         <th className="text-left py-2 pr-3">SKU</th>
                         <th className="text-left py-2 pr-3">Producto</th>
@@ -581,6 +618,7 @@ export default function SellInPage() {
                         <tr key={i} className="border-b border-gray-50 hover:bg-gray-50">
                           <td className="py-1.5 pr-3 font-semibold text-amber-600">{r.pais}</td>
                           <td className="py-1.5 pr-3 text-gray-700 max-w-[140px] truncate">{r.cliente}</td>
+                          <td className="py-1.5 pr-3 whitespace-nowrap"><span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${r.proveedor === 'DFA' ? 'bg-amber-100 text-amber-700' : r.proveedor === 'Centrolac' ? 'bg-blue-100 text-blue-700' : r.proveedor === 'Centurión' ? 'bg-violet-100 text-violet-700' : r.proveedor === 'Sensación' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'}`}>{r.proveedor || '—'}</span></td>
                           <td className="py-1.5 pr-6 w-1 whitespace-nowrap text-gray-500 font-mono text-[11px]">{r.orden_compra || r.canal}</td>
                           <td className="py-1.5 pr-3 font-mono text-gray-500">{r.sku}</td>
                           <td className="py-1.5 pr-3 text-gray-700 max-w-[260px] truncate" title={r.descripcion}>{r.descripcion}</td>
@@ -601,13 +639,13 @@ export default function SellInPage() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                     <button
-                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, pg) }}
+                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, fProveedor, pg) }}
                       disabled={page === 1}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >← Anterior</button>
                     <span className="text-sm text-gray-500">Página {page} de {totalPages}</span>
                     <button
-                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, pg) }}
+                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, fProveedor, pg) }}
                       disabled={page === totalPages}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >Siguiente →</button>

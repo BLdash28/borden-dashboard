@@ -12,6 +12,7 @@ const DIM_MAP: Record<string, string> = {
   cliente:   'cliente_nombre',
   canal:     'canal',
   sku:       'sku',
+  proveedor: 'proveedor',
 }
 
 export async function GET(req: NextRequest) {

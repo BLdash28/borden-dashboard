@@ -51,6 +51,9 @@ export async function GET(req: NextRequest) {
     const skusArr = (sp.get('skus') || '').split(',').map(s => s.trim()).filter(Boolean)
     if (skusArr.length) { conds.push(`sku IN (${skusArr.map(() => `$${idx++}`).join(',')})`); params.push(...skusArr) }
 
+    const provArr = (sp.get('proveedores') || '').split(',').map(s => s.trim()).filter(Boolean)
+    if (provArr.length) { conds.push(`proveedor IN (${provArr.map(() => `$${idx++}`).join(',')})`); params.push(...provArr) }
+
     // Búsqueda libre
     const buscarP = sp.get('buscar') || ''
     if (buscarP) {
@@ -86,12 +89,12 @@ export async function GET(req: NextRequest) {
     // 'mes' = fila por (combo × mes × OC) — para CSV detallado
     // 'combo' = fila por combo (default de la tabla paginada)
     const groupBy = granularidad === 'mes'
-      ? 'pais, cliente_nombre, canal, tipo_negocio, sku, descripcion, categoria, subcategoria, ano, mes, numero_factura'
-      : 'pais, cliente_nombre, canal, tipo_negocio, sku, descripcion, categoria, subcategoria'
+      ? 'pais, cliente_nombre, canal, tipo_negocio, proveedor, sku, descripcion, categoria, subcategoria, ano, mes, numero_factura'
+      : 'pais, cliente_nombre, canal, tipo_negocio, proveedor, sku, descripcion, categoria, subcategoria'
     const selectExtra = granularidad === 'mes' ? ', ano, mes, numero_factura AS orden_compra' : ''
     const countGroupBy = granularidad === 'mes'
-      ? 'pais, cliente_nombre, canal, sku, descripcion, categoria, ano, mes, numero_factura'
-      : 'pais, cliente_nombre, canal, sku, descripcion, categoria'
+      ? 'pais, cliente_nombre, canal, proveedor, sku, descripcion, categoria, ano, mes, numero_factura'
+      : 'pais, cliente_nombre, canal, proveedor, sku, descripcion, categoria'
 
     // Count (filas agrupadas)
     const countR = await pool.query(
@@ -111,6 +114,7 @@ export async function GET(req: NextRequest) {
          cliente_nombre                               AS cliente,
          canal,
          tipo_negocio,
+         proveedor,
          sku,
          descripcion,
          categoria,
