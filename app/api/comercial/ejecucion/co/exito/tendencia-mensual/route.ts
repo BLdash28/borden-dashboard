@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
       const dp = await pool.query(
         `SELECT DISTINCT sku, descripcion
            FROM dim_producto
-          WHERE pais='CO' AND sku = ANY($1)`,
+          WHERE sku = ANY($1)`,
         [skusInvolved],
       )
       for (const r of dp.rows) descBySku[String(r.sku)] = r.descripcion ?? ''
