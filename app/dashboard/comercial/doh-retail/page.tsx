@@ -1,6 +1,7 @@
 'use client'
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { RefreshCw, Upload, Search, X, AlertTriangle } from 'lucide-react'
+import { useTableSort, SortableTh } from '@/components/ui/table-sort'
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 interface RetailRow {
@@ -267,6 +268,30 @@ export default function DohRetailPage() {
     [rows, diasSlider]
   )
 
+  // Sort tabla Retail Link — helper compartido
+  type DohCol = 'item_nbr' | 'item' | 'inventario' | 'ordenes' | 'transito' | 'wharehouse'
+    | 'doh_tiendas' | 'doh_tiendas_transito' | 'prom_diario'
+    | 'inv_cedi_cajas' | 'inv_cedi_unds' | 'doh_cedi' | 'doh_total'
+  const numCmp = (k: DohCol) => (a: Computed, b: Computed) => (Number(a[k as keyof Computed] ?? 0) - Number(b[k as keyof Computed] ?? 0))
+  const { toggleSort, sorted: computedSorted, SortArrow } = useTableSort<Computed, DohCol>(
+    computed, 'doh_total', 'asc',
+    {
+      item_nbr: (a, b) => String(a.item_nbr ?? '').localeCompare(String(b.item_nbr ?? '')),
+      item:     (a, b) => String(a.item ?? '').localeCompare(String(b.item ?? '')),
+      inventario:           numCmp('inventario'),
+      ordenes:              numCmp('ordenes'),
+      transito:             numCmp('transito'),
+      wharehouse:           numCmp('wharehouse'),
+      doh_tiendas:          numCmp('doh_tiendas'),
+      doh_tiendas_transito: numCmp('doh_tiendas_transito'),
+      prom_diario:          numCmp('prom_diario'),
+      inv_cedi_cajas:       numCmp('inv_cedi_cajas'),
+      inv_cedi_unds:        numCmp('inv_cedi_unds'),
+      doh_cedi:             numCmp('doh_cedi'),
+      doh_total:            numCmp('doh_total'),
+    },
+  )
+
   // Totales
   const totals = useMemo(() => {
     if (!computed.length) return null
@@ -422,27 +447,28 @@ export default function DohRetailPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-xs whitespace-nowrap">
               <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
+                <tr className="bg-gray-50 border-b border-gray-100 text-gray-500">
                   {/* Producto */}
-                  <th className="px-3 py-3 text-left text-gray-500 font-semibold sticky left-0 bg-gray-50 min-w-[80px]">Item Nbr</th>
-                  <th className="px-3 py-3 text-left text-gray-500 font-semibold min-w-[200px]">Item</th>
-                  <th className="px-3 py-3 text-center text-gray-500 font-semibold">Tipo</th>
-                  <th className="px-3 py-3 text-center text-gray-500 font-semibold">Est.</th>
+                  <SortableTh onClick={() => toggleSort('item_nbr')} arrow={<SortArrow col="item_nbr"/>}
+                    className="sticky left-0 bg-gray-50 min-w-[80px]">Item Nbr</SortableTh>
+                  <SortableTh onClick={() => toggleSort('item')} arrow={<SortArrow col="item"/>} className="min-w-[200px]">Item</SortableTh>
+                  <th className="px-3 py-3 text-center font-semibold">Tipo</th>
+                  <th className="px-3 py-3 text-center font-semibold">Est.</th>
                   {/* Tiendas */}
-                  <th className="px-2 py-3 text-right text-gray-500 font-semibold border-l border-gray-100">Inv.</th>
-                  <th className="px-2 py-3 text-right text-gray-500 font-semibold">Órdenes</th>
-                  <th className="px-2 py-3 text-right text-gray-500 font-semibold">Tránsito</th>
-                  <th className="px-2 py-3 text-right text-gray-500 font-semibold">Wharehouse</th>
-                  <th className="px-2 py-3 text-right text-blue-500 font-semibold">DOH Tiendas</th>
-                  <th className="px-2 py-3 text-right text-blue-500 font-semibold">DOH + Trán.</th>
+                  <SortableTh onClick={() => toggleSort('inventario')} arrow={<SortArrow col="inventario"/>} align="right" className="border-l border-gray-100">Inv.</SortableTh>
+                  <SortableTh onClick={() => toggleSort('ordenes')} arrow={<SortArrow col="ordenes"/>} align="right">Órdenes</SortableTh>
+                  <SortableTh onClick={() => toggleSort('transito')} arrow={<SortArrow col="transito"/>} align="right">Tránsito</SortableTh>
+                  <SortableTh onClick={() => toggleSort('wharehouse')} arrow={<SortArrow col="wharehouse"/>} align="right">Wharehouse</SortableTh>
+                  <SortableTh onClick={() => toggleSort('doh_tiendas')} arrow={<SortArrow col="doh_tiendas"/>} align="right" className="text-blue-500">DOH Tiendas</SortableTh>
+                  <SortableTh onClick={() => toggleSort('doh_tiendas_transito')} arrow={<SortArrow col="doh_tiendas_transito"/>} align="right" className="text-blue-500">DOH + Trán.</SortableTh>
                   {/* Prom */}
-                  <th className="px-2 py-3 text-right text-gray-700 font-semibold border-l border-gray-100">Prom. Diario</th>
+                  <SortableTh onClick={() => toggleSort('prom_diario')} arrow={<SortArrow col="prom_diario"/>} align="right" className="text-gray-700 border-l border-gray-100">Prom. Diario</SortableTh>
                   {/* CEDI */}
-                  <th className="px-2 py-3 text-right text-gray-500 font-semibold border-l border-gray-100">CEDI Cajas</th>
-                  <th className="px-2 py-3 text-right text-gray-500 font-semibold">CEDI Unds.</th>
-                  <th className="px-2 py-3 text-right text-purple-500 font-semibold">DOH CEDI</th>
+                  <SortableTh onClick={() => toggleSort('inv_cedi_cajas')} arrow={<SortArrow col="inv_cedi_cajas"/>} align="right" className="border-l border-gray-100">CEDI Cajas</SortableTh>
+                  <SortableTh onClick={() => toggleSort('inv_cedi_unds')} arrow={<SortArrow col="inv_cedi_unds"/>} align="right">CEDI Unds.</SortableTh>
+                  <SortableTh onClick={() => toggleSort('doh_cedi')} arrow={<SortArrow col="doh_cedi"/>} align="right" className="text-purple-500">DOH CEDI</SortableTh>
                   {/* Total */}
-                  <th className="px-2 py-3 text-right text-green-600 font-semibold border-l border-gray-100">DOH Total</th>
+                  <SortableTh onClick={() => toggleSort('doh_total')} arrow={<SortArrow col="doh_total"/>} align="right" className="text-green-600 border-l border-gray-100">DOH Total</SortableTh>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -467,7 +493,7 @@ export default function DohRetailPage() {
                 )}
 
                 {/* Filas productos */}
-                {computed.map(r => (
+                {computedSorted.map(r => (
                   <tr key={r.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="px-3 py-2 text-gray-600 font-mono sticky left-0 bg-white">
                       {r.item_nbr}
