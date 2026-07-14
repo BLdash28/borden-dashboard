@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useTableSort, SortableTh } from '@/components/ui/table-sort'
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, LabelList,
@@ -496,26 +497,7 @@ export default function SellInLicenciamiento() {
                   </div>
                   <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
                     <h3 className="text-sm font-bold text-gray-800 mb-3">Top 15 PDVs · 2026</h3>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
-                        <thead className="text-gray-500 text-[10px] uppercase tracking-wider">
-                          <tr className="border-b border-gray-100">
-                            <th className="text-left py-1.5 font-semibold">PDV</th>
-                            <th className="text-right py-1.5 font-semibold">USD</th>
-                            <th className="text-right py-1.5 font-semibold">Uds</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {wmHel.top_pdvs.map(p => (
-                            <tr key={p.punto_venta} className="border-b border-gray-50 hover:bg-blue-50/20">
-                              <td className="py-1.5 pr-3 text-gray-700 truncate max-w-[180px]">{p.punto_venta}</td>
-                              <td className="py-1.5 text-right tabular-nums text-gray-800 font-semibold">${fmtNum(p.usd)}</td>
-                              <td className="py-1.5 text-right tabular-nums text-gray-500">{fmtNum(p.uds)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                    <TopPdvsTable rows={wmHel.top_pdvs} />
                   </div>
                 </div>
               </div>
@@ -812,6 +794,40 @@ export default function SellInLicenciamiento() {
           </div>
         )
       })()}
+    </div>
+  )
+}
+
+// Top PDVs con sort — usa el helper compartido useTableSort
+function TopPdvsTable({ rows }: { rows: { punto_venta: string; cadena: string; usd: number; uds: number }[] }) {
+  type Col = 'pdv' | 'usd' | 'uds'
+  const { toggleSort, sorted, SortArrow } = useTableSort<
+    { punto_venta: string; cadena: string; usd: number; uds: number }, Col
+  >(rows, 'usd', 'desc', {
+    pdv: (a, b) => (a.punto_venta || '').localeCompare(b.punto_venta || ''),
+    usd: (a, b) => a.usd - b.usd,
+    uds: (a, b) => a.uds - b.uds,
+  })
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead className="text-gray-500 text-[10px] uppercase tracking-wider">
+          <tr className="border-b border-gray-100">
+            <SortableTh onClick={() => toggleSort('pdv')} arrow={<SortArrow col="pdv"/>}>PDV</SortableTh>
+            <SortableTh onClick={() => toggleSort('usd')} arrow={<SortArrow col="usd"/>} align="right">USD</SortableTh>
+            <SortableTh onClick={() => toggleSort('uds')} arrow={<SortArrow col="uds"/>} align="right">Uds</SortableTh>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(p => (
+            <tr key={p.punto_venta} className="border-b border-gray-50 hover:bg-blue-50/20">
+              <td className="py-1.5 pr-3 text-gray-700 truncate max-w-[180px]">{p.punto_venta}</td>
+              <td className="py-1.5 text-right tabular-nums text-gray-800 font-semibold">${fmtNum(p.usd)}</td>
+              <td className="py-1.5 text-right tabular-nums text-gray-500">{fmtNum(p.uds)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

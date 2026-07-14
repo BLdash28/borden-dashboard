@@ -8,6 +8,7 @@ import {
   ResponsiveContainer, LabelList,
 } from 'recharts'
 import FiltroMulti from '@/components/ui/FiltroMulti'
+import { useTableSort, SortableTh } from '@/components/ui/table-sort'
 
 const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 
@@ -646,18 +647,22 @@ function SellInSensacion({ data, moneda, isUsd, fmtVal, fmt$Short }: {
     return s
   })
 
-  // Sort tabla Clientes
-  type SortCol = 'cliente' | 'venta' | 'uds' | 'share' | 'delta'
-  const [sortCol, setSortCol] = useState<SortCol>('venta')
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-  const toggleSort = (col: SortCol) => {
-    if (col === sortCol) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
-    else { setSortCol(col); setSortDir(col === 'cliente' ? 'asc' : 'desc') }
-  }
-  const SortArrow = ({ col }: { col: SortCol }) => {
-    if (sortCol !== col) return <span className="text-gray-300 ml-1">↕</span>
-    return <span className="text-amber-600 ml-1">{sortDir === 'desc' ? '↓' : '↑'}</span>
-  }
+  // Sort tabla Clientes usando helper compartido
+  type CliCol = 'cliente' | 'venta' | 'uds' | 'share' | 'delta'
+  const { sortCol, sortDir, toggleSort, sorted: cadenasSorted, SortArrow } = useTableSort<
+    Data['por_cadena'][number], CliCol
+  >(
+    data.por_cadena,
+    'venta',
+    'desc',
+    {
+      cliente: (a, b) => a.cadena.localeCompare(b.cadena),
+      venta:   (a, b) => a.usd_2026 - b.usd_2026,
+      uds:     (a, b) => a.uds_2026 - b.uds_2026,
+      share:   (a, b) => a.usd_2026 - b.usd_2026,
+      delta:   (a, b) => (a.delta ?? -Infinity) - (b.delta ?? -Infinity),
+    },
+  )
 
   const totalVenta = isUsd ? data.ytd_2026 : data.ytd_2026_crc
   const monthlyChart = data.monthly.map(m => ({
@@ -774,40 +779,15 @@ function SellInSensacion({ data, moneda, isUsd, fmtVal, fmt$Short }: {
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider">
               <tr>
-                <th onClick={() => toggleSort('cliente')}
-                  className="text-left py-2 px-3 font-semibold cursor-pointer select-none hover:text-gray-700">
-                  Cliente<SortArrow col="cliente"/>
-                </th>
-                <th onClick={() => toggleSort('venta')}
-                  className="text-right py-2 px-3 font-semibold cursor-pointer select-none hover:text-gray-700">
-                  Sell-In {moneda.toUpperCase()}<SortArrow col="venta"/>
-                </th>
-                <th onClick={() => toggleSort('uds')}
-                  className="text-right py-2 px-3 font-semibold cursor-pointer select-none hover:text-gray-700">
-                  Unidades<SortArrow col="uds"/>
-                </th>
-                <th onClick={() => toggleSort('share')}
-                  className="text-right py-2 px-3 font-semibold cursor-pointer select-none hover:text-gray-700">
-                  % Share<SortArrow col="share"/>
-                </th>
-                <th onClick={() => toggleSort('delta')}
-                  className="text-right py-2 px-3 font-semibold cursor-pointer select-none hover:text-gray-700">
-                  Δ vs 2025<SortArrow col="delta"/>
-                </th>
+                <SortableTh onClick={() => toggleSort('cliente')} arrow={<SortArrow col="cliente"/>}>Cliente</SortableTh>
+                <SortableTh onClick={() => toggleSort('venta')} arrow={<SortArrow col="venta"/>} align="right">Sell-In {moneda.toUpperCase()}</SortableTh>
+                <SortableTh onClick={() => toggleSort('uds')} arrow={<SortArrow col="uds"/>} align="right">Unidades</SortableTh>
+                <SortableTh onClick={() => toggleSort('share')} arrow={<SortArrow col="share"/>} align="right">% Share</SortableTh>
+                <SortableTh onClick={() => toggleSort('delta')} arrow={<SortArrow col="delta"/>} align="right">Δ vs 2025</SortableTh>
               </tr>
             </thead>
             <tbody>
-              {[...data.por_cadena].sort((a, b) => {
-                const dir = sortDir === 'asc' ? 1 : -1
-                if (sortCol === 'cliente') return a.cadena.localeCompare(b.cadena) * dir
-                if (sortCol === 'uds')     return (a.uds_2026 - b.uds_2026) * dir
-                if (sortCol === 'delta') {
-                  const da = a.delta ?? -Infinity, db = b.delta ?? -Infinity
-                  return (da - db) * dir
-                }
-                // 'venta' o 'share' — comparten mismo orden porque share es proporcional a venta
-                return (a.usd_2026 - b.usd_2026) * dir
-              }).map(c => {
+              {cadenasSorted.map(c => {
                 const total = data.por_cadena.reduce((s, x) => s + x.usd_2026, 0)
                 const pct = total > 0 ? (c.usd_2026 / total) * 100 : 0
                 const pdvs = pdvsGrouped[c.cadena] ?? []
