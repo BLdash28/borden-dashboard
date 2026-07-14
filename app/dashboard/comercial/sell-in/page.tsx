@@ -276,31 +276,74 @@ export default function SellInPage() {
 
   const arrow = (key: SortKey) => sort.key === key ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : ' ↕'
 
-  // ── CSV ─────────────────────────────────────────────────────────────────────
-  const descargarCSV = () => {
-    const headers = ['País','Cliente','Orden de Compra','SKU','Producto','Categoría','Subcategoría','Año','Mes','Cajas','Valor','Precio Caja','% Total']
-    const esc = (v: string | number) => {
-      const s = String(v)
-      return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s
+  // ── CSV (descarga TODAS las filas del filtro, no solo la página visible) ──
+  const [downloading, setDownloading] = useState(false)
+  const descargarCSV = async () => {
+    if (downloading) return
+    setDownloading(true)
+    try {
+      const p = new URLSearchParams()
+      if (fAnos.length)     p.set('anos',       fAnos.join(','))
+      if (fMeses.length)    p.set('meses',      fMeses.join(','))
+      if (fPaises.length)   p.set('paises',     fPaises.join(','))
+      if (fCats.length)     p.set('categorias', fCats.join(','))
+      if (fClientes.length) p.set('clientes',   fClientes.join(','))
+      if (fSkus.length)     p.set('skus',       fSkus.join(','))
+      p.set('all', 'true')
+
+      const r = await fetch('/api/ventas/sell-in?' + p)
+      const j = await r.json()
+      if (j.error) { showError(j.error || 'Error al descargar'); return }
+
+      const allRows = (j.rows || []).map((x: Record<string, unknown>) => ({
+        pais:            String(x.pais         ?? ''),
+        cliente:         String(x.cliente      ?? ''),
+        canal:           String(x.canal        ?? ''),
+        sku:             String(x.sku          ?? ''),
+        descripcion:     String(x.descripcion  ?? ''),
+        categoria:       String(x.categoria    ?? ''),
+        subcategoria:    String(x.subcategoria ?? ''),
+        fecha_max:       x.fecha_max ? String(x.fecha_max).slice(0, 10) : null,
+        cajas:           toNum(x.cajas),
+        ingresos:        toNum(x.ingresos),
+        precio_promedio: toNum(x.precio_promedio),
+      }))
+      const gTotal = toNum(j.kpi?.total_ingresos) || allRows.reduce((s: number, x: { ingresos: number }) => s + x.ingresos, 0)
+
+      const headers = ['País','Cliente','Orden de Compra','SKU','Producto','Categoría','Subcategoría','Año','Mes','Cajas','Valor','Precio Caja','% Total']
+      const esc = (v: string | number) => {
+        const s = String(v)
+        return s.includes(',') || s.includes('"') || s.includes('\n')
+          ? `"${s.replace(/"/g, '""')}"` : s
+      }
+      const csvRows = [
+        headers.join(','),
+        ...allRows.map((x: {
+          pais: string; cliente: string; canal: string; sku: string; descripcion: string;
+          categoria: string; subcategoria: string; fecha_max: string | null;
+          cajas: number; ingresos: number; precio_promedio: number;
+        }) => {
+          const p2 = partesFecha(x.fecha_max)
+          const pct = gTotal > 0 ? (x.ingresos / gTotal) * 100 : 0
+          return [
+            x.pais, x.cliente, x.canal, x.sku, x.descripcion, x.categoria, x.subcategoria,
+            p2.ano, p2.mes,
+            x.cajas.toFixed(0), x.ingresos.toFixed(2), x.precio_promedio.toFixed(4), pct.toFixed(2) + '%',
+          ].map(esc).join(',')
+        }),
+      ]
+      const blob = new Blob(['﻿' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href = url
+      a.download = `sell_in_${fAnos.length ? fAnos.join('-') : 'todos'}_${fMeses.length ? fMeses.map(m => MESES[parseInt(m)]).join('-') : 'todos'}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (e: unknown) {
+      showError(e instanceof Error ? e.message : 'Error al descargar CSV')
+    } finally {
+      setDownloading(false)
     }
-    const csv = [
-      headers.join(','),
-      ...sorted.map(r => {
-        const p = partesFecha(r.fecha_max)
-        return [
-          r.pais, r.cliente, r.canal, r.sku, r.descripcion, r.categoria, r.subcategoria,
-          p.ano, p.mes,
-          r.cajas.toFixed(0), r.ingresos.toFixed(2), r.precio_promedio.toFixed(4), r.pct.toFixed(2) + '%',
-        ].map(esc).join(',')
-      }),
-    ].join('\n')
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url  = URL.createObjectURL(blob)
-    const a    = document.createElement('a')
-    a.href = url
-    a.download = `sell_in_${fAnos.length ? fAnos.join('-') : 'todos'}_${fMeses.length ? fMeses.map(m => MESES[parseInt(m)]).join('-') : 'todos'}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
   }
 
   // Meses disponibles = unión de meses para los años seleccionados (o todos si ninguno)
@@ -479,10 +522,10 @@ export default function SellInPage() {
           </button>
           <button
             onClick={descargarCSV}
-            disabled={rows.length === 0}
+            disabled={rows.length === 0 || downloading}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 shadow-sm disabled:opacity-40"
           >
-            <Download size={13} /> CSV
+            <Download size={13} /> {downloading ? 'Descargando…' : 'CSV'}
           </button>
         </div>
 
