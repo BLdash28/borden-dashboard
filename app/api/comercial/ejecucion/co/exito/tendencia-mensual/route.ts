@@ -12,25 +12,33 @@ const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov'
 export async function GET(req: NextRequest) {
   try {
     const f = parseExitoFilters(req)
-    const meses = Math.max(1, Math.min(36, parseInt(req.nextUrl.searchParams.get('meses') ?? '14')))
+    // Modo por defecto: rango completo (desde el primer mes con datos hasta el último).
+    // Compat: si se pasa `?meses=N` con N > 0, usa ventana rolling de N meses.
+    const mesesParam = req.nextUrl.searchParams.get('meses')
+    const usarRangoCompleto = !mesesParam || mesesParam === 'full'
+    const meses = usarRangoCompleto ? 0 : Math.max(1, Math.min(48, parseInt(mesesParam)))
 
-    // Último (ano, mes) con data — respeta filtros para que el rango sea coherente
+    // Rango con data — respeta filtros para que la ventana sea coherente
     const wUlt = buildExitoWhere(f, { startAt: 1 })
     const ultR = await pool.query(
-      `SELECT MAX(ano*100 + mes) AS f
+      `SELECT MAX(ano*100 + mes) AS mx, MIN(ano*100 + mes) AS mn
          FROM mv_exito_mensual
         WHERE pais='CO' AND ${wUlt.where}`,
       wUlt.params,
     )
-    const fNum = parseInt(ultR.rows[0]?.f ?? '0')
-    if (!fNum) {
+    const mx = parseInt(ultR.rows[0]?.mx ?? '0')
+    const mn = parseInt(ultR.rows[0]?.mn ?? '0')
+    if (!mx) {
       return NextResponse.json({ desde: null, hasta: null, labels: [], total: [], por_sku: [] })
     }
-    const hastaAno = Math.floor(fNum / 100)
-    const hastaMes = fNum % 100
-    // Convertir a serial (ano*12 + mes) para calcular ventana continua
+    const hastaAno = Math.floor(mx / 100)
+    const hastaMes = mx % 100
+    const primerAno = Math.floor(mn / 100)
+    const primerMes = mn % 100
+    // Serial (ano*12 + mes) para calcular ventana continua
     const hastaSerial = hastaAno * 12 + hastaMes
-    const desdeSerial = hastaSerial - (meses - 1)
+    const desdeSerialCompleto = primerAno * 12 + primerMes
+    const desdeSerial = usarRangoCompleto ? desdeSerialCompleto : hastaSerial - (meses - 1)
     const desdeAno = Math.floor((desdeSerial - 1) / 12)
     const desdeMes = ((desdeSerial - 1) % 12) + 1
 
