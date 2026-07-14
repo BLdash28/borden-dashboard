@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { RefreshCw, TrendingUp, TrendingDown, Minus, SlidersHorizontal, X } from 'lucide-react'
-import MultiSelect from '@/components/dashboard/MultiSelect'
+import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
   PieChart, Pie,
@@ -14,6 +13,7 @@ import {
   TendenciaMensualChart, TendenciaDiariaChart, MetricaTogglePill,
   type TendMetrica, type TendData, type TendDailyRow,
 } from '@/components/ui/tendencia-chart'
+import { EjecucionLayout } from './shared'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -389,7 +389,6 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     puntos:        { value: string; cadena: string | null; venta: number }[]
     skus:          { value: string; descripcion: string | null; subcategoria: string | null; venta: number }[]
   } | null>(null)
-  const [showFiltros,   setShowFiltros]   = useState(false)
   // Compat: cadenaFilter legacy = primer item si hay UNA sola cadena seleccionada
   const cadenaFilter = cadenasSel.length === 1 ? cadenasSel[0] : ''
 
@@ -481,14 +480,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       .catch(() => {})
   }, [pais])
 
-  // Persistir toggle Filtros abierto/cerrado
-  useEffect(() => {
-    const saved = localStorage.getItem(`${storageKey}-showFiltros`)
-    if (saved === '1') setShowFiltros(true)
-  }, []) // eslint-disable-line
-  useEffect(() => {
-    localStorage.setItem(`${storageKey}-showFiltros`, showFiltros ? '1' : '0')
-  }, [showFiltros])
+  // (Persistencia del toggle Filtros ahora la maneja EjecucionLayout con el mismo storageKey)
 
   const currentCat = DIVS.find(d => d.key === div)?.cat ?? ''
 
@@ -2185,114 +2177,38 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   }
 
   return (
-    <div className="flex flex-col min-h-full">
-
-      {/* ── Header ── */}
-      <div className="px-6 pt-6 pb-0 flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <p className="text-xs text-gray-400 uppercase tracking-widest">Ejecución Walmart</p>
-          <h1 className="text-2xl font-bold text-gray-800">{bandera} Walmart Group</h1>
-          <p className="text-sm text-gray-400 mt-0.5">{paisNombre} · Sell-In + Sell-Out</p>
-        </div>
-        <button
-          onClick={() => window.location.reload()}
-          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
-          <RefreshCw size={13} className={Object.values(loading).some(Boolean) ? 'animate-spin' : ''} /> Actualizar
-        </button>
-      </div>
-
-      {/* ── Filtros globales (nuevos) ── */}
-      <div className="px-6 pt-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4"
-             style={{ ['--acc' as any]: '#0071CE', ['--bg' as any]: '#ffffff', ['--surface' as any]: '#ffffff',
-                      ['--border' as any]: '#e5e7eb', ['--t1' as any]: '#111827', ['--t2' as any]: '#374151', ['--t3' as any]: '#6b7280' }}>
-          <div className="flex items-center flex-wrap gap-3 justify-between">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                onClick={() => setShowFiltros(v => !v)}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg">
-                <SlidersHorizontal size={12}/> Filtros {showFiltros ? '▲' : '▼'}
-              </button>
-              {[
-                { label: 'Cadena',       items: cadenasSel, onClear: () => setCadenasSel([]) },
-                { label: 'Categoría',    items: categoriaSel, onClear: () => setCategoriaSel([]) },
-                { label: 'Subcategoría', items: subcatSel,  onClear: () => setSubcatSel([])  },
-                { label: 'Formato',      items: formatoSel, onClear: () => setFormatoSel([]) },
-                { label: 'PDV',          items: puntoSel,   onClear: () => setPuntoSel([])   },
-                { label: 'SKU',          items: skuSel,     onClear: () => setSkuSel([])     },
-              ].filter(c => c.items.length > 0).map(c => (
-                <span key={c.label}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium bg-blue-50 text-blue-800 border border-blue-200 rounded-full px-2.5 py-1">
-                  <span className="text-blue-500">{c.label}:</span>
-                  <span>{c.items.length <= 2 ? c.items.join(', ') : `${c.items.length} sel.`}</span>
-                  <button onClick={c.onClear} className="ml-0.5 rounded-full hover:bg-blue-100 p-0.5" aria-label={`Limpiar ${c.label}`}>
-                    <X size={10}/>
-                  </button>
-                </span>
-              ))}
-            </div>
-            {(cadenasSel.length + categoriaSel.length + subcatSel.length + formatoSel.length + puntoSel.length + skuSel.length > 0) && (
-              <button
-                onClick={() => {
-                  setCadenasSel([]); setCategoriaSel([]); setSubcatSel([]); setFormatoSel([]); setPuntoSel([]); setSkuSel([])
-                }}
-                className="px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
-                ↺ Reset filtros
-              </button>
-            )}
-          </div>
-          {showFiltros && (
-            <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-              <MultiSelect label="Cadena" placeholder="Todas" selectAllLabel="Todas las cadenas"
-                value={cadenasSel} onChange={setCadenasSel}
-                options={(filtrosOpts?.cadenas ?? []).map(o => ({ value: o.value, label: o.value }))} />
-              <MultiSelect label="Categoría" placeholder="Todas" selectAllLabel="Todas las categorías"
-                value={categoriaSel} onChange={setCategoriaSel}
-                options={(filtrosOpts?.categorias ?? []).map(o => ({ value: o.value, label: o.value }))} />
-              <MultiSelect label="Subcategoría" placeholder="Todas" selectAllLabel="Todas las subcategorías"
-                value={subcatSel} onChange={setSubcatSel}
-                options={(filtrosOpts?.subcategorias ?? []).map(o => ({ value: o.value, label: o.value }))} />
-              <MultiSelect label="Formato" placeholder="Todos" selectAllLabel="Todos los formatos"
-                value={formatoSel} onChange={setFormatoSel}
-                options={(filtrosOpts?.formatos ?? []).map(o => ({ value: o.value, label: o.value }))} />
-              <MultiSelect label="Punto de Venta" placeholder="Todos" selectAllLabel="Todos los PDVs"
-                value={puntoSel} onChange={setPuntoSel}
-                options={(filtrosOpts?.puntos ?? [])
-                  .filter(o => cadenasSel.length === 0 || (o.cadena && cadenasSel.includes(o.cadena)))
-                  .map(o => ({ value: o.value, label: o.value }))} />
-              <MultiSelect label="SKU / Producto" placeholder="Todos" selectAllLabel="Todos los SKUs"
-                value={skuSel} onChange={setSkuSel}
-                options={(filtrosOpts?.skus ?? [])
-                  .filter(o => subcatSel.length === 0 || (o.subcategoria && subcatSel.includes(o.subcategoria)))
-                  .map(o => ({ value: o.value, label: o.descripcion ? `${o.value} · ${o.descripcion.slice(0, 32)}` : o.value }))} />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* ── Section nav ── */}
-      <div className="px-6 pt-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="flex overflow-x-auto">
-            {SECTIONS.map(s => (
-              <button key={s.key} onClick={() => goSection(s.key)}
-                className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors flex-shrink-0
-                  ${section === s.key
-                    ? 'border-amber-500 text-amber-600 bg-amber-50/40'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* ── Content ── */}
-      <div className="px-6 py-6 flex-1">
+      <EjecucionLayout
+        eyebrow="Ejecución Walmart"
+        title="Walmart Group"
+        flag={bandera}
+        subtitle={`${paisNombre} · Sell-In + Sell-Out`}
+        loading={Object.values(loading).some(Boolean)}
+        accent="blue"
+        storageKey={storageKey}
+        sections={SECTIONS}
+        section={section}
+        onSection={goSection}
+        filters={[
+          { key: 'categoria', label: 'Categoría', value: categoriaSel, onChange: setCategoriaSel,
+            options: (filtrosOpts?.categorias ?? []).map(o => ({ value: o.value })) },
+          { key: 'cadena', label: 'Cadena', value: cadenasSel, onChange: setCadenasSel,
+            options: (filtrosOpts?.cadenas ?? []).map(o => ({ value: o.value })) },
+          { key: 'subcategoria', label: 'Subcategoría', value: subcatSel, onChange: setSubcatSel,
+            options: (filtrosOpts?.subcategorias ?? []).map(o => ({ value: o.value })) },
+          { key: 'formato', label: 'Formato', value: formatoSel, onChange: setFormatoSel,
+            options: (filtrosOpts?.formatos ?? []).map(o => ({ value: o.value })) },
+          { key: 'punto', label: 'Punto de Venta', value: puntoSel, onChange: setPuntoSel,
+            options: (filtrosOpts?.puntos ?? [])
+              .filter(o => cadenasSel.length === 0 || (o.cadena && cadenasSel.includes(o.cadena)))
+              .map(o => ({ value: o.value })) },
+          { key: 'sku', label: 'SKU / Producto', value: skuSel, onChange: setSkuSel, span: 2,
+            options: (filtrosOpts?.skus ?? [])
+              .filter(o => subcatSel.length === 0 || (o.subcategoria && subcatSel.includes(o.subcategoria)))
+              .map(o => ({ value: o.value, label: o.descripcion ? `${o.value} · ${o.descripcion}` : o.value })) },
+        ]}
+      >
         {renderSection()}
-      </div>
-
-    </div>
+      </EjecucionLayout>
   )
 }
 
