@@ -69,10 +69,11 @@ export async function GET(req: NextRequest) {
         WHERE pais = $1 AND ano = 2026 AND ${w.where}
         GROUP BY categoria ORDER BY valor_2026 DESC
       `, [pais, ...w.params]),
-      // Monthly 2025 + 2026
+      // Monthly 2025 + 2026 (valor + unidades)
       pool.query(`
         SELECT ano, mes,
-               ROUND(SUM(ventas_valor)::numeric, 2) AS valor
+               ROUND(SUM(ventas_valor)::numeric, 2)    AS valor,
+               ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
         FROM mv_walmart_mensual
         WHERE pais = $1 AND ano IN (2025, 2026) AND ${w.where}
         GROUP BY 1, 2 ORDER BY 1, 2
@@ -82,17 +83,17 @@ export async function GET(req: NextRequest) {
     const row = ytdR.rows[0] ?? {}
     const ultimoMes = parseInt(row.ultimo_mes ?? '0')
 
-    const monthly: Record<string, { mes: number; mes_nombre: string; y2025: number; y2026: number | null }> = {}
+    const monthly: Record<string, { mes: number; mes_nombre: string; y2025: number; y2026: number | null; u2025: number; u2026: number | null }> = {}
     for (let m = 1; m <= 12; m++) {
-      monthly[m] = { mes: m, mes_nombre: MN[m], y2025: 0, y2026: null }
+      monthly[m] = { mes: m, mes_nombre: MN[m], y2025: 0, y2026: null, u2025: 0, u2026: null }
     }
     for (const r of monthlyR.rows) {
       const m = parseInt(r.mes)
       const a = parseInt(r.ano)
-      if (a === 2025) monthly[m].y2025 = parseFloat(r.valor)
-      if (a === 2026) monthly[m].y2026 = parseFloat(r.valor)
+      if (a === 2025) { monthly[m].y2025 = parseFloat(r.valor); monthly[m].u2025 = parseFloat(r.unidades ?? '0') }
+      if (a === 2026) { monthly[m].y2026 = parseFloat(r.valor); monthly[m].u2026 = parseFloat(r.unidades ?? '0') }
     }
-    for (let m = ultimoMes + 1; m <= 12; m++) monthly[m].y2026 = null
+    for (let m = ultimoMes + 1; m <= 12; m++) { monthly[m].y2026 = null; monthly[m].u2026 = null }
 
     return NextResponse.json({
       ytd_2026:    parseFloat(row.ytd_2026 ?? '0'),

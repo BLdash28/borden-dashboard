@@ -1,6 +1,6 @@
-'use client'
+﻿'use client'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Download } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
   PieChart, Pie,
@@ -13,7 +13,7 @@ import {
   TendenciaMensualChart, TendenciaDiariaChart, MetricaTogglePill,
   type TendMetrica, type TendData, type TendDailyRow,
 } from '@/components/ui/tendencia-chart'
-import { EjecucionLayout } from './shared'
+import { EjecucionLayout, KpiCard } from './shared'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -103,6 +103,10 @@ const fmtLblUnd = (v: any) => {
   if (Math.abs(n) >= 1e3) return (n / 1e3).toFixed(0) + 'K'
   return String(Math.round(n))
 }
+const fmtNum = (v: number) => Math.round(v).toLocaleString('en-US')
+const fmtRR  = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const MN12   = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+const MES_LBL_YR = (m: number, ano: number) => `${MN12[m]}-${String(ano).slice(-2)}`
 
 function Delta({ d, isPp = false }: { d: number | null | undefined; isPp?: boolean }) {
   const n = d ?? 0
@@ -568,12 +572,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
     } else if (section === 'evolucion') {
       setL('evolucion', true)
-      const qsTop5 = buildFilterQS({ ...extraCat, ...extraSubcat, top: String(evolTopN > 5 ? 100 : 5) })
       Promise.all([
-        fetch(`/api/comercial/ejecucion/walmart/timeseries?${qsWithSub}`).then(r => r.json()),
-        fetch(`/api/comercial/ejecucion/walmart/evo-top5?${qsTop5}`).then(r => r.json()),
-        fetch(`/api/comercial/ejecucion/walmart/comparativo?pais=${pais}&cliente=${clienteSellin}`).then(r => r.json()),
-      ]).then(([tsData, t5Data, cpData]) => { setTs(tsData); setEvoTop5(t5Data); setComparativo(cpData) })
+        fetch(`/api/comercial/ejecucion/walmart/kpis?${qs}`).then(r => r.json()),
+      ]).then(([so]) => { setSellout(so) })
         .finally(() => setL('evolucion', false))
 
     } else if (section === 'pareto') {
@@ -636,9 +637,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       .then(r => r.json()).then(d => setEvolDiario(d))
   }, [evolVista, div, evolSubcat, filterKey, evolTopN, evolDesde, evolHasta, section]) // eslint-disable-line
 
-  // Tendencia mensual (chart Sell-Out Mensual · Walmart) — solo Resumen
+  // Tendencia mensual (chart Sell-Out Mensual · Walmart) — Resumen + Evolución
   useEffect(() => {
-    if (section !== 'resumen') return
+    if (section !== 'resumen' && section !== 'evolucion') return
     setTendencia(null)
     const cat = DIVS.find(d => d.key === div)?.cat ?? ''
     const extra: Record<string, string> = {}
@@ -651,7 +652,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
   // Tendencia diaria (chart Sell-Out Diaria · Walmart) — dedicado, no re-dispara mensual
   useEffect(() => {
-    if (section !== 'resumen' || tendVista !== 'diaria') return
+    if ((section !== 'resumen' && section !== 'evolucion') || tendVista !== 'diaria') return
     setTendDailyLoading(true)
     const cat = DIVS.find(d => d.key === div)?.cat ?? ''
     const extra: Record<string, string> = {}
@@ -685,11 +686,6 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       y2025: (m.y2025 ?? 0) > 0 ? m.y2025 : null,
     }))
 
-    const siVal    = sellin?.kpis?.ingresos?.valor ?? 0
-    const siDelta  = sellin?.kpis?.ingresos?.delta ?? null
-    const siCajas  = sellin?.kpis?.cajas?.valor    ?? 0
-    const siMargen = sellin?.kpis?.margen_pct       ?? 0
-
     return (
       <div className="space-y-5">
 
@@ -714,101 +710,6 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             ))}
           </div>
         </div>
-
-        {/* Sell-In KPI row */}
-        {siVal > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Sell-In</p>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {[
-                { label: 'Sell-In YTD 2026', value: fmtFull(siVal),                        sub: `cliente: ${clienteSellin}`, icon: '🔥', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
-                { label: 'vs YTD 2025',       value: siDelta !== null ? <Delta d={siDelta} /> : <span className="text-sm text-gray-400">Sin hist.</span>, sub: 'crecimiento YTD', icon: '📈', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
-                { label: 'Cajas YTD',         value: Math.round(siCajas).toLocaleString('en-US'), sub: 'cajas facturadas',  icon: '🗃️', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
-                { label: 'Margen Bruto',      value: `${siMargen.toFixed(1)}%`,             sub: 'margen promedio YTD',      icon: '💹', bg: siMargen > 30 ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-gray-100', tc: siMargen > 30 ? 'text-emerald-700' : 'text-gray-800' },
-              ].map(c => (
-                <div key={c.label} className={`rounded-xl border shadow-sm p-5 ${c.bg}`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
-                    <span className="text-lg">{c.icon}</span>
-                  </div>
-                  <p className={`text-2xl font-bold mb-1 ${c.tc}`}>{c.value}</p>
-                  <p className="text-xs text-gray-400">{c.sub}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Sell-Out & Sell-In por Categoría — YTD 2026 */}
-        {cats.filter((c: any) => c.valor_2026 > 0).length > 0 && (
-          <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
-            <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
-              <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest">📊 SELL-OUT vs SELL-IN POR CATEGORÍA · YTD 2026 · {pais}</p>
-              <div className="flex gap-4 text-[10px]">
-                <span className="text-blue-300">Sell-Out total: <b className="text-yellow-300">{fmtFull(soTotal)}</b></span>
-                <span className="text-blue-300">Sell-In total: <b className="text-yellow-300">{fmtFull(siVal)}</b></span>
-              </div>
-            </div>
-            <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${Math.min(cats.filter((c: any) => c.valor_2026 > 0).length, 4)} gap-4`}>
-              {cats.filter((c: any) => c.valor_2026 > 0).map((c: any) => {
-                const pctSo = soTotal > 0 ? (c.valor_2026 / soTotal * 100) : 0
-                const siCat = sellinPorCat[c.categoria] ?? 0
-                const pctSi = siVal > 0 ? (siCat / siVal * 100) : 0
-                const emoji = /queso/i.test(c.categoria) ? '🧀'
-                            : /leche/i.test(c.categoria) ? '🥛'
-                            : /helado/i.test(c.categoria) ? '🍦'
-                            : '📦'
-                return (
-                  <div key={c.categoria} className="border-t border-white/10 pt-3 sm:border-t-0 sm:border-l sm:pt-0 sm:pl-4 first:border-l-0 first:pl-0">
-                    <p className="text-[10px] uppercase tracking-widest text-blue-300 mb-2">{emoji} {c.categoria}</p>
-                    {/* Sell-Out */}
-                    <div className="mb-2">
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-[9px] uppercase tracking-widest text-blue-300">Sell-Out</span>
-                        <span className="text-[10px] text-blue-300">{pctSo.toFixed(1)}%</span>
-                      </div>
-                      <p className="text-lg font-bold text-yellow-300 leading-tight">{fmtFull(c.valor_2026)}</p>
-                      <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1">
-                        <div className="h-full bg-yellow-300/70" style={{ width: `${pctSo}%` }} />
-                      </div>
-                    </div>
-                    {/* Sell-In */}
-                    <div>
-                      <div className="flex items-baseline justify-between">
-                        <span className="text-[9px] uppercase tracking-widest text-blue-300">Sell-In</span>
-                        <span className="text-[10px] text-blue-300">{pctSi.toFixed(1)}%</span>
-                      </div>
-                      <p className="text-lg font-bold text-emerald-300 leading-tight">{siCat > 0 ? fmtFull(siCat) : <span className="text-blue-400 text-xs">Sin datos</span>}</p>
-                      <div className="h-1 rounded-full bg-white/10 overflow-hidden mt-1">
-                        <div className="h-full bg-emerald-300/70" style={{ width: `${pctSi}%` }} />
-                      </div>
-                    </div>
-                    {c.uni_2026 != null && (
-                      <p className="text-[10px] text-blue-300 mt-2">{Number(c.uni_2026).toLocaleString('en-US')} u vendidas</p>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            {/* Footer con métricas Sell-In */}
-            <div className="border-t border-white/10 mt-4 pt-3 flex flex-wrap gap-6">
-              <div>
-                <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-0.5">Sell-In · Crecimiento YTD vs 2025</p>
-                <p className="text-sm font-bold text-yellow-300">
-                  {siDelta !== null ? `${siDelta > 0 ? '+' : ''}${siDelta.toFixed(1)}%` : 'Sin datos 2025'}
-                </p>
-              </div>
-              <div>
-                <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-0.5">Sell-In · Cajas YTD</p>
-                <p className="text-sm font-bold text-yellow-300">{Math.round(siCajas).toLocaleString('en-US')}</p>
-              </div>
-              <div>
-                <p className="text-[9px] uppercase tracking-widest text-blue-300 mb-0.5">Sell-Out · hasta</p>
-                <p className="text-sm font-bold text-yellow-300">{soLast}</p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Por cadena cards */}
         {cadenas.length > 0 && (
@@ -839,22 +740,15 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           </div>
         )}
 
-        {/* Sell-Out Mensual/Diaria — tendencia continua reusable */}
+        {/* Evolución Sell-Out — resumen mensual continuo (sin toggle diaria, con toggle métricas) */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
             <div>
-              <h3 className="text-sm font-bold text-gray-800">
-                Sell-Out {tendVista === 'mensual' ? 'Mensual' : 'Diaria'} · Walmart {paisNombre}
-              </h3>
+              <h3 className="text-sm font-bold text-gray-800">Evolución Sell-Out · Walmart {paisNombre}</h3>
               {(() => {
-                // Último precio prom por Und (último mes con data, o último día en diaria)
                 let precioUlt = 0
-                let refLabel  = ''
-                if (tendVista === 'diaria' && tendDaily.length > 0) {
-                  const last = tendDaily[tendDaily.length - 1]
-                  precioUlt = last.unidades > 0 ? last.valor_usd / last.unidades : 0
-                  refLabel = last.dia_str
-                } else if (tendVista === 'mensual' && tendencia?.total) {
+                let refLabel = ''
+                if (tendencia?.total) {
                   const withData = tendencia.total.filter(p => (p.unidades ?? 0) > 0)
                   const last = withData[withData.length - 1]
                   if (last) { precioUlt = last.precio_usd; refLabel = last.mes_str }
@@ -862,7 +756,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 const precioFmt = '$' + precioUlt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 return (
                   <p className="text-[11px] text-gray-400">
-                    {tendVista === 'mensual' ? 'Tendencia mensual continua · rango completo' : 'Tendencia diaria · 2026'}
+                    Timeline mensual continuo
                     {precioUlt > 0 && (
                       <>
                         <span className="mx-1.5 text-gray-300">·</span>
@@ -873,34 +767,144 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 )
               })()}
             </div>
-            <div className="flex items-center gap-3 text-[11px] flex-wrap">
-              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {(['mensual','diaria'] as const).map(v => (
-                  <button key={v} onClick={() => setTendVista(v)}
-                    className={`px-3 py-1 font-semibold transition-colors ${tendVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {v === 'mensual' ? 'Mensual' : 'Diaria'}
-                  </button>
-                ))}
-              </div>
-              <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} activeClass="bg-amber-500 text-white" />
-            </div>
+            <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} activeClass="bg-amber-500 text-white" />
           </div>
-          {tendVista === 'mensual' ? (
-            <TendenciaMensualChart
-              tendencia={tendencia}
-              metricas={tendMetricas}
-              moneda="usd"
-              skuFilter={skuSel}
-            />
-          ) : (
-            <TendenciaDiariaChart
-              rows={tendDaily}
-              metricas={tendMetricas}
-              moneda="usd"
-              loading={tendDailyLoading}
-            />
-          )}
+          <TendenciaMensualChart
+            tendencia={tendencia}
+            metricas={tendMetricas}
+            moneda="usd"
+            skuFilter={skuSel}
+          />
         </div>
+
+        {/* Venta Valor vs Unidades — timeline continuo (Bar valor + Line unidades) */}
+        {monthly.length > 0 && (() => {
+          const MN12 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+          const byMes = new Map(monthly.map((m: any) => [m.mes, m]))
+          const data: { mes_str: string; valor: number; unidades: number }[] = []
+          for (const ano of [2025, 2026] as const) {
+            for (let m = 1; m <= 12; m++) {
+              const row: any = byMes.get(m)
+              if (!row) continue
+              const valor    = ano === 2025 ? Number(row.y2025 ?? 0) : Number(row.y2026 ?? 0)
+              const unidades = ano === 2025 ? Number(row.u2025 ?? 0) : Number(row.u2026 ?? 0)
+              if (valor <= 0 && unidades <= 0) continue
+              data.push({ mes_str: `${MN12[m]}-${String(ano).slice(2)}`, valor, unidades })
+            }
+          }
+          if (data.length === 0) return null
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-800">Venta Valor vs Unidades</h3>
+                  <p className="text-[11px] text-gray-400">Timeline continuo · valor USD (barras) + unidades (línea)</p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Valor USD</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500 border border-blue-700"/> Unidades</span>
+                </div>
+              </div>
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={data} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="18%">
+                    <defs>
+                      <linearGradient id="gradWmVv" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.75}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                    <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
+                    <YAxis yAxisId="v" tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}/>
+                    <YAxis yAxisId="u" orientation="right" tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
+                      tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false}/>
+                    <Tooltip
+                      formatter={(v: any, name: string) => name === 'Unidades'
+                        ? [Math.round(Number(v)).toLocaleString('en-US'), name]
+                        : [fmtFull(Number(v)), name]}
+                      cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
+                    <Bar yAxisId="v" dataKey="valor" name="Valor USD" fill="url(#gradWmVv)" radius={[6,6,0,0]} maxBarSize={26}/>
+                    <Line yAxisId="u" type="monotone" dataKey="unidades" name="Unidades" stroke="#2563eb" strokeWidth={2.5}
+                      dot={{ r: 3, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }} connectNulls/>
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Nivel Inventario vs Sell-Out — snapshot actual vs sellout mensual */}
+        {monthly.length > 0 && (() => {
+          const ikpis = computeInventarioKPIs(sellout, inv)
+          const invActual = ikpis.pdv_inv ?? 0
+          const cediActual = ikpis.cedi_unidades ?? 0
+          const invTotal = invActual + cediActual
+          if (invTotal <= 0) return null
+          const MN12 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+          const data = monthly
+            .filter((m: any) => (m.u2026 ?? 0) > 0)
+            .map((m: any) => ({
+              mes_str: `${MN12[m.mes]}-26`,
+              unidades: Number(m.u2026 ?? 0),
+              inv_actual: invTotal,   // referencia horizontal (snapshot actual)
+            }))
+          if (data.length === 0) return null
+          const cobDias = (() => {
+            // días de cobertura = inv actual / promedio uds vendidas al día
+            const totalUds = data.reduce((s: number, d: { unidades: number }) => s + d.unidades, 0)
+            const meses = data.length
+            const diasAcum = meses * 30
+            const udsDia = diasAcum > 0 ? totalUds / diasAcum : 0
+            return udsDia > 0 ? invTotal / udsDia : 0
+          })()
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-800">Nivel Inventario vs Sell-Out</h3>
+                  <p className="text-[11px] text-gray-400">
+                    Inv actual: <span className="font-semibold text-blue-600">{Math.round(invTotal).toLocaleString('en-US')} un</span>
+                    <span className="mx-1.5 text-gray-300">·</span>
+                    Cobertura ≈ <span className="font-semibold text-emerald-600">{cobDias.toFixed(0)} días</span>
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> Sell-Out mensual</span>
+                  <span className="flex items-center gap-1.5"><span className="w-6 h-0.5 bg-red-500 inline-block"/> Inv actual</span>
+                </div>
+              </div>
+              <div className="h-[240px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={data} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="18%">
+                    <defs>
+                      <linearGradient id="gradWmInvSo" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#6ee7b7" stopOpacity={0.75}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                    <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
+                    <YAxis tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
+                      tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}/>
+                    <Tooltip
+                      formatter={(v: any) => [Math.round(Number(v)).toLocaleString('en-US') + ' un', '']}
+                      cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
+                    <Bar dataKey="unidades" name="Sell-Out (un)" fill="url(#gradWmInvSo)" radius={[6,6,0,0]} maxBarSize={26}/>
+                    <ReferenceLine y={invTotal} stroke="#ef4444" strokeDasharray="6 3" strokeWidth={2}
+                      label={{ value: `Inv actual · ${Math.round(invTotal).toLocaleString('en-US')}`, position: 'insideTopRight', fill: '#ef4444', fontSize: 10 }}/>
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-[10px] text-gray-400 mt-2">
+                * El nivel de inventario es un snapshot actual (PDV + CEDI). Las barras son la venta mensual 2026 en unidades. La línea roja es referencia visual del stock disponible hoy.
+              </p>
+            </div>
+          )
+        })()}
 
         {/* Indicadores de Inventario */}
         {(() => {
@@ -957,11 +961,11 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           )
         })()}
 
-        {soTotal === 0 && siVal === 0 && (
+        {soTotal === 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
             <p className="text-3xl mb-2">📭</p>
             <p className="text-sm font-semibold text-gray-600">Sin datos disponibles para {paisNombre}</p>
-            <p className="text-xs text-gray-400 mt-1">Aún no se han cargado datos de sell-out o sell-in para este mercado.</p>
+            <p className="text-xs text-gray-400 mt-1">Aún no se han cargado datos de sell-out para este mercado.</p>
           </div>
         )}
       </div>
@@ -969,419 +973,438 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   }
 
   // ── Evolución ─────────────────────────────────────────────────────────────
+  // Portado del patrón de Éxito Evolución, adaptado a Walmart (multi-país, USD).
 
   function Evolucion() {
     const L = isL('evolucion')
-    if (L) return <div className="space-y-4"><ChartSkeleton /><ChartSkeleton /><ChartSkeleton /></div>
+    if (L || !sellout) return <div className="space-y-4"><CardSkeleton cols={4} /><ChartSkeleton /><ChartSkeleton /></div>
 
-    const MN12 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
-    const desdeMonth = evolDesde ? parseInt(evolDesde.split('-')[1]) : 1
-    const hastaMonth = evolHasta ? parseInt(evolHasta.split('-')[1]) : 12
+    const monthlyRaw: any[] = sellout.monthly ?? []
+    const cadenasSell: any[] = sellout.por_cadena ?? []
 
-    const allSeries = (ts?.series ?? []).filter((m: any) => m.y2025 > 0 || m.y2026 !== null || m.y2024 > 0)
-    const series    = allSeries.filter((m: any) => m.mes >= desdeMonth && m.mes <= hastaMonth)
-    const cadenas   = ts?.cadenas ?? []
-    const byCad     = (ts?.byCadena ?? []).filter((m: any) => cadenas.some((c: string) => (m[c] ?? 0) > 0))
-    const skus      = evoTop5?.skus ?? []
+    // ── Estadísticas del período ─────────────────────────────────────────────
+    const meses2026 = monthlyRaw.filter(m => m.y2026 !== null && m.y2026 > 0)
+    const totVal2026 = meses2026.reduce((s, m) => s + (m.y2026 ?? 0), 0)
+    const totUds2026 = meses2026.reduce((s, m) => s + (m.u2026 ?? 0), 0)
+    const promMensualVal = meses2026.length > 0 ? totVal2026 / meses2026.length : 0
+    const promMensualUds = meses2026.length > 0 ? totUds2026 / meses2026.length : 0
+    const DIAS_MES: Record<number, number> = { 1:31,2:28,3:31,4:30,5:31,6:30,7:31,8:31,9:30,10:31,11:30,12:31 }
+    const diasAcumulados = meses2026.reduce((s, m) => s + (DIAS_MES[m.mes] ?? 30), 0)
+    const promDiarioVal = diasAcumulados > 0 ? totVal2026 / diasAcumulados : 0
+    const promDiarioUds = diasAcumulados > 0 ? totUds2026 / diasAcumulados : 0
 
-    // ── Timeline continuo 2024 → 2026 (flatten para el chart de evolución) ──
-    // Respeta el toggle evolMedida (valor/unidades) y el rango de meses.
-    // Además respeta evolYearFilter: si está seteado, muestra sólo ese año.
-    const continuoSeries: { mes_str: string; valor: number }[] = (() => {
-      const byMes: Record<number, any> = {}
-      for (const m of allSeries) byMes[Number(m.mes)] = m
-      const out: { mes_str: string; valor: number }[] = []
-      const anos: (2024 | 2025 | 2026)[] = evolYearFilter === 'y2024' ? [2024]
-        : evolYearFilter === 'y2025' ? [2025]
-        : evolYearFilter === 'y2026' ? [2026]
-        : [2024, 2025, 2026]
-      for (const ano of anos) {
-        for (let m = desdeMonth; m <= hastaMonth; m++) {
-          const row = byMes[m]
-          if (!row) continue
-          const key = evolMedida === 'valor'
-            ? (ano === 2024 ? 'y2024' : ano === 2025 ? 'y2025' : 'y2026')
-            : (ano === 2024 ? 'u2024' : ano === 2025 ? 'u2025' : 'u2026')
-          const raw = row[key]
-          const valor = raw == null ? 0 : Number(raw)
-          if (valor <= 0) continue
-          out.push({ mes_str: `${MN12[m]}-${String(ano).slice(2)}`, valor })
-        }
-      }
-      return out
-    })()
+    // Mejor / peor mes 2026
+    const sortedByVal = [...meses2026].sort((a, b) => (b.y2026 ?? 0) - (a.y2026 ?? 0))
+    const mejorMes = sortedByVal[0]
+    const peorMes  = sortedByVal[sortedByVal.length - 1]
 
-    // Generate N perceptually distinct colors spread across the hue wheel
-    const makeColors = (n: number) => {
-      const base = ['#e63946','#f4a261','#2a9d8f','#457b9d','#8338ec','#06d6a0','#fb5607','#3a86ff','#ffbe0b','#ff006e',
-                    '#118ab2','#ef476f','#06b6d4','#84cc16','#8b5cf6','#f59e0b','#10b981','#c8873a','#a78bfa','#f43f5e']
-      if (n <= base.length) return base.slice(0, n)
-      return Array.from({ length: n }, (_, i) => `hsl(${Math.round(i * 360 / n)}, 68%, 48%)`)
+    const ticketMedio = totUds2026 > 0 ? totVal2026 / totUds2026 : 0
+
+    // Growth MoM (2026)
+    const growthMoM: { mes_nombre: string; growth: number | null }[] = monthlyRaw.map((m, i) => {
+      const prev = i > 0 ? monthlyRaw[i - 1] : null
+      const g = prev && prev.y2026 && m.y2026 !== null && prev.y2026 > 0
+        ? ((m.y2026 - prev.y2026) / prev.y2026) * 100
+        : null
+      return { mes_nombre: m.mes_nombre, growth: g }
+    })
+    const growthValidos = growthMoM.filter(x => x.growth !== null).map(x => x.growth as number)
+    const growthPromedio = growthValidos.length > 0
+      ? growthValidos.reduce((s, v) => s + v, 0) / growthValidos.length
+      : 0
+
+    const cadenasActivas = cadenasSell.filter((c: any) => (c.valor_2026 ?? 0) > 0).length
+
+    // ── KPIs primarios ───────────────────────────────────────────────────────
+    const soTotal = sellout.ytd_2026 ?? 0
+    const soPrev  = sellout.ytd_2025 ?? 0
+    const soDelta = sellout.delta_ytd ?? null
+    const soLast  = sellout.ultimo_mes_nombre ?? '—'
+    const mAct = monthlyRaw.find(m => m.mes === sellout.ultimo_mes)
+    const dVal = mAct && mAct.y2025 > 0 && mAct.y2026 !== null
+      ? ((mAct.y2026 - mAct.y2025) / mAct.y2025) * 100 : null
+    const dUds = mAct && mAct.u2025 > 0 && mAct.u2026 !== null
+      ? ((mAct.u2026 - mAct.u2025) / mAct.u2025) * 100 : null
+
+    if (soTotal === 0) {
+      return (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="py-16 text-center">
+            <p className="text-3xl mb-2">📭</p>
+            <p className="text-sm font-semibold text-gray-600">Sin datos de sell-out para {paisNombre}</p>
+            <p className="text-xs text-gray-400 mt-1">Los datos de sell-out Walmart {pais} aún no han sido cargados.</p>
+          </div>
+        </div>
+      )
     }
-    const SKU_COLORS = makeColors(skus.length || 10)
 
-    // Top5 chart data
-    const top5Series: Record<number, Record<string, any>> = {}
-    for (let m = 1; m <= 12; m++) top5Series[m] = { mes: m, mes_nombre: MN12[m] }
-    for (const sku of skus) {
-      for (const pt of sku.series) {
-        top5Series[pt.mes][sku.descripcion] = evolMedida === 'valor' ? pt.valor : pt.unidades
-      }
+    // Formatters
+    const yFmtVal = (v: number) => {
+      if (Math.abs(v) >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M'
+      if (Math.abs(v) >= 1e3) return '$' + (v / 1e3).toFixed(0) + 'K'
+      return '$' + v.toFixed(0)
     }
-    const top5Data = Object.values(top5Series).filter(r => skus.some((s: any) => (r[s.descripcion] ?? 0) > 0))
-
-    // Daily variants (declared after top5Data so no temporal dead zone)
-    const isDiaria  = evolVista === 'diaria'
-    const dCadenas  = isDiaria ? (evolDiario?.cadenas  ?? []) : cadenas
-    const dByCad    = isDiaria ? (evolDiario?.byCadena ?? []) : byCad
-    const dSkuNames = isDiaria ? (evolDiario?.skuNames ?? []) : skus.map((s: any) => s.descripcion)
-    const dSkuData  = isDiaria ? (evolDiario?.bySkus   ?? []) : top5Data
-    const xKey      = isDiaria ? 'label' : 'mes_nombre'
-    const SKU_COLORS2 = makeColors(dSkuNames.length || 10)
-
-    // Comparativo (sell-in vs sell-out por categoria)
-    const cpQuesos  = comparativo?.quesos  ?? []
-    const cpLeches  = comparativo?.leches  ?? []
-    const cpHelados = comparativo?.helados ?? []
-
-    const yFmt = (v: number) => evolMedida === 'valor'
-      ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
-      : (v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v))
-
-    const toggleYear = (key: string) => setEvolYearFilter(p => p === key ? '' : key)
-    const toggleCadenaLine = (c: string) => setEvolCadenaLine(p => p === c ? '' : c)
-    const toggleCpFilter = (k: string) => setEvolCpFilter(p => p === k ? '' : k)
+    const tipVal = (v: unknown) => fmt$(v)
 
     return (
       <div className="space-y-5">
 
-        {/* ── Main evolution chart ── */}
+        {/* Header con 4 KPIs primarios */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm font-semibold text-gray-800">📈 Evolución de Ventas — Portafolio Activo</h3>
+            <h3 className="text-sm font-semibold text-gray-800">📈 Evolución de Ventas</h3>
             <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">SELLOUT</span>
+            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">USD</span>
           </div>
-          <p className="text-xs text-gray-400 mb-3">{currentCat || 'Todas las categorías'} · Walmart {paisNombre}</p>
+          <p className="text-xs text-gray-400 mb-3">
+            Walmart {paisNombre}
+            {cadenasSel.length > 0 && ` · ${cadenasSel.length === 1 ? cadenasSel[0] : `${cadenasSel.length} cadenas`}`}
+            {subcatSel.length > 0 && ` · ${subcatSel.length === 1 ? subcatSel[0] : `${subcatSel.length} subcategorías`}`}
+            {formatoSel.length > 0 && ` · ${formatoSel.length === 1 ? formatoSel[0] : `${formatoSel.length} formatos`}`}
+            {puntoSel.length > 0 && ` · ${puntoSel.length === 1 ? puntoSel[0] : `${puntoSel.length} PDVs`}`}
+            {skuSel.length > 0 && ` · ${skuSel.length === 1 ? `SKU ${skuSel[0]}` : `${skuSel.length} SKUs`}`}
+          </p>
 
-          {evolVista === 'diaria' ? (
-            evolDiario?.series?.length > 0 ? (
-              <>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs text-gray-500 font-medium">
-                    {evolDiario.series.length} días · Total: {fmtFull(evolDiario.series.reduce((s: number, r: any) => s + (evolMedida === 'valor' ? r.valor : r.unidades), 0))}
-                  </span>
-                </div>
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={evolDiario.series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-                    <defs>
-                      <linearGradient id="gradWmEvolDia" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.35}/>
-                        <stop offset="60%"  stopColor="#c8873a" stopOpacity={0.08}/>
-                        <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
-                      interval={Math.max(0, Math.floor(evolDiario.series.length / 20) - 1)} />
-                    <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
-                    <Tooltip
-                      labelFormatter={(l: string) => l}
-                      formatter={(v: number) => [
-                        evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'),
-                        evolMedida === 'valor' ? 'Venta ($)' : 'Unidades',
-                      ]}
-                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                    />
-                    <Area type="monotone" dataKey={evolMedida === 'valor' ? 'valor' : 'unidades'}
-                      stroke="#c8873a" strokeWidth={2.5} fill="url(#gradWmEvolDia)" dot={false}
-                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </>
-            ) : (
-              <div className="h-[280px] bg-gray-50 rounded-lg animate-pulse flex items-center justify-center">
-                <span className="text-xs text-gray-300">Cargando datos diarios...</span>
-              </div>
-            )
-          ) : continuoSeries.length === 0 ? (
-            <div className="py-16 text-center">
-              <p className="text-3xl mb-2">📭</p>
-              <p className="text-sm font-semibold text-gray-600">Sin datos de sell-out para {paisNombre}</p>
-              <p className="text-xs text-gray-400 mt-1">Los datos de sell-out Walmart {pais} aún no han sido cargados.</p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className={`rounded-lg px-4 py-2.5 border ${(soDelta ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(soDelta ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                YTD 2026 vs 2025
+              </p>
+              <p className={`text-lg font-bold ${(soDelta ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {soPrev === 0 ? '—' : `${(soDelta ?? 0) > 0 ? '+' : ''}${(soDelta ?? 0).toFixed(1)}%`}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{soLast ? `Ene–${soLast}` : ''}</p>
             </div>
-          ) : (
-            <>
-              {/* YTD + OOS banners */}
-              {ts && (
-                <div className="flex gap-3 mb-4 flex-wrap">
-                  <div className={`flex-1 min-w-[180px] rounded-lg px-4 py-2.5 border ${ts.delta_ytd >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
-                    <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${ts.delta_ytd >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                      Crecimiento YTD Sell-Out vs 2025
-                    </p>
-                    <p className={`text-lg font-bold ${ts.delta_ytd >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                      {ts.ytd_2025 === 0 ? 'Sin datos 2025' : `${ts.delta_ytd > 0 ? '+' : ''}${ts.delta_ytd.toFixed(1)}%`}
-                    </p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">
-                      {fmtFull(ts.ytd_2026)} · 2026 YTD {ts.ultimo_mes_nombre ? `Ene–${ts.ultimo_mes_nombre}` : ''}
-                    </p>
-                  </div>
-                  {ts.oos_meses?.length > 0 ? (
-                    <div className="flex-1 min-w-[180px] rounded-lg px-4 py-2.5 bg-orange-50 border border-orange-100">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-orange-700 mb-0.5">⚠️ Alerta OOS Detectada</p>
-                      <p className="text-sm font-bold text-orange-700">{ts.oos_meses.length} mes{ts.oos_meses.length !== 1 ? 'es' : ''} con quiebre</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">{ts.oos_meses.join(' + ')} bajo el 30% del baseline</p>
-                    </div>
-                  ) : (
-                    <div className="flex-1 min-w-[180px] rounded-lg px-4 py-2.5 bg-emerald-50 border border-emerald-100">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-0.5">✅ Sin Quiebres de Stock</p>
-                      <p className="text-sm font-bold text-emerald-700">Abastecimiento continuo</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Todos los meses sobre el 30% del baseline</p>
-                    </div>
-                  )}
-                </div>
-              )}
+            <div className="rounded-lg px-4 py-2.5 bg-amber-50 border border-amber-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-0.5">YTD 2026 (USD)</p>
+              <p className="text-lg font-bold text-amber-700">{fmt$(soTotal)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(sellout.uni_2026 ?? 0)} und</p>
+            </div>
+            <div className={`rounded-lg px-4 py-2.5 border ${(dVal ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dVal ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {soLast} vs 2025
+              </p>
+              <p className={`text-lg font-bold ${(dVal ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {dVal === null ? '—' : `${dVal > 0 ? '+' : ''}${dVal.toFixed(1)}%`}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmt$(mAct?.y2026 ?? 0)}</p>
+            </div>
+            <div className={`rounded-lg px-4 py-2.5 border ${(dUds ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {soLast} unidades vs 2025
+              </p>
+              <p className={`text-lg font-bold ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {dUds === null ? '—' : `${dUds > 0 ? '+' : ''}${dUds.toFixed(1)}%`}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(mAct?.u2026 ?? 0)} und</p>
+            </div>
+          </div>
+        </div>
 
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={continuoSeries} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="18%">
-                  <defs>
-                    <linearGradient id="gradWmEvolCont" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
-                    interval={continuoSeries.length > 24 ? 1 : 0} />
-                  <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]}
-                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
-                  {ts?.baseline_val > 0 && evolMedida === 'valor' && (
-                    <ReferenceLine y={ts.baseline_val} stroke="#f59e0b" strokeDasharray="4 4"
-                      label={{ value: 'Baseline', fontSize: 9, fill: '#f59e0b', position: 'insideTopRight' }} />
-                  )}
-                  <Bar dataKey="valor" name={evolMedida === 'valor' ? 'Venta' : 'Unidades'}
-                    fill="url(#gradWmEvolCont)" radius={[6,6,0,0]} maxBarSize={24}>
-                    <LabelList dataKey="valor" position="top"
-                      formatter={evolMedida === 'valor' ? fmtLblUsd : fmtLblUnd}
-                      style={{ fontSize: 8, fill: '#92400e', fontWeight: 700 }} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+        {/* Seguimiento mensual (simplificado: usa sellout.monthly) */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <h4 className="text-sm font-semibold text-gray-800">📅 Seguimiento Mensual</h4>
+            <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+              {MES_LBL_YR(sellout.ultimo_mes ?? 0, 2026)}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <KpiCard label="Total YTD 2026 (USD)" value={fmt$(soTotal)} sub={`${sellout.ultimo_mes ?? 0} meses acumulados`} />
+            <KpiCard label="Total YTD 2026 (und)" value={fmtNum(sellout.uni_2026 ?? 0)} sub={`${sellout.ultimo_mes ?? 0} meses acumulados`} />
+            <KpiCard label="Promedio mensual" value={fmt$(promMensualVal)} sub={`${fmtNum(promMensualUds)} und/mes`} />
+            <KpiCard label={`Prom. diario (${diasAcumulados}d)`} value={fmt$(promDiarioVal)} sub={`${fmtNum(promDiarioUds)} und/día`} highlight />
+          </div>
+        </div>
 
-              <div className="flex items-center gap-3 mt-3 text-[10px] flex-wrap">
-                {[
-                  { key: 'y2024', label: '2024',      color: '#e5e7eb' },
-                  { key: 'y2025', label: '2025',      color: '#60a5fa' },
-                  { key: 'y2026', label: '2026 YTD',  color: '#c8873a' },
-                ].map(({ key, label, color }) => {
-                  const active = !evolYearFilter || evolYearFilter === key
-                  return (
-                    <button key={key} onClick={() => toggleYear(key)}
-                      className={`flex items-center gap-1.5 transition-opacity ${active ? 'opacity-100' : 'opacity-30'}`}>
-                      <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: color }} />
-                      <span style={{ color: active ? '#6b7280' : '#d1d5db' }}>{label}</span>
-                    </button>
-                  )
-                })}
-                {ts?.baseline_val > 0 && evolMedida === 'valor' && (
-                  <span className="flex items-center gap-1.5 text-gray-400">
-                    <span className="w-5 h-0.5 border-t-2 border-dashed border-amber-400 inline-block" />
-                    Baseline {fmtFull(ts.baseline_val)}/mes
-                  </span>
-                )}
-                {evolYearFilter && (
-                  <button onClick={() => setEvolYearFilter('')}
-                    className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 text-[10px] font-medium">
-                    ✕ ver todos
+        {/* Fila de estadísticas detalladas */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3">📊 Estadísticas del período</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio mensual</p>
+              <p className="text-lg font-bold text-gray-800">{fmt$(promMensualVal)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promMensualUds)} und/mes</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio diario</p>
+              <p className="text-lg font-bold text-gray-800">{fmt$(promDiarioVal)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promDiarioUds)} und/día</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-emerald-50 border border-emerald-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-0.5">Mejor mes 2026</p>
+              <p className="text-lg font-bold text-emerald-700">{mejorMes ? mejorMes.mes_nombre : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{mejorMes ? fmt$(mejorMes.y2026 ?? 0) : '—'}</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-red-50 border border-red-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-red-700 mb-0.5">Peor mes 2026</p>
+              <p className="text-lg font-bold text-red-700">{peorMes ? peorMes.mes_nombre : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{peorMes ? fmt$(peorMes.y2026 ?? 0) : '—'}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            <div className="rounded-lg px-4 py-2.5 bg-blue-50 border border-blue-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-blue-700 mb-0.5">Ticket medio</p>
+              <p className="text-lg font-bold text-blue-700">{fmt$(ticketMedio)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">por unidad</p>
+            </div>
+            <div className={`rounded-lg px-4 py-2.5 border ${growthPromedio >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${growthPromedio >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>Crecimiento MoM prom.</p>
+              <p className={`text-lg font-bold ${growthPromedio >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {growthPromedio > 0 ? '+' : ''}{growthPromedio.toFixed(1)}%
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">vs mes anterior</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Meses activos</p>
+              <p className="text-lg font-bold text-gray-800">{meses2026.length} <span className="text-xs font-normal text-gray-500">de 12</span></p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{diasAcumulados} días acumulados</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-purple-50 border border-purple-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-purple-700 mb-0.5">Cadenas activas</p>
+              <p className="text-lg font-bold text-purple-700">{cadenasActivas}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">con ventas 2026</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart 1: Ventas mensuales / diarias — usa TendenciaMensualChart/TendenciaDiariaChart */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">
+                {tendVista === 'mensual' ? 'Ventas mensuales' : 'Ventas diarias · 2026'}
+              </h4>
+              {(() => {
+                let precioUlt = 0
+                let refLabel  = ''
+                if (tendVista === 'diaria' && tendDaily.length > 0) {
+                  const last = tendDaily[tendDaily.length - 1]
+                  precioUlt = last.unidades > 0 ? last.valor_usd / last.unidades : 0
+                  refLabel = last.dia_str
+                } else if (tendVista === 'mensual' && tendencia?.total) {
+                  const withData = tendencia.total.filter(p => (p.unidades ?? 0) > 0)
+                  const last = withData[withData.length - 1]
+                  if (last) { precioUlt = last.precio_usd; refLabel = last.mes_str }
+                }
+                const precioFmt = '$' + precioUlt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                return (
+                  <p className="text-[11px] text-gray-400">
+                    {tendVista === 'mensual' ? 'Comparativo continuo · USD' : 'Tendencia diaria · USD'}
+                    {precioUlt > 0 && (
+                      <>
+                        <span className="mx-1.5 text-gray-300">·</span>
+                        <span className="font-semibold text-emerald-600">Último precio prom / Und ({refLabel}): {precioFmt}</span>
+                      </>
+                    )}
+                  </p>
+                )
+              })()}
+            </div>
+            <div className="flex items-center gap-3 text-[11px] flex-wrap">
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {(['mensual','diaria'] as const).map(v => (
+                  <button key={v} onClick={() => setTendVista(v)}
+                    className={`px-3 py-1 font-semibold transition-colors ${tendVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {v === 'mensual' ? 'Mensual' : 'Diaria'}
                   </button>
-                )}
+                ))}
               </div>
-            </>
+              <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} activeClass="bg-amber-500 text-white" />
+            </div>
+          </div>
+          {tendVista === 'mensual' ? (
+            <TendenciaMensualChart
+              tendencia={tendencia}
+              metricas={tendMetricas}
+              moneda="usd"
+              skuFilter={skuSel}
+            />
+          ) : (
+            <TendenciaDiariaChart
+              rows={tendDaily}
+              metricas={tendMetricas}
+              moneda="usd"
+              loading={tendDailyLoading}
+            />
           )}
         </div>
 
-        {/* ── Top N SKUs ── */}
-        {dSkuNames.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <div className="flex items-start justify-between gap-2 mb-1">
-              <h3 className="text-sm font-semibold text-gray-800">
-                🏆 {evolTopN === 5 ? 'Top 5 SKUs' : `${dSkuNames.length} SKUs`} — Evolución {isDiaria ? 'Diaria' : 'Mensual'} 2026
-              </h3>
-              {evolSkuFilter && (
-                <button onClick={() => setEvolSkuFilter('')}
-                  className="flex-shrink-0 text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium hover:bg-amber-200 transition-colors">
-                  ✕ ver todas
-                </button>
-              )}
+        {/* Chart 2: Growth MoM % */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">Crecimiento MoM %</h4>
+              <p className="text-[11px] text-gray-400">Variación mes vs mes anterior · 2026</p>
             </div>
-            <p className="text-xs text-gray-400 mb-3">
-              Por venta acumulada · Walmart {paisNombre} · Toca una línea para aislarla
-            </p>
-
-            <ResponsiveContainer width="100%" height={evolSkuFilter ? 320 : evolTopN === 5 ? 280 : Math.max(560, dSkuNames.length * 14)}>
-              <LineChart data={dSkuData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
-                onMouseLeave={() => setEvolSkuHover('')}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey={xKey} tick={{ fontSize: isDiaria ? 9 : 11, fill: '#64748b' }} axisLine={false} tickLine={false}
-                  interval={isDiaria ? Math.max(0, Math.floor((dSkuData.length || 1) / 20) - 1) : 0} />
-                <YAxis tickFormatter={yFmt} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(v: number, name: string) => [evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'), name]}
-                  itemStyle={{ fontSize: 11 }}
-                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
-                {dSkuNames.map((name: string, i: number) => {
-                  const color = SKU_COLORS2[i % SKU_COLORS2.length]
-                  if (evolSkuFilter && evolSkuFilter !== name) return null
-                  const dimmed = !evolSkuFilter && evolSkuHover && evolSkuHover !== name
-                  return (
-                    <Line key={name} type="monotone" dataKey={name}
-                      stroke={color}
-                      strokeWidth={evolSkuFilter || evolSkuHover === name ? 3 : 1.5}
-                      strokeOpacity={dimmed ? 0.12 : 1}
-                      dot={evolSkuFilter || evolSkuHover === name ? { r: 3, fill: color } : false}
-                      activeDot={{ r: 5, fill: color }}
-                      connectNulls
-                      onMouseEnter={() => setEvolSkuHover(name)}
-                      onClick={() => { setEvolSkuFilter(p => p === name ? '' : name); setEvolSkuHover('') }}
-                      style={{ cursor: 'pointer' }} />
-                  )
-                })}
-              </LineChart>
-            </ResponsiveContainer>
-
-            {/* Custom clickable legend */}
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {dSkuNames.map((name: string, i: number) => {
-                const color = SKU_COLORS2[i % SKU_COLORS2.length]
-                const isActive = !evolSkuFilter || evolSkuFilter === name
-                return (
-                  <button key={name}
-                    onClick={() => setEvolSkuFilter(prev => prev === name ? '' : name)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-all select-none ${
-                      isActive ? 'border-gray-200 text-gray-700 bg-white hover:bg-gray-50' : 'border-gray-100 text-gray-300 bg-gray-50 hover:bg-gray-100'
-                    }`}>
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                      style={{ background: isActive ? color : '#d1d5db' }} />
-                    {name}
-                  </button>
-                )
-              })}
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> Positivo</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500"/> Negativo</span>
             </div>
           </div>
-        )}
-
-        {/* ── 2026 por Cadena (line) ── */}
-        {!cadenaFilter && dByCad.length > 0 && dCadenas.length > 1 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-sm font-semibold text-gray-700">2026 por Cadena</h3>
-              {evolCadenaLine && (
-                <button onClick={() => setEvolCadenaLine('')}
-                  className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium">
-                  ✕ ver todas
-                </button>
-              )}
-            </div>
-            <p className="text-xs text-gray-400 mb-4">Sell-out {isDiaria ? 'diario' : 'mensual'} por formato · clic en una línea para aislar</p>
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={dByCad} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+          <div className="h-[260px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={growthMoM} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="20%">
+                <defs>
+                  <linearGradient id="gradWmGrowthPos" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradWmGrowthNeg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f87171" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis dataKey={xKey} tick={{ fontSize: isDiaria ? 9 : 11, fill: '#64748b' }} axisLine={false} tickLine={false}
-                  interval={isDiaria ? Math.max(0, Math.floor((dByCad.length || 1) / 20) - 1) : 0} />
-                <YAxis tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(v: any) => v !== null ? fmtFull(v) : '—'}
-                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
-                {dCadenas.map((c: string) => {
-                  if (evolCadenaLine && evolCadenaLine !== c) return null
-                  return (
-                    <Line key={c} type="monotone" dataKey={c} name={c}
-                      stroke={CADENA_COLORS[c] ?? '#6b7280'}
-                      strokeWidth={evolCadenaLine === c ? 2.5 : 2} dot={false}
-                      activeDot={{ r: 4 }}
-                      connectNulls onClick={() => toggleCadenaLine(c)}
-                      style={{ cursor: 'pointer' }} />
-                  )
-                })}
-              </LineChart>
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v: number) => v + '%'} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v: unknown) => v === null ? ['—', 'Growth'] : [(v as number).toFixed(1) + '%', 'Growth']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="growth" radius={[8,8,0,0]} maxBarSize={40}>
+                  {growthMoM.map((r, i) => (
+                    <Cell key={i} fill={r.growth === null ? '#e2e8f0' : r.growth >= 0 ? 'url(#gradWmGrowthPos)' : 'url(#gradWmGrowthNeg)'} />
+                  ))}
+                  <LabelList dataKey="growth" position="top"
+                    formatter={(v: any) => v === null || v === undefined ? '' : Number(v).toFixed(1) + '%'}
+                    style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              {dCadenas.map((c: string) => {
-                const color = CADENA_COLORS[c] ?? '#6b7280'
-                const active = !evolCadenaLine || evolCadenaLine === c
-                return (
-                  <button key={c} onClick={() => toggleCadenaLine(c)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium transition-opacity select-none ${
-                      active ? 'border-gray-200 text-gray-700 bg-white' : 'border-gray-100 text-gray-300 bg-gray-50'
-                    }`}>
-                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: active ? color : '#d1d5db' }} />
-                    {c}
-                  </button>
-                )
-              })}
-            </div>
           </div>
-        )}
+        </div>
 
-        {/* ── Sell-In vs Sell-Out · Comparativo mensual ── */}
-        {(cpQuesos.length > 0 || cpLeches.length > 0 || cpHelados.length > 0) && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-1">Sell-In vs Sell-Out · Comparativo Mensual</h3>
-            <p className="text-xs text-gray-400 mb-1">
-              Sell-In = facturación BL Foods → {clienteSellin} (CIF). Sell-Out = venta al consumidor desde sell-out reportado.
-            </p>
-            {evolCpFilter && (
-              <div className="mt-1 mb-3">
-                <button onClick={() => setEvolCpFilter('')}
-                  className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 font-medium">
-                  ✕ ver ambas líneas
-                </button>
+        {/* Chart 3: Distribución por cadena 2026 — Pie chart */}
+        {(() => {
+          const pieData = cadenasSell
+            .filter((c: any) => (c.valor_2026 ?? 0) > 0)
+            .map((c: any) => ({ cadena: c.cadena, valor: c.valor_2026 }))
+          const totPie = pieData.reduce((s: number, x: { valor: number }) => s + x.valor, 0)
+          if (pieData.length === 0) return null
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div>
+                <h4 className="text-sm font-bold text-gray-800">Distribución por cadena 2026</h4>
+                <p className="text-[11px] text-gray-400">Participación de ventas por cadena · USD</p>
               </div>
-            )}
-            <div className="space-y-4 mt-4">
-              {[{ label: '🧀 Quesos', data: cpQuesos, id: 'quesos' }, { label: '🥛 Leches', data: cpLeches, id: 'leches' }, { label: '🍦 Helados', data: cpHelados, id: 'helados' }]
-                .filter(g => g.data.length > 0)
-                .map(g => (
-                  <div key={g.label}>
-                    <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
-                      <p className="text-xs font-semibold text-gray-600">{g.label}</p>
-                      <div className="flex items-center gap-3 text-[11px]">
-                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"/> Sell-In</span>
-                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"/> Sell-Out</span>
-                      </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={g.data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="20%">
-                        <defs>
-                          <linearGradient id={`gradWmCp_${g.id}_si`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="#3b82f6" stopOpacity={1}/>
-                            <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.85}/>
-                          </linearGradient>
-                          <linearGradient id={`gradWmCp_${g.id}_so`} x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="#f59e0b" stopOpacity={1}/>
-                            <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                        <YAxis tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false} />
-                        <Tooltip formatter={(v: number, name: string) => [fmtFull(v), name]}
-                          cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
-                        <Bar dataKey="sellin"  name="Sell-In"  fill={`url(#gradWmCp_${g.id}_si)`} radius={[8,8,0,0]} maxBarSize={28}>
-                          <LabelList dataKey="sellin"  position="top"
-                            formatter={(v: any) => { const n = Number(v); return n > 0 ? (Math.abs(n) >= 1e6 ? '$'+(n/1e6).toFixed(0)+'M' : Math.abs(n) >= 1e3 ? '$'+(n/1e3).toFixed(0)+'K' : '$'+Math.round(n)) : '' }}
-                            style={{ fontSize: 9, fill: '#1e40af', fontWeight: 700 }} />
-                        </Bar>
-                        <Bar dataKey="sellout" name="Sell-Out" fill={`url(#gradWmCp_${g.id}_so)`} radius={[8,8,0,0]} maxBarSize={28}>
-                          <LabelList dataKey="sellout" position="top"
-                            formatter={(v: any) => { const n = Number(v); return n > 0 ? (Math.abs(n) >= 1e6 ? '$'+(n/1e6).toFixed(0)+'M' : Math.abs(n) >= 1e3 ? '$'+(n/1e3).toFixed(0)+'K' : '$'+Math.round(n)) : '' }}
-                            style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ))}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 items-center">
+                <div className="md:col-span-2 h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        dataKey="valor"
+                        nameKey="cadena"
+                        cx="50%" cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={2}
+                        stroke="#fff"
+                        strokeWidth={2}
+                        label={(entry: any) => {
+                          const pct = totPie > 0 ? (entry.valor / totPie) * 100 : 0
+                          return pct >= 3 ? `${pct.toFixed(1)}%` : ''
+                        }}
+                        labelLine={false}
+                      >
+                        {pieData.map((c: { cadena: string }, i: number) => (
+                          <Cell key={i} fill={CADENA_COLORS[c.cadena] ?? '#c8873a'} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(v: unknown) => [tipVal(v), '']}
+                        contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                {/* Leyenda con % y monto */}
+                <div className="space-y-2">
+                  {pieData
+                    .slice()
+                    .sort((a: { valor: number }, b: { valor: number }) => b.valor - a.valor)
+                    .map((c: { cadena: string; valor: number }) => {
+                      const pct = totPie > 0 ? (c.valor / totPie) * 100 : 0
+                      return (
+                        <div key={c.cadena} className="flex items-start gap-2 text-xs">
+                          <div className="w-2.5 h-2.5 rounded-sm mt-1 flex-shrink-0"
+                               style={{ background: CADENA_COLORS[c.cadena] ?? '#c8873a' }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-gray-700 truncate">{c.cadena}</p>
+                            <p className="text-[11px] text-gray-400 tabular-nums">
+                              {tipVal(c.valor)} <span className="text-gray-300">· {pct.toFixed(1)}%</span>
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })}
+                </div>
+              </div>
+            </div>
+          )
+        })()}
+
+        {/* Tabla Seguimiento por Cadena (simplificada — usa sellout.por_cadena) */}
+        {cadenasSell.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h3 className="text-sm font-semibold text-gray-700">📋 Detalle por Cadena</h3>
+                <p className="text-[11px] text-gray-400">Sell-Out YTD 2026 · Walmart {paisNombre}</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                  <tr>
+                    <th className="px-3 py-2.5 text-left font-semibold">Cadena</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Valor 2026 (USD)</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Unidades 2026</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Valor 2025 (USD)</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">vs 2025</th>
+                    <th className="px-3 py-2.5 text-right font-semibold bg-amber-50 text-amber-700">Share %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cadenasSell.map((c: any, i: number) => {
+                    const pct = soTotal > 0 ? ((c.valor_2026 ?? 0) / soTotal) * 100 : 0
+                    return (
+                      <tr key={c.cadena} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                        <td className="px-3 py-2.5">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                                style={{ background: CADENA_COLORS[c.cadena] ?? '#6b7280' }}>
+                            {c.cadena}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-800 font-semibold">{fmt$(c.valor_2026 ?? 0)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmtNum(c.uni_2026 ?? 0)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{c.valor_2025 > 0 ? fmt$(c.valor_2025) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-2.5 text-right">
+                          {c.delta !== null ? <Delta d={c.delta} /> : <span className="text-[11px] text-gray-300">Sin 2025</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums bg-amber-50/40">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
+                              <div className="h-1.5 rounded-full bg-amber-400" style={{ width: `${Math.min(100, pct)}%` }} />
+                            </div>
+                            <span className="font-bold text-amber-700 min-w-[42px]">{pct.toFixed(1)}%</span>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                  <tr className="bg-gray-900 text-white font-bold">
+                    <td className="px-3 py-2.5">TOTAL</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{fmt$(soTotal)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{fmtNum(sellout.uni_2026 ?? 0)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">{soPrev > 0 ? fmt$(soPrev) : '—'}</td>
+                    <td className="px-3 py-2.5 text-right">{soDelta !== null ? <Delta d={soDelta} /> : '—'}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-amber-300">100.0%</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         )}
@@ -1389,33 +1412,24 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     )
   }
 
-  // ── Inventarios / Cobertura ───────────────────────────────────────────────
+  // ── Cobertura ─────────────────────────────────────────────────────────────
+  // Adaptado del patrón de Éxito Cobertura, usando fact_inventario_walmart_pdv.
+  // Métricas: universo PDVs, PDVs con stock, Cobertura efectiva %, SKUs activos.
+  // Detalle: cadena breakdown + matriz por SKU (stock <3, 3-10, >10).
 
   function Cobertura() {
     const L          = isL('cobertura')
     const staticCob  = COBERTURA_POR_PAIS[pais]
 
-    const barColor = (pct: number) =>
-      pct >= 70 ? '#10b981' : pct >= 50 ? '#f59e0b' : pct >= 30 ? '#f97316' : '#ef4444'
+    // Local filter for categoria (drill-down) — NO useMemo aquí porque Cobertura()
+    // es una función anidada; useMemo condicional entre renders violaría Rules of Hooks.
+    const cats: string[] = (() => {
+      const set = new Set<string>()
+      for (const r of (cob?.por_sku ?? [])) if (r.categoria) set.add(r.categoria)
+      return Array.from(set).sort()
+    })()
 
-    if (L) return (
-      <div className="space-y-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 animate-pulse">
-          <div className="h-4 bg-gray-100 rounded w-1/3 mb-3" />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4">
-            {Array(4).fill(0).map((_, i) => <div key={i} className="h-16 bg-gray-50 rounded-lg" />)}
-          </div>
-        </div>
-        {Array(2).fill(0).map((_, i) => (
-          <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 animate-pulse">
-            <div className="h-4 bg-gray-100 rounded w-1/3 mb-4" />
-            <div className="h-[220px] bg-gray-50 rounded" />
-          </div>
-        ))}
-      </div>
-    )
-
-    // ── Static store network panel ───────────────────────────────────────────
+    // ── Static store network panel (siempre visible) ─────────────────────────
     const staticPanel = staticCob && (
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
@@ -1450,182 +1464,129 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       </div>
     )
 
-    if (!cob?.rows?.length) return (
+    if (L) return (
+      <div className="space-y-4">
+        {staticPanel}
+        <CardSkeleton cols={4} />
+        <ChartSkeleton />
+      </div>
+    )
+
+    if (!cob || !cob.fecha) return (
       <div className="space-y-5">
         {staticPanel}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-8 text-center">
-          <p className="text-3xl mb-2">📊</p>
-          <p className="text-sm font-semibold text-gray-700 mb-1">Sin datos de ventas por tienda</p>
-          <p className="text-xs text-gray-400">La cobertura se calcula desde <code className="bg-gray-100 px-1 rounded text-xs">fact_ventas_walmart</code> con columna <code className="bg-gray-100 px-1 rounded text-xs">punto_venta</code>.</p>
+          <p className="text-3xl mb-2">📦</p>
+          <p className="text-sm font-semibold text-gray-700 mb-1">Sin snapshot de inventario</p>
+          <p className="text-xs text-gray-400">
+            La cobertura se calcula desde{' '}
+            <code className="bg-gray-100 px-1 rounded text-xs">fact_inventario_walmart_pdv</code>{' '}
+            (col <code className="bg-gray-100 px-1 rounded text-xs">inv_mano</code>).
+          </p>
         </div>
       </div>
     )
 
-    const allRows: any[]  = cob.rows
-    const totalPdvs       = cob.total_pdvs
-    const skuSaludables   = allRows.filter((r: any) => r.cobertura_pct >= 70).length
-    const skuBaja         = allRows.filter((r: any) => r.cobertura_pct < 50).length
-
-    // ── Bullet chart rows ────────────────────────────────────────────────────
-    const bulletRows = allRows
-      .filter((r: any) => !cobCatF || r.categoria === cobCatF)
-      .map((r: any) => ({
-        ...r,
-        _actual: cobVista === 'ponderada' ? r.cobertura_ponderada : r.cobertura_pct,
-        _max:    r.cobertura_maxima,
-      }))
-      .sort((a: any, b: any) => {
-        if (cobSort === 'gap')    return b.gap_pp  - a.gap_pp
-        if (cobSort === 'actual') return b._actual - a._actual
-        return b._max - a._max
-      })
+    const universo    = cob.universo_pdvs      ?? 0
+    const conStock    = cob.pdvs_con_stock     ?? 0
+    const cobEfectiva = cob.cobertura_efectiva ?? 0
+    const skusAct     = cob.skus_activos       ?? 0
+    const porCadena: any[] = cob.por_cadena    ?? []
+    const porSkuAll: any[] = cob.por_sku       ?? []
+    const porSku    = cobCatF ? porSkuAll.filter(r => r.categoria === cobCatF) : porSkuAll
 
     return (
       <div className="space-y-5">
 
         {staticPanel}
 
-
-
-        {/* ── KPI cards ── */}
+        {/* Header + KPIs (patrón Éxito) */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-800 mb-4">🎯 Cobertura de Distribución — {paisNombre}</h3>
-          <p className="text-xs text-gray-500 leading-relaxed mb-4">
-            <span className="font-semibold">Cobertura numérica</span> = % de tiendas ({totalPdvs} con ventas) que vendieron el SKU en 2026.{' '}
-            <span className="font-semibold">Cobertura ponderada</span> = las mismas tiendas pesadas por su share de ventas.{' '}
-            <span className="font-semibold">Máxima histórica</span> = mejor mes alcanzado. Gap = pp de recuperación potencial.
-          </p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[
-              { label: 'COBERTURA PROMEDIO', value: cob.avg_cob + '%', sub: `vs máx histórica ${cob.max_historica}% · gap ${cob.gap_global}pp`, tc: 'text-emerald-600' },
-              { label: 'COB. PONDERADA',     value: cob.avg_ponderada + '%', sub: `por share de venta · ${allRows.length} SKUs`, tc: 'text-emerald-600' },
-              { label: 'SKUs SALUDABLES',    value: skuSaludables, sub: 'cobertura ≥ 70% de tiendas', tc: skuSaludables > 0 ? 'text-emerald-600' : 'text-red-600' },
-              { label: 'SKUs BAJA COB.',     value: skuBaja, sub: 'por debajo de 50% — oportunidad', tc: skuBaja > 0 ? 'text-red-600' : 'text-gray-800' },
-            ].map(c => (
-              <div key={c.label} className="border border-gray-100 rounded-xl p-4">
-                <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-widest mb-2 leading-tight">{c.label}</p>
-                <p className={`text-2xl font-bold mb-1 ${c.tc}`}>{c.value}</p>
-                <p className="text-xs text-gray-400">{c.sub}</p>
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Cobertura · Walmart {paisNombre}
+              </p>
+              <h2 className="text-base font-bold text-gray-800 mt-0.5">
+                Snapshot al <strong>{cob.fecha}</strong>
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Universo: {universo} PDVs con presencia en el snapshot.
+                {porSkuAll.length > 200 && ' Top 200 SKUs por PDVs con stock.'}
+              </p>
+            </div>
+            {cats.length > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="text-gray-400 font-medium">Categoría:</span>
+                <select value={cobCatF}
+                  onChange={e => setCobCatF(e.target.value)}
+                  className="border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400">
+                  <option value="">Todas</option>
+                  {cats.map(c => <option key={c}>{c}</option>)}
+                </select>
               </div>
-            ))}
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <KpiCard label="PDVs totales" value={fmtNum(universo)} sub="Universo con presencia" />
+            <KpiCard label="PDVs con stock" value={fmtNum(conStock)} sub={`${universo > 0 ? ((conStock / universo) * 100).toFixed(1) : '0'}% del universo`} />
+            <KpiCard label="Cobertura efectiva" value={`${cobEfectiva.toFixed(1)}%`} sub="≥ 1 SKU con stock" highlight />
+            <KpiCard label="SKUs activos" value={fmtNum(skusAct)} sub={`${porSkuAll.length} SKUs en detalle`} />
           </div>
         </div>
 
-        {/* ── By cadena bar chart ── */}
-        {cob.por_cadena?.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-800 mb-1">📊 Por Formato — ¿Dónde están las brechas?</h3>
-            <p className="text-xs text-gray-400 mb-4">Cobertura promedio de los SKUs Borden en cada formato de tienda (actual vs máxima histórica).</p>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart
-                data={cob.por_cadena.map((g: any) => ({
-                  cadena:  `${g.cadena} (${g.n_tiendas})`,
-                  actual:  g.cob_actual_avg,
-                  maxima:  g.cob_max_avg,
-                }))}
-                margin={{ top: 10, right: 16, left: 8, bottom: 40 }}
-                barCategoryGap="22%"
-                barGap={10}
-              >
-                <defs>
-                  <linearGradient id="gradWmCobMax" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#d1d5db" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#e5e7eb" stopOpacity={0.85}/>
-                  </linearGradient>
-                  <linearGradient id="gradWmCobAct" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#2a7a58" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#4a9b78" stopOpacity={0.85}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis dataKey="cadena" tick={{ fontSize: 10, fill: '#64748b' }} angle={-20} textAnchor="end" interval={0} axisLine={false} tickLine={false} />
-                <YAxis domain={[0, 100]} tickFormatter={v => v + '%'} tick={{ fontSize: 11, fill: '#94a3b8' }} width={42} axisLine={false} tickLine={false} />
-                <Tooltip
-                  formatter={(v: number, n: string) => [v.toFixed(1) + '%', n === 'maxima' ? 'Máx Histórica' : 'Actual 2026']}
-                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
-                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                />
-                <Legend formatter={(n: string) => n === 'maxima' ? 'Máx Histórica' : 'Actual 2026'} />
-                <Bar dataKey="maxima" name="maxima" fill="url(#gradWmCobMax)" radius={[8, 8, 0, 0]} maxBarSize={36}>
-                  <LabelList dataKey="maxima" position="top"
-                    formatter={(v: any) => v > 0 ? Number(v).toFixed(0) + '%' : ''}
-                    style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
-                </Bar>
-                <Bar dataKey="actual" name="actual" fill="url(#gradWmCobAct)" radius={[8, 8, 0, 0]} maxBarSize={36}>
-                  <LabelList dataKey="actual" position="top"
-                    formatter={(v: any) => v > 0 ? Number(v).toFixed(0) + '%' : ''}
-                    style={{ fontSize: 9, fill: '#065f46', fontWeight: 700 }} />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+        {/* Cobertura por Cadena */}
+        {porCadena.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-50">
+              <h3 className="text-sm font-semibold text-gray-700">📍 Cobertura por Cadena</h3>
+              <p className="text-[11px] text-gray-400 mt-0.5">PDVs con stock vs universo · Walmart {paisNombre}</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                  <tr>
+                    <th className="px-3 py-2.5 text-left font-semibold">Cadena</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">PDVs totales</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Con stock</th>
+                    <th className="px-3 py-2.5 text-right font-semibold bg-blue-50 text-blue-700">Cobertura %</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">SKUs</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Unidades</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {porCadena.map((r, i) => (
+                    <tr key={r.cadena} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                      <td className="px-3 py-2.5">
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                              style={{ background: CADENA_COLORS[r.cadena] ?? '#6b7280' }}>
+                          {r.cadena || '—'}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmtNum(r.pdvs_total)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-gray-700">{fmtNum(r.pdvs_con_stock)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums bg-blue-50/40">
+                        <div className="flex items-center justify-end gap-2">
+                          <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
+                            <div className="h-1.5 rounded-full bg-blue-500"
+                                 style={{ width: `${Math.min(100, r.cobertura_pct)}%` }} />
+                          </div>
+                          <span className="font-bold text-blue-700 min-w-[42px]">{r.cobertura_pct.toFixed(1)}%</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmtNum(r.skus)}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmtNum(r.uds)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
-        {/* ── Bullet chart by SKU ── */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-800 mb-1">📋 Bullet Chart por SKU — Actual vs Máxima Histórica</h3>
-          <p className="text-xs text-gray-400 mb-4">
-            Barra coloreada = cobertura actual. Línea gris = máxima histórica. La diferencia es la distribución recuperable.
-          </p>
-
-          <div className="flex items-center gap-x-4 gap-y-2 flex-wrap text-xs mb-4">
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 font-medium">Ordenar:</span>
-              {([['gap', 'Mayor Gap'], ['actual', 'Cobertura Actual'], ['maxima', 'Máxima Histórica']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setCobSort(k)}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors border ${cobSort === k ? 'bg-[#1b3b5f] text-white border-[#1b3b5f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                  {l}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-gray-400 font-medium">Vista:</span>
-              {([['numerica', 'Numérica'], ['ponderada', 'Ponderada']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setCobVista(k)}
-                  className={`px-3 py-1.5 rounded-lg font-medium transition-colors border ${cobVista === k ? 'bg-[#1b3b5f] text-white border-[#1b3b5f]' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}`}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-1 max-h-[500px] overflow-y-auto pr-1">
-            {bulletRows.map((r: any) => (
-              <div key={r.sku} className="flex items-center gap-3 py-1.5">
-                <div className="w-52 flex-shrink-0">
-                  <p className="text-xs font-semibold text-gray-700 truncate">{r.descripcion}</p>
-                  <p className="text-[10px] text-gray-400">{r.sku} · {r.categoria}</p>
-                </div>
-                <div className="flex-1 relative h-7 bg-gray-100 rounded overflow-hidden">
-                  <div className="absolute inset-y-0 left-0 bg-gray-200 rounded"
-                    style={{ width: `${Math.min(r._max, 100)}%` }} />
-                  <div className="absolute inset-y-0 left-0 rounded transition-all"
-                    style={{ width: `${Math.min(r._actual, 100)}%`, backgroundColor: barColor(r._actual) }} />
-                  {r._max > r._actual && (
-                    <div className="absolute inset-y-0 w-0.5 bg-gray-500 opacity-60"
-                      style={{ left: `${Math.min(r._max, 100)}%` }} />
-                  )}
-                </div>
-                <div className="flex gap-4 text-right flex-shrink-0">
-                  <div className="w-12">
-                    <p className="text-[9px] text-gray-400">Actual</p>
-                    <p className="text-xs font-bold" style={{ color: barColor(r._actual) }}>{r._actual.toFixed(0)}%</p>
-                  </div>
-                  <div className="w-10">
-                    <p className="text-[9px] text-gray-400">Máx</p>
-                    <p className="text-xs font-semibold text-gray-500">{r._max.toFixed(0)}%</p>
-                  </div>
-                  <div className="w-14">
-                    <p className="text-[9px] text-gray-400">Gap</p>
-                    <p className={`text-xs font-bold ${r.gap_pp > 0 ? 'text-orange-500' : 'text-emerald-600'}`}>
-                      {r.gap_pp > 0 ? '+' : ''}{r.gap_pp.toFixed(1)}pp
-                    </p>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        {/* Matriz por SKU: # PDVs por nivel de stock */}
+        <CoberturaSkuTable rows={porSku} universo={universo} coberturaEfectiva={cobEfectiva} />
 
       </div>
     )
@@ -2533,6 +2494,111 @@ function TopSkusDetailTable({ rows, fmtFull }: { rows: any[]; fmtFull: (v: numbe
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+/* ═════ Sub-componente: Matriz de Cobertura por SKU (ordenable) ═════ */
+function CoberturaSkuTable({
+  rows,
+  universo,
+  coberturaEfectiva,
+}: {
+  rows: any[]
+  universo: number
+  coberturaEfectiva: number
+}) {
+  type Col = 'descripcion' | 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10' | 'total_pdvs' | 'cobertura_pct'
+  const { toggleSort, sorted, SortArrow } = useTableSort<any, Col>(
+    rows, 'total_pdvs', 'desc',
+    {
+      descripcion:   (a, b) => (a.descripcion ?? a.sku ?? '').localeCompare(b.descripcion ?? b.sku ?? ''),
+      menos_de_3:    (a, b) => (a.menos_de_3    ?? 0) - (b.menos_de_3    ?? 0),
+      entre_3_y_10:  (a, b) => (a.entre_3_y_10  ?? 0) - (b.entre_3_y_10  ?? 0),
+      mayor_a_10:    (a, b) => (a.mayor_a_10    ?? 0) - (b.mayor_a_10    ?? 0),
+      total_pdvs:    (a, b) => (a.total_pdvs    ?? 0) - (b.total_pdvs    ?? 0),
+      cobertura_pct: (a, b) => (a.cobertura_pct ?? 0) - (b.cobertura_pct ?? 0),
+    },
+  )
+
+  const totMenos = rows.reduce((s, r) => s + (r.menos_de_3   ?? 0), 0)
+  const totEntre = rows.reduce((s, r) => s + (r.entre_3_y_10 ?? 0), 0)
+  const totMayor = rows.reduce((s, r) => s + (r.mayor_a_10   ?? 0), 0)
+  const totPdvs  = rows.reduce((s, r) => s + (r.total_pdvs   ?? 0), 0)
+
+  if (rows.length === 0) {
+    return (
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+        <p className="text-3xl mb-2">📭</p>
+        <p className="text-sm font-semibold text-gray-600">Sin SKUs con stock</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-gray-50">
+        <h3 className="text-sm font-bold text-gray-800">Nivel de Inventario — Detalle por Producto</h3>
+        <p className="text-[11px] text-gray-400 mt-0.5"># de PDVs por nivel de stock · cobertura vs universo total ({universo} PDVs)</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+            <tr>
+              <SortableTh onClick={() => toggleSort('descripcion')} arrow={<SortArrow col="descripcion"/>} className="px-4 py-2.5">Producto</SortableTh>
+              <SortableTh onClick={() => toggleSort('menos_de_3')} arrow={<SortArrow col="menos_de_3"/>} align="right" className="px-3 py-2.5 text-red-600">Menos de 3</SortableTh>
+              <SortableTh onClick={() => toggleSort('entre_3_y_10')} arrow={<SortArrow col="entre_3_y_10"/>} align="right" className="px-3 py-2.5 text-amber-600">Entre 3 y 10</SortableTh>
+              <SortableTh onClick={() => toggleSort('mayor_a_10')} arrow={<SortArrow col="mayor_a_10"/>} align="right" className="px-3 py-2.5 text-emerald-600">Mayor a 10</SortableTh>
+              <SortableTh onClick={() => toggleSort('total_pdvs')} arrow={<SortArrow col="total_pdvs"/>} align="right" className="px-3 py-2.5 bg-gray-100">Total PDVs</SortableTh>
+              <SortableTh onClick={() => toggleSort('cobertura_pct')} arrow={<SortArrow col="cobertura_pct"/>} align="right" className="px-3 py-2.5 bg-blue-50 text-blue-700">Cobertura %</SortableTh>
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((r, i) => (
+              <tr key={r.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                <td className="px-4 py-2.5 font-medium text-gray-800">
+                  {r.descripcion ?? r.sku}
+                  <span className="ml-2 text-[10px] text-gray-400 font-mono">{r.sku}</span>
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  {r.menos_de_3 > 0
+                    ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-red-100 text-red-700">{r.menos_de_3}</span>
+                    : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  {r.entre_3_y_10 > 0
+                    ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-amber-100 text-amber-700">{r.entre_3_y_10}</span>
+                    : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums">
+                  {r.mayor_a_10 > 0
+                    ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-700">{r.mayor_a_10}</span>
+                    : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums bg-gray-50/60 font-bold text-gray-800">{r.total_pdvs}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums bg-blue-50/40">
+                  <div className="flex items-center justify-end gap-2">
+                    <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
+                      <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${Math.min(100, r.cobertura_pct)}%` }} />
+                    </div>
+                    <span className="font-bold text-blue-700 min-w-[42px]">{r.cobertura_pct.toFixed(1)}%</span>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            <tr className="bg-gray-900 text-white font-bold">
+              <td className="px-4 py-2.5">TOTAL <span className="text-[9px] font-normal text-gray-400 ml-1">(suma por SKU)</span></td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{totMenos}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{totEntre}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{totMayor}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{totPdvs}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums text-blue-300" title="Cobertura efectiva: PDVs distintos con al menos 1 SKU con stock / universo total">
+                {coberturaEfectiva.toFixed(1)}% <span className="text-[9px] font-normal text-gray-400">efectiva</span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

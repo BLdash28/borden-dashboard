@@ -7,17 +7,15 @@ import {
 } from 'recharts'
 import FiltroMulti from '@/components/ui/FiltroMulti'
 
-const STORAGE_KEY = 'bl_sellin_res_v1'
-function saveStorage(ano: number, paises: string[], cats: string[], tipos: string[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ ano, paises, cats, tipos })) } catch {}
+const STORAGE_KEY = 'bl_sellin_res_v2'
+type StoredFilters = { ano: number; meses: string[]; paises: string[]; cats: string[]; subcats: string[]; clientes: string[]; proveedores: string[]; tipos: string[] }
+function saveStorage(s: StoredFilters) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)) } catch {}
 }
 
 const MESES      = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const MESES_FULL = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre']
-const PAISES = ['CR','GT','SV','NI','HN','CO']
-const CATS   = ['Quesos','Leches','Helados']
-const PAISES_OPT = PAISES.map(p => ({ value: p }))
-const CATS_OPT   = CATS.map(c => ({ value: c }))
+const MESES_OPT  = Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: MESES[i + 1] }))
 const TIPOS_OPT  = [
   { value: 'REGULAR',                 label: 'BL FOODS' },
   { value: 'LICENCIAMIENTO_HELADOS',  label: 'LICENCIAMIENTO HELADOS' },
@@ -101,24 +99,39 @@ function MonthDividers(props: any) {
 }
 
 export default function SellInResumen() {
-  const [ano,    setAno]    = useState(2026)
-  const [paises, setPaises] = useState<string[]>([])
-  const [cats,   setCats]   = useState<string[]>([])
-  const [tipos,  setTipos]  = useState<string[]>(['REGULAR'])
+  const [ano,       setAno]       = useState(2026)
+  const [meses,     setMeses]     = useState<string[]>([])
+  const [paises,    setPaises]    = useState<string[]>([])
+  const [cats,      setCats]      = useState<string[]>([])
+  const [subcats,   setSubcats]   = useState<string[]>([])
+  const [clientes,    setClientes]    = useState<string[]>([])
+  const [proveedores, setProveedores] = useState<string[]>([])
+  const [tipos,       setTipos]       = useState<string[]>(['REGULAR'])
   const initDone = useRef(false)
+
+  // Opciones dinámicas (fetched del endpoint sell-in/opts)
+  const [paisOpts,       setPaisOpts]       = useState<string[]>([])
+  const [catOpts,        setCatOpts]        = useState<string[]>([])
+  const [subcatOpts,     setSubcatOpts]     = useState<string[]>([])
+  const [clienteOpts,    setClienteOpts]    = useState<string[]>([])
+  const [proveedorOpts,  setProveedorOpts]  = useState<string[]>([])
 
   const [kpi,     setKpi]     = useState<KpiData | null>(null)
   const [mensual, setMensual] = useState<any[]>([])
   const [ytd,     setYtd]     = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const cargar = useCallback(async (a: number, ps: string[], cs: string[], ts: string[]) => {
+  const cargar = useCallback(async (a: number, ms: string[], ps: string[], cs: string[], scs: string[], cls: string[], prs: string[], ts: string[]) => {
     setLoading(true)
     try {
       const qs = new URLSearchParams({ ano: String(a) })
-      if (ps.length) qs.set('pais', ps.join(','))
-      if (cs.length) qs.set('categoria', cs.join(','))
-      if (ts.length) qs.set('tipo_negocio', ts.join(','))
+      if (ms.length)  qs.set('mes',           ms.join(','))
+      if (ps.length)  qs.set('pais',          ps.join(','))
+      if (cs.length)  qs.set('categoria',     cs.join(','))
+      if (scs.length) qs.set('subcategoria',  scs.join(','))
+      if (cls.length) qs.set('cliente',       cls.join(','))
+      if (prs.length) qs.set('proveedor',     prs.join(','))
+      if (ts.length)  qs.set('tipo_negocio',  ts.join(','))
 
       const [kR, eR] = await Promise.all([
         fetch('/api/comercial/sell-in/kpis?' + qs).then(r => r.ok ? r.json() : {}) as Promise<any>,
@@ -139,16 +152,71 @@ export default function SellInResumen() {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (raw) {
         const s = JSON.parse(raw)
-        if (s.ano)            setAno(s.ano)
-        if (s.paises?.length) setPaises(s.paises)
-        if (s.cats?.length)   setCats(s.cats)
-        if (s.tipos?.length)  setTipos(s.tipos)
+        if (s.ano)              setAno(s.ano)
+        if (s.meses?.length)    setMeses(s.meses)
+        if (s.paises?.length)   setPaises(s.paises)
+        if (s.cats?.length)     setCats(s.cats)
+        if (s.subcats?.length)  setSubcats(s.subcats)
+        if (s.clientes?.length)    setClientes(s.clientes)
+        if (s.proveedores?.length) setProveedores(s.proveedores)
+        if (s.tipos?.length)       setTipos(s.tipos)
       }
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => { cargar(ano, paises, cats, tipos) }, [cargar, ano, paises, cats, tipos])
+  useEffect(() => { cargar(ano, meses, paises, cats, subcats, clientes, proveedores, tipos) }, [cargar, ano, meses, paises, cats, subcats, clientes, proveedores, tipos])
+
+  // ── Fetch opciones dinámicas (sell-in/opts) ────────────────────────────
+  // País: siempre disponible
+  useEffect(() => {
+    fetch('/api/ventas/sell-in/opts?dim=pais').then(r => r.json()).then(j => setPaisOpts(j.opts ?? []))
+  }, [])
+
+  // Categoría: filtrada por país
+  useEffect(() => {
+    const p = new URLSearchParams({ dim: 'categoria' })
+    if (paises.length) p.set('paises', paises.join(','))
+    fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => setCatOpts(j.opts ?? []))
+  }, [paises])
+
+  // Subcategoría: SIEMPRE disponible — si hay país/categoría filtra opciones, si no muestra todas
+  useEffect(() => {
+    const p = new URLSearchParams({ dim: 'subcategoria' })
+    if (cats.length)   p.set('categorias', cats.join(','))
+    if (paises.length) p.set('paises', paises.join(','))
+    fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => {
+      const opts = j.opts ?? []
+      setSubcatOpts(opts)
+      setSubcats(prev => prev.filter(v => opts.includes(v)))
+    })
+  }, [paises, cats])
+
+  // Cliente: SIEMPRE disponible — si hay país, filtra; si no, muestra todos
+  useEffect(() => {
+    const p = new URLSearchParams({ dim: 'cliente' })
+    if (paises.length) p.set('paises', paises.join(','))
+    fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => {
+      const opts = j.opts ?? []
+      setClienteOpts(opts)
+      setClientes(prev => prev.filter(v => opts.includes(v)))
+    })
+  }, [paises])
+
+  // Proveedor: SIEMPRE disponible — si hay país, filtra; si no, muestra todos
+  useEffect(() => {
+    const p = new URLSearchParams({ dim: 'proveedor' })
+    if (paises.length) p.set('paises', paises.join(','))
+    fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => {
+      const opts = j.opts ?? []
+      setProveedorOpts(opts)
+      setProveedores(prev => prev.filter(v => opts.includes(v)))
+    })
+  }, [paises])
+
+  const persistir = (partial: Partial<StoredFilters>) => {
+    saveStorage({ ano, meses, paises, cats, subcats, clientes, proveedores, tipos, ...partial })
+  }
 
   const handlePaisChange = (ps: string[]) => {
     setPaises(ps)
@@ -157,14 +225,20 @@ export default function SellInResumen() {
       const newCats  = cats.includes('Quesos') ? cats : [...cats, 'Quesos']
       setTipos(newTipos)
       setCats(newCats)
-      saveStorage(ano, ps, newCats, newTipos)
+      persistir({ paises: ps, tipos: newTipos, cats: newCats })
     } else {
       const newTipos = tipos.filter(t => t !== 'LICENCIAMIENTO_COLOMBIA')
       const newCats  = cats.filter(c => c !== 'Quesos')
       setTipos(newTipos)
       setCats(newCats)
-      saveStorage(ano, ps, newCats, newTipos)
+      persistir({ paises: ps, tipos: newTipos, cats: newCats })
     }
+  }
+
+  const limpiarFiltros = () => {
+    setMeses([]); setPaises([]); setCats([]); setSubcats([]); setClientes([]); setProveedores([])
+    setTipos(['REGULAR'])
+    saveStorage({ ano, meses: [], paises: [], cats: [], subcats: [], clientes: [], proveedores: [], tipos: ['REGULAR'] })
   }
 
   // Transform ytd for recharts
@@ -209,15 +283,21 @@ export default function SellInResumen() {
           <h1 className="text-xl md:text-2xl font-bold text-gray-800">Resumen Ejecutivo</h1>
           <p className="text-xs md:text-sm text-gray-400 mt-0.5">Comparativo vs año anterior · Facturación propia</p>
         </div>
-        <button onClick={() => cargar(ano, paises, cats, tipos)}
+        <button onClick={() => cargar(ano, meses, paises, cats, subcats, clientes, proveedores, tipos)}
           className="flex items-center gap-2 px-3 md:px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Actualizar
         </button>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros — mismo formato que Sellout */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Filtros</p>
+          <button onClick={limpiarFiltros} className="text-xs text-gray-400 hover:text-gray-600 underline">↺ Limpiar todo</button>
+        </div>
+
+        {/* 4 primeros arriba (Año/Mes/País/Categoría), 4 abajo (Subcategoría/Cliente/Proveedor/Tipo Negocio) */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Año</p>
             <select
@@ -225,30 +305,38 @@ export default function SellInResumen() {
               onChange={e => {
                 const v = Number(e.target.value)
                 setAno(v)
-                saveStorage(v, paises, cats, tipos)
+                persistir({ ano: v })
               }}
-              className="px-3 py-1.5 pr-8 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-[110px] cursor-pointer"
+              className="w-full px-2 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
             >
               {[2024, 2025, 2026].map(a => (
                 <option key={a} value={a}>{a}</option>
               ))}
             </select>
           </div>
-          <FiltroMulti label="País" options={PAISES_OPT} value={paises} onChange={handlePaisChange} placeholder="Todos" />
+          <FiltroMulti label="Mes" options={MESES_OPT} value={meses} onChange={v => { setMeses(v); persistir({ meses: v }) }} placeholder="Todos" className="" />
+          <FiltroMulti label="País" options={paisOpts.map(p => ({ value: p }))} value={paises} onChange={handlePaisChange} placeholder="Todos los países" className="" />
           <FiltroMulti label="Tipo Negocio" options={TIPOS_OPT} value={tipos} onChange={ts => {
             setTipos(ts)
             if (ts.includes('LICENCIAMIENTO_COLOMBIA')) {
               const newCats = cats.includes('Quesos') ? cats : [...cats, 'Quesos']
               setCats(newCats)
-              saveStorage(ano, paises, newCats, ts)
+              persistir({ cats: newCats, tipos: ts })
             } else {
-              saveStorage(ano, paises, cats, ts)
+              persistir({ tipos: ts })
             }
-          }} placeholder="Todos" />
-          <FiltroMulti label="Categoría" options={CATS_OPT} value={cats} onChange={cs => {
-            setCats(cs)
-            saveStorage(ano, paises, cs, tipos)
-          }} placeholder="Todas" />
+          }} placeholder="Todos" className="" />
+          <FiltroMulti label="Categoría" options={catOpts.map(c => ({ value: c }))} value={cats}
+            onChange={cs => { setCats(cs); persistir({ cats: cs }) }} placeholder="Todas las categorías" className="" />
+          <FiltroMulti label="Subcategoría" options={subcatOpts.map(s => ({ value: s }))} value={subcats}
+            onChange={ss => { setSubcats(ss); persistir({ subcats: ss }) }}
+            placeholder="Todas" className="" />
+          <FiltroMulti label="Cliente" options={clienteOpts.map(c => ({ value: c }))} value={clientes}
+            onChange={cls => { setClientes(cls); persistir({ clientes: cls }) }}
+            placeholder="Todos" className="" />
+          <FiltroMulti label="Proveedor" options={proveedorOpts.map(p => ({ value: p }))} value={proveedores}
+            onChange={ps => { setProveedores(ps); persistir({ proveedores: ps }) }}
+            placeholder="Todos" className="" />
         </div>
       </div>
 

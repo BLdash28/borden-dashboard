@@ -10,20 +10,28 @@ export async function GET(req: NextRequest) {
   try {
     const sp     = req.nextUrl.searchParams
     const ano    = parseInt(sp.get('ano') || '2026')
-    const paises = sp.get('pais')      ? sp.get('pais')!.split(',').filter(Boolean)      : []
-    const cats   = sp.get('categoria') ? sp.get('categoria')!.split(',').filter(Boolean) : []
-    const tipos  = sp.get('tipo_negocio') ? sp.get('tipo_negocio')!.split(',').filter(Boolean) : []
+    const paises      = sp.get('pais')          ? sp.get('pais')!.split(',').filter(Boolean)          : []
+    const cats        = sp.get('categoria')     ? sp.get('categoria')!.split(',').filter(Boolean)     : []
+    const subcats     = sp.get('subcategoria')  ? sp.get('subcategoria')!.split(',').filter(Boolean)  : []
+    const tipos       = sp.get('tipo_negocio')  ? sp.get('tipo_negocio')!.split(',').filter(Boolean)  : []
+    const clientes    = sp.get('cliente')       ? sp.get('cliente')!.split(',').filter(Boolean)       : []
+    const proveedores = sp.get('proveedor')     ? sp.get('proveedor')!.split(',').filter(Boolean)     : []
+    const mesesArr    = sp.get('mes')           ? sp.get('mes')!.split(',').map(Number).filter(n => n >= 1 && n <= 12) : []
 
     const inC = (col: string, vals: string[]) =>
       `${col} IN (${vals.map(v => `'${v.replace(/'/g,"''")}'`).join(',')})`
 
     const extraConds: string[] = []
-    if (paises.length) extraConds.push(inC('pais', paises))
-    if (cats.length)   extraConds.push(inC('categoria', cats))
-    if (tipos.length)  extraConds.push(inC('tipo_negocio', tipos))
+    if (paises.length)      extraConds.push(inC('pais', paises))
+    if (cats.length)        extraConds.push(inC('categoria', cats))
+    if (subcats.length)     extraConds.push(inC('subcategoria', subcats))
+    if (tipos.length)       extraConds.push(inC('tipo_negocio', tipos))
+    if (clientes.length)    extraConds.push(inC('cliente_nombre', clientes))
+    if (proveedores.length) extraConds.push(inC('proveedor', proveedores))
+    if (mesesArr.length)    extraConds.push(`mes IN (${mesesArr.join(',')})`)
     const extra = extraConds.length ? 'AND ' + extraConds.join(' AND ') : ''
 
-    // ventas_sell_in no tiene tipo_negocio — filtrar solo por pais/categoria
+    // ventas_sell_in no tiene tipo_negocio ni cliente_nombre — filtrar solo por pais/categoria
     const extraViejo = (() => {
       const c: string[] = []
       if (paises.length) c.push(inC('pais', paises))

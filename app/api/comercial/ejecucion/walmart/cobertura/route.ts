@@ -1,182 +1,192 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
-import { CADENA_NORM_SQL } from '@/lib/db/walmart-cadena'
 import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
 
 export const revalidate = 300
 
+/**
+ * Cobertura Walmart (multi-país) — replica el patrón de Éxito adaptado a
+ * `fact_inventario_walmart_pdv` (columna `inv_mano`).
+ *
+ * KPIs:
+ *   - universo_pdvs: total de PDVs con presencia (cualquier registro en el snap)
+ *   - pdvs_con_stock: PDVs con al menos un SKU con `inv_mano > 0`
+ *   - cobertura_efectiva: pdvs_con_stock / universo * 100
+ *   - skus_activos: SKUs distintos con stock > 0
+ *
+ * Detalles:
+ *   - por_cadena: PDVs totales/con stock por cadena + cobertura %
+ *   - por_sku:    matriz de # PDVs por bucket de stock (<3, 3-10, >10) por SKU
+ *
+ * NB: fact_inventario_walmart_pdv NO tiene subcategoría/formato — se omiten
+ * ambos filtros. El filtro por cadena SÍ aplica.
+ */
 export async function GET(req: NextRequest) {
   try {
-    const sp   = req.nextUrl.searchParams
-    const pais = sp.get('pais') ?? 'CR'
-    const ano  = parseInt(sp.get('ano') ?? '2026')
+    const pais = req.nextUrl.searchParams.get('pais') ?? 'CR'
     const f    = parseWalmartFilters(req)
-    const w    = buildWalmartWhere(f, { startAt: 2 })
-    // Para vista por cadena, no filtrar por cadena así vemos todas las cadenas
-    const wSinCad = buildWalmartWhere({ ...f, cadenas: [] }, { startAt: 2 })
 
-    const [skuR, totalR, histR, wgtR, cadenaR] = await Promise.all([
+    // KPIs globales (respeta todos los filtros aplicables)
+    const wG   = buildWalmartWhere(f, { startAt: 2, omit: ['subcategoria', 'formato'] })
+    // Universo por cadena: NO filtrar por cadena así vemos todas
+    const wCad = buildWalmartWhere(
+      { ...f, cadenas: [], skus: [] },
+      { startAt: 2, omit: ['subcategoria', 'formato'] },
+    )
+    // Universo global (para cobertura % del SKU): sin filtro de SKU
+    const wUni = buildWalmartWhere(
+      { ...f, skus: [] },
+      { startAt: 2, omit: ['subcategoria', 'formato'] },
+    )
 
-      // Per-SKU: active stores + value (current year)
-      pool.query(`
-        SELECT sku, MAX(descripcion) AS descripcion, MAX(categoria) AS categoria,
-          COUNT(DISTINCT punto_venta) AS pdvs_activos,
-          ROUND(SUM(ventas_valor)::numeric, 2) AS valor
-        FROM fact_ventas_walmart
-        WHERE pais = $1 AND EXTRACT(YEAR FROM fecha) = ${ano}
-          AND sku IS NOT NULL AND sku != '' AND ${w.where}
-        GROUP BY sku
-        ORDER BY pdvs_activos DESC, valor DESC
-        LIMIT 200
-      `, [pais, ...w.params]),
+    const [snapR, universoR, pdvsConStockR, skusActR, cadenaR, skuR] = await Promise.all([
+      // Fecha snapshot
+      pool.query(
+        `SELECT MAX(fecha)::text AS fecha
+         FROM fact_inventario_walmart_pdv
+         WHERE pais = $1`,
+        [pais],
+      ),
 
-      // Total distinct stores (current year)
-      pool.query(`
-        SELECT COUNT(DISTINCT punto_venta) AS n
-        FROM fact_ventas_walmart
-        WHERE pais = $1 AND EXTRACT(YEAR FROM fecha) = ${ano} AND ${w.where}
-      `, [pais, ...w.params]),
+      // Universo total de PDVs
+      pool.query(
+        `WITH ult AS (
+           SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = $1
+         )
+         SELECT COUNT(DISTINCT punto_venta) AS pdvs
+         FROM fact_inventario_walmart_pdv
+         WHERE pais = $1
+           AND fecha = (SELECT f FROM ult)
+           AND ${wUni.where}`,
+        [pais, ...wUni.params],
+      ),
 
-      // Historical max stores per SKU (best month across all years)
-      pool.query(`
-        WITH monthly AS (
-          SELECT sku, DATE_TRUNC('month', fecha) AS mes,
-            COUNT(DISTINCT punto_venta) AS n
-          FROM fact_ventas_walmart
-          WHERE pais = $1 AND sku IS NOT NULL AND sku != '' AND ${w.where}
-          GROUP BY sku, DATE_TRUNC('month', fecha)
-        )
-        SELECT sku, MAX(n) AS pdvs_max FROM monthly GROUP BY sku
-      `, [pais, ...w.params]),
+      // PDVs con stock > 0
+      pool.query(
+        `WITH ult AS (
+           SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = $1
+         )
+         SELECT COUNT(DISTINCT punto_venta) AS pdvs
+         FROM fact_inventario_walmart_pdv
+         WHERE pais = $1
+           AND fecha = (SELECT f FROM ult)
+           AND inv_mano > 0
+           AND ${wUni.where}`,
+        [pais, ...wUni.params],
+      ),
 
-      // Weighted coverage: stores weighted by their share of total year sales
-      pool.query(`
-        WITH store_val AS (
-          SELECT punto_venta, SUM(ventas_valor) AS venta
-          FROM fact_ventas_walmart
-          WHERE pais = $1 AND EXTRACT(YEAR FROM fecha) = ${ano} AND ${w.where}
-          GROUP BY punto_venta
-        ),
-        total_val AS (SELECT NULLIF(SUM(venta), 0) AS t FROM store_val),
-        sku_stores AS (
-          SELECT DISTINCT sku, punto_venta
-          FROM fact_ventas_walmart
-          WHERE pais = $1 AND EXTRACT(YEAR FROM fecha) = ${ano}
-            AND sku IS NOT NULL AND sku != '' AND ${w.where}
-        )
-        SELECT s.sku,
-          ROUND((SUM(sv.venta / tv.t) * 100)::numeric, 1) AS cob_ponderada
-        FROM sku_stores s
-        JOIN store_val sv ON sv.punto_venta = s.punto_venta
-        CROSS JOIN total_val tv
-        GROUP BY s.sku
-      `, [pais, ...w.params]),
+      // SKUs activos (con stock > 0)
+      pool.query(
+        `WITH ult AS (
+           SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = $1
+         )
+         SELECT COUNT(DISTINCT COALESCE(sku, codigo_barras)) AS n
+         FROM fact_inventario_walmart_pdv
+         WHERE pais = $1
+           AND fecha = (SELECT f FROM ult)
+           AND inv_mano > 0
+           AND ${wG.where}`,
+        [pais, ...wG.params],
+      ),
 
-      // Per-cadena summary: stores + avg SKU coverage + historical max
-      pool.query(`
-        WITH raw AS (
-          SELECT ${CADENA_NORM_SQL} AS cadena, fecha, sku, punto_venta
-          FROM fact_ventas_walmart
-          WHERE pais = $1 AND ${wSinCad.where}
-        ),
-        cadena_cur AS (
-          SELECT cadena, COUNT(DISTINCT punto_venta) AS n_tiendas
-          FROM raw
-          WHERE EXTRACT(YEAR FROM fecha) = ${ano}
-          GROUP BY cadena
-        ),
-        sku_cadena_cur AS (
-          SELECT sku, cadena, COUNT(DISTINCT punto_venta) AS pdvs
-          FROM raw
-          WHERE EXTRACT(YEAR FROM fecha) = ${ano}
-            AND sku IS NOT NULL AND sku != ''
-          GROUP BY sku, cadena
-        ),
-        monthly_avg AS (
-          SELECT sc.cadena, sc.mes,
-            AVG(sc.n::float / ct.n * 100) AS avg_cob
-          FROM (
-            SELECT sku, cadena, DATE_TRUNC('month', fecha) AS mes,
-              COUNT(DISTINCT punto_venta) AS n
-            FROM raw
-            WHERE sku IS NOT NULL AND sku != ''
-            GROUP BY sku, cadena, DATE_TRUNC('month', fecha)
-          ) sc
-          JOIN (
-            SELECT cadena, DATE_TRUNC('month', fecha) AS mes,
-              COUNT(DISTINCT punto_venta) AS n
-            FROM raw
-            GROUP BY cadena, DATE_TRUNC('month', fecha)
-          ) ct ON ct.cadena = sc.cadena AND ct.mes = sc.mes
-          GROUP BY sc.cadena, sc.mes
-        ),
-        hist_max AS (
-          SELECT cadena, MAX(avg_cob) AS cob_max_avg
-          FROM monthly_avg GROUP BY cadena
-        )
-        SELECT
-          cc.cadena,
-          cc.n_tiendas,
-          ROUND(
-            AVG(sc.pdvs::float / cc.n_tiendas * 100)::numeric, 1
-          ) AS cob_actual_avg,
-          ROUND(COALESCE(hm.cob_max_avg, 0)::numeric, 1) AS cob_max_avg
-        FROM cadena_cur cc
-        LEFT JOIN sku_cadena_cur sc ON sc.cadena = cc.cadena
-        LEFT JOIN hist_max hm ON hm.cadena = cc.cadena
-        GROUP BY cc.cadena, cc.n_tiendas, hm.cob_max_avg
-        ORDER BY cc.n_tiendas DESC
-      `, [pais, ...wSinCad.params]),
+      // Por cadena — todos los PDVs y los con stock
+      pool.query(
+        `WITH ult AS (
+           SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = $1
+         )
+         SELECT
+           cadena,
+           COUNT(DISTINCT punto_venta)                                             AS pdvs_total,
+           COUNT(DISTINCT punto_venta) FILTER (WHERE inv_mano > 0)                 AS pdvs_con_stock,
+           COUNT(DISTINCT COALESCE(sku, codigo_barras)) FILTER (WHERE inv_mano > 0) AS skus,
+           SUM(inv_mano) FILTER (WHERE inv_mano > 0)                               AS uds
+         FROM fact_inventario_walmart_pdv
+         WHERE pais = $1
+           AND fecha = (SELECT f FROM ult)
+           AND cadena IS NOT NULL AND cadena <> ''
+           AND ${wCad.where}
+         GROUP BY cadena
+         ORDER BY pdvs_total DESC`,
+        [pais, ...wCad.params],
+      ),
+
+      // Por SKU — matriz de stock buckets
+      pool.query(
+        `WITH ult AS (
+           SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = $1
+         )
+         SELECT
+           COALESCE(t.sku, t.codigo_barras)                                        AS sku,
+           COALESCE(MAX(NULLIF(t.descripcion,'')), MAX(NULLIF(dp.descripcion,''))) AS descripcion,
+           COALESCE(MAX(NULLIF(t.categoria,''))  , MAX(NULLIF(dp.categoria,'')))   AS categoria,
+           COUNT(DISTINCT CASE WHEN inv_mano > 0 AND inv_mano < 3    THEN punto_venta END) AS menos_de_3,
+           COUNT(DISTINCT CASE WHEN inv_mano >= 3 AND inv_mano <= 10 THEN punto_venta END) AS entre_3_y_10,
+           COUNT(DISTINCT CASE WHEN inv_mano > 10                    THEN punto_venta END) AS mayor_a_10,
+           COUNT(DISTINCT CASE WHEN inv_mano > 0                     THEN punto_venta END) AS total_pdvs,
+           SUM(inv_mano)                                                                    AS unidades
+         FROM fact_inventario_walmart_pdv t
+         LEFT JOIN dim_producto dp
+           ON dp.sku = t.sku
+           OR dp.codigo_barras = t.codigo_barras
+         WHERE t.pais = $1
+           AND t.fecha = (SELECT f FROM ult)
+           AND ${wG.where}
+         GROUP BY COALESCE(t.sku, t.codigo_barras)
+         HAVING COUNT(DISTINCT CASE WHEN inv_mano > 0 THEN punto_venta END) > 0
+         ORDER BY total_pdvs DESC
+         LIMIT 200`,
+        [pais, ...wG.params],
+      ),
     ])
 
-    const total_pdvs = parseInt(totalR.rows[0]?.n ?? '0')
+    const fecha        = snapR.rows[0]?.fecha ?? null
+    const universo     = parseInt(universoR.rows[0]?.pdvs ?? '0')
+    const pdvsConStock = parseInt(pdvsConStockR.rows[0]?.pdvs ?? '0')
+    const skusActivos  = parseInt(skusActR.rows[0]?.n ?? '0')
 
-    const maxMap: Record<string, number> = {}
-    for (const r of histR.rows) maxMap[r.sku] = parseInt(r.pdvs_max)
-
-    const wgtMap: Record<string, number> = {}
-    for (const r of wgtR.rows) wgtMap[r.sku] = parseFloat(r.cob_ponderada)
-
-    const rows = (skuR.rows as any[]).map(row => {
-      const pdvs      = parseInt(row.pdvs_activos)
-      const pdvs_max  = maxMap[row.sku] ?? pdvs
-      const cob       = total_pdvs > 0 ? parseFloat((pdvs / total_pdvs * 100).toFixed(1)) : 0
-      const cob_max   = total_pdvs > 0 ? parseFloat((pdvs_max / total_pdvs * 100).toFixed(1)) : 0
-      const cob_pond  = wgtMap[row.sku] ?? cob
+    const porCadena = (cadenaR.rows as any[]).map(r => {
+      const tot = parseInt(r.pdvs_total     ?? '0')
+      const con = parseInt(r.pdvs_con_stock ?? '0')
       return {
-        sku:                 row.sku,
-        descripcion:         row.descripcion ?? '',
-        categoria:           row.categoria   ?? '',
-        pdvs_activos:        pdvs,
-        pdvs_max,
-        valor:               parseFloat(row.valor ?? '0'),
-        cobertura_pct:       cob,
-        cobertura_maxima:    cob_max,
-        cobertura_ponderada: cob_pond,
-        gap_pp:              parseFloat((cob_max - cob).toFixed(1)),
+        cadena:         r.cadena ?? '',
+        pdvs_total:     tot,
+        pdvs_con_stock: con,
+        cobertura_pct:  tot > 0 ? (con / tot) * 100 : 0,
+        skus:           parseInt(r.skus ?? '0'),
+        uds:            parseFloat(r.uds ?? '0'),
       }
     })
 
-    const n             = rows.length || 1
-    const avg_cob       = parseFloat((rows.reduce((s, r) => s + r.cobertura_pct,       0) / n).toFixed(1))
-    const avg_ponderada = parseFloat((rows.reduce((s, r) => s + r.cobertura_ponderada, 0) / n).toFixed(1))
-    const max_historica = parseFloat((rows.reduce((s, r) => s + r.cobertura_maxima,    0) / n).toFixed(1))
-    const gap_global    = parseFloat((max_historica - avg_cob).toFixed(1))
+    const porSku = (skuR.rows as any[]).map(r => {
+      const menos = parseInt(r.menos_de_3   ?? '0')
+      const entre = parseInt(r.entre_3_y_10 ?? '0')
+      const mayor = parseInt(r.mayor_a_10   ?? '0')
+      const total = parseInt(r.total_pdvs   ?? '0')
+      return {
+        sku:              r.sku,
+        descripcion:      r.descripcion,
+        categoria:        r.categoria,
+        menos_de_3:       menos,
+        entre_3_y_10:     entre,
+        mayor_a_10:       mayor,
+        total_pdvs:       total,
+        pct_menos_de_3:   total > 0 ? (menos / total) * 100 : 0,
+        pct_entre_3_y_10: total > 0 ? (entre / total) * 100 : 0,
+        pct_mayor_a_10:   total > 0 ? (mayor / total) * 100 : 0,
+        cobertura_pct:    universo > 0 ? (total / universo) * 100 : 0,
+        unidades:         parseFloat(r.unidades ?? '0'),
+      }
+    })
 
     return NextResponse.json({
-      rows,
-      total_pdvs,
-      avg_cob,
-      avg_ponderada,
-      max_historica,
-      gap_global,
-      por_cadena: (cadenaR.rows as any[]).map(r => ({
-        cadena:         r.cadena         ?? '',
-        n_tiendas:      parseInt(r.n_tiendas      ?? '0'),
-        cob_actual_avg: parseFloat(r.cob_actual_avg ?? '0'),
-        cob_max_avg:    parseFloat(r.cob_max_avg    ?? '0'),
-      })),
+      fecha,
+      universo_pdvs:      universo,
+      pdvs_con_stock:     pdvsConStock,
+      cobertura_efectiva: universo > 0 ? (pdvsConStock / universo) * 100 : 0,
+      skus_activos:       skusActivos,
+      por_cadena:         porCadena,
+      por_sku:            porSku,
     })
   } catch (err) {
     return handleApiError(err)

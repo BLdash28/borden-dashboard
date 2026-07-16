@@ -13,7 +13,8 @@ function readStorage() {
     if (!raw) return null
     return JSON.parse(raw) as {
       fAnos?: string[]; fMeses?: string[]; fPaises?: string[]; fCats?: string[]
-      fClientes?: string[]; fSkus?: string[]; fProveedor?: string[]
+      fSubcats?: string[]; fClientes?: string[]; fSkus?: string[]; fProveedor?: string[]
+      fTipos?: string[]
     }
   } catch { return null }
 }
@@ -75,16 +76,20 @@ export default function SellInPage() {
   // Filters
   const [fPaises,    setFPaises]    = useState<string[]>([])
   const [fCats,      setFCats]      = useState<string[]>([])
+  const [fSubcats,   setFSubcats]   = useState<string[]>([])
   const [fClientes,  setFClientes]  = useState<string[]>([])
   const [fSkus,      setFSkus]      = useState<string[]>([])
   const [fProveedor, setFProveedor] = useState<string[]>([])
+  const [fTipos,     setFTipos]     = useState<string[]>([])
 
   // Options
   const [paisOpts,      setPaisOpts]      = useState<string[]>([])
   const [catOpts,       setCatOpts]       = useState<string[]>([])
+  const [subcatOpts,    setSubcatOpts]    = useState<string[]>([])
   const [clienteOpts,   setClienteOpts]   = useState<string[]>([])
-  const [skuOpts,       setSkuOpts]       = useState<string[]>([])
+  const [skuOpts,       setSkuOpts]       = useState<{ value: string; descripcion: string | null }[]>([])
   const [proveedorOpts, setProveedorOpts] = useState<string[]>([])
+
 
   // Data
   const [rows,    setRows]    = useState<SellInRow[]>([])
@@ -111,18 +116,22 @@ export default function SellInPage() {
     const sMeses   = saved?.fMeses     ?? []
     const sPaises  = saved?.fPaises    ?? []
     const sCats    = saved?.fCats      ?? []
+    const sSubcats = saved?.fSubcats   ?? []
     const sClient  = saved?.fClientes  ?? []
     const sSkus    = saved?.fSkus      ?? []
     const sProv    = saved?.fProveedor ?? []
+    const sTipos   = saved?.fTipos     ?? []
     if (sAnos.length)   setFAnos(sAnos)
     if (sMeses.length)  setFMeses(sMeses)
     if (sPaises.length) setFPaises(sPaises)
     if (sCats.length)   setFCats(sCats)
+    if (sSubcats.length) setFSubcats(sSubcats)
     if (sClient.length) setFClientes(sClient)
     if (sSkus.length)   setFSkus(sSkus)
     if (sProv.length)   setFProveedor(sProv)
+    setFTipos(sTipos)
 
-    cargar(sAnos, sMeses, sPaises, sCats, sClient, sSkus, sProv, 1)
+    cargar(sAnos, sMeses, sPaises, sCats, sSubcats, sClient, sSkus, sProv, sTipos, 1)
     fetch('/api/ventas/resumen?tipo=periodos')
       .then(r => r.json())
       .then(j => {
@@ -178,35 +187,52 @@ export default function SellInPage() {
     fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => setProveedorOpts(j.opts ?? []))
   }, [buildPeriodParams, fPaises])
 
-  // ── NIVEL 2 producto — SKU: requiere Categoría ──────────────────────────────
+  // ── Subcategoría: siempre disponible (filtra por país/categoría si aplica) ─
   useEffect(() => {
-    if (!fCats.length) { setSkuOpts([]); setFSkus([]); return }
-    const p = buildPeriodParams(new URLSearchParams({ dim: 'sku' }))
-    p.set('categorias', fCats.join(','))
-    if (fPaises.length)   p.set('paises',   fPaises.join(','))
-    if (fClientes.length) p.set('clientes', fClientes.join(','))
+    const p = buildPeriodParams(new URLSearchParams({ dim: 'subcategoria' }))
+    if (fPaises.length) p.set('paises', fPaises.join(','))
+    if (fCats.length)   p.set('categorias', fCats.join(','))
     fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => {
       const opts = j.opts ?? []
-      setSkuOpts(opts)
-      setFSkus(prev => prev.filter(v => opts.includes(v)))
+      setSubcatOpts(opts)
+      setFSubcats(prev => prev.filter(v => opts.includes(v)))
     })
-  }, [buildPeriodParams, fPaises, fClientes, fCats])
+  }, [buildPeriodParams, fPaises, fCats])
+
+  // ── SKU: siempre disponible (filtra por país/categoría/subcategoría) ───────
+  // Devuelve {value, descripcion} para mostrar nombre de producto en el dropdown.
+  useEffect(() => {
+    const p = buildPeriodParams(new URLSearchParams({ dim: 'sku' }))
+    if (fPaises.length)   p.set('paises',   fPaises.join(','))
+    if (fCats.length)     p.set('categorias', fCats.join(','))
+    if (fSubcats.length)  p.set('subcategorias', fSubcats.join(','))
+    if (fClientes.length) p.set('clientes', fClientes.join(','))
+    fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => {
+      const skusList: { value: string; descripcion: string | null }[] = j.skus ?? (j.opts ?? []).map((s: string) => ({ value: s, descripcion: null }))
+      setSkuOpts(skusList)
+      const validValues = new Set(skusList.map(s => s.value))
+      setFSkus(prev => prev.filter(v => validValues.has(v)))
+    })
+  }, [buildPeriodParams, fPaises, fClientes, fCats, fSubcats])
 
   // ── Fetch datos ─────────────────────────────────────────────────────────────
   const cargar = useCallback((
     anos: string[], meses: string[],
-    paises: string[], cats: string[], clientes: string[], skus: string[],
-    proveedores: string[], pg: number
+    paises: string[], cats: string[], subcats: string[],
+    clientes: string[], skus: string[],
+    proveedores: string[], tipos: string[], pg: number
   ) => {
     setLoading(true)
     const p = new URLSearchParams()
-    if (anos.length)        p.set('anos',        anos.join(','))
-    if (meses.length)       p.set('meses',       meses.join(','))
-    if (paises.length)      p.set('paises',      paises.join(','))
-    if (cats.length)        p.set('categorias',  cats.join(','))
-    if (clientes.length)    p.set('clientes',    clientes.join(','))
-    if (skus.length)        p.set('skus',        skus.join(','))
-    if (proveedores.length) p.set('proveedores', proveedores.join(','))
+    if (anos.length)        p.set('anos',           anos.join(','))
+    if (meses.length)       p.set('meses',          meses.join(','))
+    if (paises.length)      p.set('paises',         paises.join(','))
+    if (cats.length)        p.set('categorias',     cats.join(','))
+    if (subcats.length)     p.set('subcategorias',  subcats.join(','))
+    if (clientes.length)    p.set('clientes',       clientes.join(','))
+    if (skus.length)        p.set('skus',           skus.join(','))
+    if (proveedores.length) p.set('proveedores',    proveedores.join(','))
+    if (tipos.length)       p.set('tipo_negocio',   tipos.join(','))
     p.set('page',         String(pg))
     p.set('pageSize',     String(PAGE_SIZE))
     p.set('granularidad', 'mes')   // fila por (SKU × cliente × mes × OC)
@@ -245,35 +271,36 @@ export default function SellInPage() {
   }, [])
 
   const saveStorage = (
-    anos = fAnos, meses = fMeses, paises = fPaises, cats = fCats,
-    clientes = fClientes, skus = fSkus, proveedores = fProveedor
+    anos = fAnos, meses = fMeses, paises = fPaises, cats = fCats, subcats = fSubcats,
+    clientes = fClientes, skus = fSkus, proveedores = fProveedor, tipos = fTipos
   ) => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        fAnos: anos, fMeses: meses, fPaises: paises, fCats: cats,
-        fClientes: clientes, fSkus: skus, fProveedor: proveedores,
+        fAnos: anos, fMeses: meses, fPaises: paises, fCats: cats, fSubcats: subcats,
+        fClientes: clientes, fSkus: skus, fProveedor: proveedores, fTipos: tipos,
       }))
     } catch {}
   }
 
   const triggerCargar = (
     anos     = fAnos,    meses    = fMeses,
-    paises   = fPaises,  cats     = fCats,
+    paises   = fPaises,  cats     = fCats,     subcats = fSubcats,
     clientes = fClientes,
-    skus     = fSkus,    proveedores = fProveedor,
+    skus     = fSkus,    proveedores = fProveedor, tipos = fTipos,
     pg       = 1
   ) => {
     setPage(pg)
-    saveStorage(anos, meses, paises, cats, clientes, skus, proveedores)
-    cargar(anos, meses, paises, cats, clientes, skus, proveedores, pg)
+    saveStorage(anos, meses, paises, cats, subcats, clientes, skus, proveedores, tipos)
+    cargar(anos, meses, paises, cats, subcats, clientes, skus, proveedores, tipos, pg)
   }
 
   const limpiar = () => {
     setFAnos([]); setFMeses([])
-    setFPaises([]); setFCats([]); setFClientes([]); setFSkus([]); setFProveedor([])
+    setFPaises([]); setFCats([]); setFSubcats([]); setFClientes([]); setFSkus([]); setFProveedor([])
+    setFTipos([])
     setPage(1)
     localStorage.removeItem(STORAGE_KEY)
-    cargar([], [], [], [], [], [], [], 1)
+    cargar([], [], [], [], [], [], [], [], [], 1)
   }
 
   // ── Sort ────────────────────────────────────────────────────────────────────
@@ -306,13 +333,15 @@ export default function SellInPage() {
     setDownloading(true)
     try {
       const p = new URLSearchParams()
-      if (fAnos.length)     p.set('anos',       fAnos.join(','))
-      if (fMeses.length)    p.set('meses',      fMeses.join(','))
-      if (fPaises.length)   p.set('paises',     fPaises.join(','))
-      if (fCats.length)     p.set('categorias', fCats.join(','))
-      if (fClientes.length) p.set('clientes',   fClientes.join(','))
-      if (fSkus.length)      p.set('skus',        fSkus.join(','))
-      if (fProveedor.length) p.set('proveedores', fProveedor.join(','))
+      if (fAnos.length)      p.set('anos',           fAnos.join(','))
+      if (fMeses.length)     p.set('meses',          fMeses.join(','))
+      if (fPaises.length)    p.set('paises',         fPaises.join(','))
+      if (fCats.length)      p.set('categorias',     fCats.join(','))
+      if (fSubcats.length)   p.set('subcategorias',  fSubcats.join(','))
+      if (fClientes.length)  p.set('clientes',       fClientes.join(','))
+      if (fSkus.length)      p.set('skus',           fSkus.join(','))
+      if (fProveedor.length) p.set('proveedores',    fProveedor.join(','))
+      if (fTipos.length)     p.set('tipo_negocio',   fTipos.join(','))
       p.set('all', 'true')
       p.set('granularidad', 'mes')   // fila por (SKU × cliente × mes × OC)
 
@@ -403,7 +432,7 @@ export default function SellInPage() {
         </button>
       </div>
 
-      {/* Filtros */}
+      {/* Filtros — mismo formato que sell-in/resumen (4×2 + SKU debajo) */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
           <button
@@ -413,128 +442,93 @@ export default function SellInPage() {
             <ChevronDown size={13} className={`md:hidden transition-transform ${filtrosOpen ? 'rotate-180' : ''}`} />
             Filtros
           </button>
-          <button onClick={limpiar} className="text-xs text-gray-400 hover:text-gray-600 underline">Limpiar todo</button>
+          <button onClick={limpiar} className="text-xs text-gray-400 hover:text-gray-600 underline">↺ Limpiar todo</button>
         </div>
-        <div className={`md:block ${filtrosOpen ? 'block' : 'hidden'}`}>
+        <div className={`md:block ${filtrosOpen ? 'block' : 'hidden'} space-y-3`}>
 
-        {/* Período */}
-        <div className="mb-3">
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Período</p>
-          <div className="flex items-start gap-1.5 flex-wrap">
-            <div className="flex-1 min-w-[160px]">
-              <MultiSelect
-                label={`Año${anos.length === 0 ? ' ●' : ''}`}
-                options={anos.map(a => ({ value: String(a), label: String(a) }))}
-                value={fAnos}
-                onChange={v => {
-                  setFAnos(v)
-                  // Si se deseleccionan todos los años, limpiar meses que ya no apliquen
-                  if (!v.length) setFMeses([])
-                  triggerCargar(v, fMeses)
-                }}
-                placeholder="Todos los años"
-              />
-            </div>
-            <div className="flex items-center self-end pb-2 text-gray-300 text-sm select-none">›</div>
-            <div className="flex-1 min-w-[160px]">
-              <MultiSelect
-                label="Mes"
-                options={mesesDisp.map(m => ({ value: String(m), label: MESES[m] }))}
-                value={fMeses}
-                onChange={v => { setFMeses(v); triggerCargar(fAnos, v) }}
-                placeholder="Todos los meses"
-              />
-            </div>
+          {/* 4 primeros: Año · Mes · País · Categoría */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <MultiSelect
+              label={`Año${anos.length === 0 ? ' ●' : ''}`}
+              options={anos.map(a => ({ value: String(a), label: String(a) }))}
+              value={fAnos}
+              onChange={v => {
+                setFAnos(v)
+                if (!v.length) setFMeses([])
+                triggerCargar(v, fMeses)
+              }}
+              placeholder="Todos los años"
+            />
+            <MultiSelect
+              label="Mes"
+              options={mesesDisp.map(m => ({ value: String(m), label: MESES[m] }))}
+              value={fMeses}
+              onChange={v => { setFMeses(v); triggerCargar(fAnos, v) }}
+              placeholder="Todos los meses"
+            />
+            <MultiSelect
+              label="País"
+              options={paisOpts.map(p => ({ value: p, label: p }))}
+              value={fPaises}
+              onChange={v => {
+                setFPaises(v)
+                if (!v.length) setFClientes([])
+                triggerCargar(fAnos, fMeses, v, fCats, fSubcats, [], fSkus)
+              }}
+              placeholder="Todos los países"
+            />
+            <MultiSelect
+              label="Categoría"
+              options={catOpts.map(c => ({ value: c, label: c }))}
+              value={fCats}
+              onChange={v => {
+                setFCats(v)
+                triggerCargar(fAnos, fMeses, fPaises, v, fSubcats, fClientes, fSkus)
+              }}
+              placeholder="Todas las categorías"
+            />
           </div>
-        </div>
 
-        {/* Jerarquía geográfica: País → Cliente */}
-        <div className="mb-3">
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Geografía / Ventas</p>
-          <div className="flex items-start gap-1.5 flex-wrap">
-            <div className="flex-1 min-w-[160px]">
-              <MultiSelect
-                label="País"
-                options={paisOpts.map(p => ({ value: p, label: p }))}
-                value={fPaises}
-                onChange={v => {
-                  setFPaises(v)
-                  if (!v.length) setFClientes([])
-                  triggerCargar(fAnos, fMeses, v, fCats, [], fSkus)
-                }}
-                placeholder="Todos los países"
-              />
-            </div>
-            <div className="flex items-center self-end pb-2 text-gray-300 text-sm select-none">›</div>
-            <div className={`flex-1 min-w-[160px] transition-opacity ${!fPaises.length ? 'opacity-40 pointer-events-none' : ''}`}>
-              <MultiSelect
-                label={`Cliente${!fPaises.length ? ' — selecciona País' : ''}`}
-                options={clienteOpts.map(c => ({ value: c, label: c }))}
-                value={fClientes}
-                onChange={v => {
-                  setFClientes(v)
-                  triggerCargar(fAnos, fMeses, fPaises, fCats, v, fSkus)
-                }}
-                placeholder={fPaises.length ? 'Todos los clientes' : '—'}
-              />
-            </div>
+          {/* 4 siguientes: Subcategoría · Cliente · Proveedor · SKU */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <MultiSelect
+              label="Subcategoría"
+              options={subcatOpts.map(s => ({ value: s, label: s }))}
+              value={fSubcats}
+              onChange={v => { setFSubcats(v); triggerCargar(fAnos, fMeses, fPaises, fCats, v, fClientes, fSkus) }}
+              placeholder="Todas"
+            />
+            <MultiSelect
+              label="Cliente"
+              options={clienteOpts.map(c => ({ value: c, label: c }))}
+              value={fClientes}
+              onChange={v => {
+                setFClientes(v)
+                triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, v, fSkus)
+              }}
+              placeholder="Todos"
+            />
+            <MultiSelect
+              label="Proveedor"
+              options={proveedorOpts.map(p => ({ value: p, label: p }))}
+              value={fProveedor}
+              onChange={v => {
+                setFProveedor(v)
+                triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus, v)
+              }}
+              placeholder="Todos"
+            />
+            <MultiSelect
+              label="SKU / Producto"
+              options={skuOpts.map(s => ({ value: s.value, label: s.descripcion || s.value }))}
+              value={fSkus}
+              onChange={v => {
+                setFSkus(v)
+                triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, v, fProveedor)
+              }}
+              placeholder="Todos los SKUs"
+            />
           </div>
-        </div>
-
-        {/* Jerarquía producto: Categoría → SKU */}
-        <div>
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Producto</p>
-          <div className="flex items-start gap-1.5 flex-wrap">
-            <div className="flex-1 min-w-[160px]">
-              <MultiSelect
-                label="Categoría"
-                options={catOpts.map(c => ({ value: c, label: c }))}
-                value={fCats}
-                onChange={v => {
-                  setFCats(v)
-                  if (!v.length) setFSkus([])
-                  triggerCargar(fAnos, fMeses, fPaises, v, fClientes, [])
-                }}
-                placeholder="Todas las categorías"
-              />
-            </div>
-            <div className="flex items-center self-end pb-2 text-gray-300 text-sm select-none">›</div>
-            <div className={`flex-1 min-w-[160px] transition-opacity ${!fCats.length ? 'opacity-40 pointer-events-none' : ''}`}>
-              <MultiSelect
-                label={`SKU${!fCats.length ? ' — selecciona Categoría' : ''}`}
-                options={skuOpts.map(s => ({ value: s, label: s }))}
-                value={fSkus}
-                onChange={v => {
-                  setFSkus(v)
-                  triggerCargar(fAnos, fMeses, fPaises, fCats, fClientes, v, fProveedor)
-                }}
-                placeholder={fCats.length ? 'Todos los SKUs' : '—'}
-              />
-            </div>
-            {/* spacer para alinear con la fila de arriba */}
-            <div className="flex items-center self-end pb-2 text-transparent text-sm select-none">›</div>
-            <div className="flex-1 min-w-[160px]" />
-          </div>
-        </div>
-
-        {/* Proveedor */}
-        <div>
-          <p className="text-[10px] uppercase tracking-widest text-gray-400 font-semibold mb-2">Proveedor</p>
-          <div className="flex items-start gap-1.5 flex-wrap">
-            <div className="flex-1 min-w-[160px] max-w-sm">
-              <MultiSelect
-                label="Proveedor"
-                options={proveedorOpts.map(p => ({ value: p, label: p }))}
-                value={fProveedor}
-                onChange={v => {
-                  setFProveedor(v)
-                  triggerCargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, v)
-                }}
-                placeholder="Todos los proveedores"
-              />
-            </div>
-          </div>
-        </div>
         </div>{/* end collapsible filtros */}
       </div>
 
@@ -634,13 +628,13 @@ export default function SellInPage() {
                 {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                     <button
-                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, fProveedor, pg) }}
+                      onClick={() => { const pg = page - 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus, fProveedor, fTipos, pg) }}
                       disabled={page === 1}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >← Anterior</button>
                     <span className="text-sm text-gray-500">Página {page} de {totalPages}</span>
                     <button
-                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fClientes, fSkus, fProveedor, pg) }}
+                      onClick={() => { const pg = page + 1; setPage(pg); cargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, fSkus, fProveedor, fTipos, pg) }}
                       disabled={page === totalPages}
                       className="px-3 py-1.5 text-sm text-gray-600 bg-gray-100 rounded-lg disabled:opacity-40 hover:bg-gray-200"
                     >Siguiente →</button>

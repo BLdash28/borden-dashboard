@@ -7,12 +7,13 @@ export const revalidate = 300
 export const dynamic = 'force-dynamic'
 
 const DIM_MAP: Record<string, string> = {
-  pais:      'pais',
-  categoria: 'categoria',
-  cliente:   'cliente_nombre',
-  canal:     'canal',
-  sku:       'sku',
-  proveedor: 'proveedor',
+  pais:         'pais',
+  categoria:    'categoria',
+  subcategoria: 'subcategoria',
+  cliente:      'cliente_nombre',
+  canal:        'canal',
+  sku:          'sku',
+  proveedor:    'proveedor',
 }
 
 export async function GET(req: NextRequest) {
@@ -29,10 +30,12 @@ export async function GET(req: NextRequest) {
 
     const ano     = sp.get('ano')
     const mes     = sp.get('mes')
-    const paises   = sp.get('paises')?.split(',').filter(Boolean) ?? []
-    const cats     = sp.get('categorias')?.split(',').filter(Boolean) ?? []
-    const clientes = sp.get('clientes')?.split(',').filter(Boolean) ?? []
-    const canales  = sp.get('canales')?.split(',').filter(Boolean) ?? []
+    const paises      = sp.get('paises')?.split(',').filter(Boolean) ?? []
+    const cats        = sp.get('categorias')?.split(',').filter(Boolean) ?? []
+    const subcats     = sp.get('subcategorias')?.split(',').filter(Boolean) ?? []
+    const clientes    = sp.get('clientes')?.split(',').filter(Boolean) ?? []
+    const proveedores = sp.get('proveedores')?.split(',').filter(Boolean) ?? []
+    const canales     = sp.get('canales')?.split(',').filter(Boolean) ?? []
 
     const anosArr  = (sp.get('anos')  || ano  || '').split(',').map(Number).filter(n => n > 2000)
     const mesesArr = (sp.get('meses') || mes  || '').split(',').map(Number).filter(n => n >= 1 && n <= 12)
@@ -40,8 +43,26 @@ export async function GET(req: NextRequest) {
     if (mesesArr.length) { conds.push(`mes IN (${mesesArr.map(() => `$${idx++}`).join(',')})`); params.push(...mesesArr) }
     if (paises.length)   { conds.push(`pais IN (${paises.map(() => `$${idx++}`).join(',')})`);    params.push(...paises) }
     if (cats.length)     { conds.push(`categoria IN (${cats.map(() => `$${idx++}`).join(',')})`); params.push(...cats) }
-    if (canales.length)  { conds.push(`canal IN (${canales.map(() => `$${idx++}`).join(',')})`);  params.push(...canales) }
-    if (clientes.length) { conds.push(`cliente_nombre IN (${clientes.map(() => `$${idx++}`).join(',')})`); params.push(...clientes) }
+    if (subcats.length)     { conds.push(`subcategoria IN (${subcats.map(() => `$${idx++}`).join(',')})`); params.push(...subcats) }
+    if (canales.length)     { conds.push(`canal IN (${canales.map(() => `$${idx++}`).join(',')})`);  params.push(...canales) }
+    if (clientes.length)    { conds.push(`cliente_nombre IN (${clientes.map(() => `$${idx++}`).join(',')})`); params.push(...clientes) }
+    if (proveedores.length) { conds.push(`proveedor IN (${proveedores.map(() => `$${idx++}`).join(',')})`); params.push(...proveedores) }
+
+    // Para SKU devolvemos también la descripción (para labels legibles en el dropdown).
+    if (dim === 'sku') {
+      const { rows } = await pool.query(
+        `SELECT sku AS val, MAX(descripcion) AS descripcion
+           FROM fact_sales_sellin
+          WHERE ${conds.join(' AND ')}
+          GROUP BY sku
+          ORDER BY sku`,
+        params,
+      )
+      return NextResponse.json({
+        opts: rows.map(r => r.val),
+        skus: rows.map(r => ({ value: r.val, descripcion: r.descripcion })),
+      })
+    }
 
     const { rows } = await pool.query(
       `SELECT DISTINCT ${col} AS val FROM fact_sales_sellin
