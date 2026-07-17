@@ -2,6 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Mercadeo mode — cuando la sección Mercadeo embebe un componente de Ejecución,
+   ocultamos todo lo marcado como monetario. Ver components/mercadeo/MercadeoModeContext.tsx */
+[data-mercadeo-mode="1"] .hide-in-mercadeo { display: none !important; }
+
+/* Contraparte: nodos que SOLO aparecen en modo mercadeo (ej. duplicados en UND
+   de tarjetas que en Ejecución muestran $ o COP). Usamos `revert` para que el
+   elemento recupere su display natural (div → block, span → inline) en vez de
+   `contents`, que rompe elementos con width/background propios (ej. barras de
+   progreso). */
+.show-only-mercadeo { display: none; }
+[data-mercadeo-mode="1"] .show-only-mercadeo { display: revert; }
+
+/* Colapsa dos grids hermanos en uno solo de 5 columnas cuando estamos en modo
+   Mercadeo. Los grids internos se "aplastan" con display: contents para que
+   sus cards se conviertan en hijos directos del wrapper. Uso:
+     <div className="mercadeo-grid-5-wrapper">
+       <div className="grid ... mercadeo-flatten-grid">...</div>
+       <div className="grid ... mercadeo-flatten-grid mt-3">...</div>
+     </div>
+*/
+[data-mercadeo-mode="1"] .mercadeo-grid-5-wrapper {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+@media (min-width: 768px) {
+  [data-mercadeo-mode="1"] .mercadeo-grid-5-wrapper {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+[data-mercadeo-mode="1"] .mercadeo-flatten-grid { display: contents; }
+
 :root {
   --acc: #c8873a;
   --bg: #f2eee7;

@@ -74,21 +74,21 @@ export async function GET(req: NextRequest) {
       ano: string; mes: string; empresa: string; valor_usd: string
     }>(projSql, pParams)
 
-    // ── Ventas reales sellin (sin filtro de sub-categoría para real empresa-level) ─
+    // ── Ventas reales sellin (agrupadas por AÑO DEL PEDIDO, no fecha_factura) ─
     const rWhere: string[] = ['venta_neta > 0']
-    if (anosParam.length)  rWhere.push(inNums('ano', anosParam))
+    if (anosParam.length)  rWhere.push(inNums('ano_pedido', anosParam))
     if (mesesParam.length) rWhere.push(inNums('mes', mesesParam))
 
     const { rows: realRows } = await pool.query<{
       ano: string; mes: string; pais: string; categoria: string; cliente_nombre: string; empresa: string; valor_real: string
     }>(`
       SELECT
-        ano, mes, pais, categoria, cliente_nombre,
+        ano_pedido AS ano, mes, pais, categoria, cliente_nombre,
         CASE WHEN tipo_negocio = 'REGULAR' THEN 'BL FOODS' ELSE 'LICENCIAMIENTO' END AS empresa,
         SUM(venta_neta) AS valor_real
       FROM fact_sales_sellin
       WHERE ${rWhere.join(' AND ')}
-      GROUP BY ano, mes, pais, categoria, cliente_nombre,
+      GROUP BY ano_pedido, mes, pais, categoria, cliente_nombre,
         CASE WHEN tipo_negocio = 'REGULAR' THEN 'BL FOODS' ELSE 'LICENCIAMIENTO' END
     `)
 

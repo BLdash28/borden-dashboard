@@ -11,8 +11,10 @@ export const revalidate = 600
 export async function GET(req: NextRequest) {
   try {
     const pais = req.nextUrl.searchParams.get('pais') ?? 'CR'
+    // mv_walmart_mensual usa columnas `ano/mes` (INT), no `fecha` — antes esta
+    // query fallaba silenciosamente y las opciones venían vacías.
     const anoR = await pool.query(
-      `SELECT EXTRACT(YEAR FROM MAX(fecha))::int AS ano FROM mv_walmart_mensual WHERE pais=$1`,
+      `SELECT MAX(ano)::int AS ano FROM mv_walmart_mensual WHERE pais=$1`,
       [pais],
     )
     const ano = anoR.rows[0]?.ano ?? new Date().getFullYear()
@@ -50,14 +52,24 @@ export async function GET(req: NextRequest) {
           GROUP BY formato ORDER BY venta DESC NULLS LAST`,
         [pais, ano],
       ),
+      // mv_walmart_mensual NO tiene granularidad por punto_venta — sacamos
+      // el listado del último snapshot de fact_inventario_walmart_pdv (que sí
+      // tiene punto_venta). Es la fuente canónica de PDVs activos por país.
       pool.query(
-        `SELECT punto_venta, MAX(cadena) AS cadena, SUM(ventas_valor)::float AS venta
-           FROM mv_walmart_mensual
-          WHERE pais=$1 AND ano=$2
-            AND punto_venta IS NOT NULL AND punto_venta <> ''
-          GROUP BY punto_venta ORDER BY venta DESC NULLS LAST
-          LIMIT 500`,
-        [pais, ano],
+        `WITH ult AS (
+           SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais=$1
+         )
+         SELECT
+           punto_venta AS value,
+           MAX(cadena) AS cadena,
+           SUM(inv_mano)::float AS venta
+         FROM fact_inventario_walmart_pdv
+         WHERE pais=$1 AND fecha = (SELECT f FROM ult)
+           AND punto_venta IS NOT NULL AND punto_venta <> ''
+         GROUP BY punto_venta
+         ORDER BY venta DESC NULLS LAST
+         LIMIT 500`,
+        [pais],
       ),
       pool.query(
         `SELECT sku, MAX(descripcion) AS descripcion,
@@ -76,7 +88,7 @@ export async function GET(req: NextRequest) {
       categorias:    catR.rows.map(r => ({ value: r.categoria, venta: r.venta })),
       subcategorias: subR.rows.map(r => ({ value: r.subcategoria, venta: r.venta })),
       formatos:      fmtR.rows.map(r => ({ value: r.formato, venta: r.venta })),
-      puntos:        pdvR.rows.map(r => ({ value: r.punto_venta, cadena: r.cadena, venta: r.venta })),
+      puntos:        pdvR.rows.map(r => ({ value: r.value, cadena: r.cadena, venta: r.venta })),
       skus:          skuR.rows.map(r => ({ value: r.sku, descripcion: r.descripcion, subcategoria: r.subcategoria, venta: r.venta })),
     })
   } catch (err) {

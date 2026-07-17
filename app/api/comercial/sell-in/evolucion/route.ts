@@ -43,14 +43,14 @@ export async function GET(req: NextRequest) {
     const tipo = tipos.length === 1 ? tipos[0] : ''
 
     const r = await pool.query(`
-      -- fact_sales_sellin: fuente principal
-      SELECT ano, mes,
+      -- fact_sales_sellin: fuente principal (agrupa por AÑO DEL PEDIDO, no fecha_factura)
+      SELECT ano_pedido AS ano, mes,
         ROUND(SUM(venta_neta)::numeric, 2)       AS ingresos,
         ROUND(SUM(cantidad_unidades)::numeric, 0) AS unidades,
         ROUND(SUM(margen_valor)::numeric, 2)      AS margen
       FROM fact_sales_sellin
-      WHERE ano IN (${ano - 1}, ${ano}) ${extra}
-      GROUP BY ano, mes
+      WHERE ano_pedido IN (${ano - 1}, ${ano}) ${extra}
+      GROUP BY ano_pedido, mes
 
       UNION ALL
 
@@ -62,7 +62,7 @@ export async function GET(req: NextRequest) {
       FROM ventas_sell_in
       WHERE ano IN (${ano - 1}, ${ano}) ${extraViejo}
         AND (ano, mes) NOT IN (
-          SELECT DISTINCT ano, mes FROM fact_sales_sellin
+          SELECT DISTINCT ano_pedido AS ano, mes FROM fact_sales_sellin
         )
       GROUP BY ano, mes
 

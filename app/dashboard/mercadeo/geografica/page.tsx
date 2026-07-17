@@ -33,6 +33,11 @@ const NIVEL_LABELS: Record<Nivel, string> = {
   cadena: 'Cadena',
   tienda: 'Punto de Venta',
 }
+const NIVEL_LABELS_PLURAL: Record<Nivel, string> = {
+  pais:   'Países',
+  cadena: 'Cadenas',
+  tienda: 'Puntos de Venta',
+}
 const NIVEL_ICONS: Record<Nivel, JSX.Element> = {
   pais:   <Globe2 size={14}/>,
   cadena: <BarChart2 size={14}/>,
@@ -571,7 +576,7 @@ export default function MercadeoGeograficaPage() {
         <div className="xl:col-span-3 bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h3 className="font-semibold text-gray-700">
-              Ranking de {NIVEL_LABELS[nivel]}s
+              Ranking de {NIVEL_LABELS_PLURAL[nivel]}
               {breadcrumbs.length > 0 && (
                 <span className="text-gray-400 font-normal ml-1">
                   · {breadcrumbs[breadcrumbs.length - 1].value}

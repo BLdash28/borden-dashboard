@@ -49,6 +49,7 @@ interface SellInRow {
   fecha_max:       string | null
   dias_venta:      number
   cajas:           number
+  total_lb:        number | null
   ingresos:        number
   precio_promedio: number
 }
@@ -94,7 +95,7 @@ export default function SellInPage() {
   // Data
   const [rows,    setRows]    = useState<SellInRow[]>([])
   const [total,   setTotal]   = useState(0)
-  const [kpi,     setKpi]     = useState<{ total_ingresos: number; total_unidades: number; total_clientes: number } | null>(null)
+  const [kpi,     setKpi]     = useState<{ total_ingresos: number; total_unidades: number; total_clientes: number; total_lb: number } | null>(null)
   const [page,    setPage]    = useState(1)
   const [loading,         setLoading]         = useState(true)
   const [sort,            setSort]            = useState<SortState>({ key: 'ingresos', dir: 'desc' })
@@ -132,7 +133,9 @@ export default function SellInPage() {
     setFTipos(sTipos)
 
     cargar(sAnos, sMeses, sPaises, sCats, sSubcats, sClient, sSkus, sProv, sTipos, 1)
-    fetch('/api/ventas/resumen?tipo=periodos')
+    // Usamos el endpoint específico de sell-in — consulta fact_sales_sellin.ano_pedido
+    // (el genérico /ventas/resumen consulta mv_ventas_agg de sellout, no sirve para sell-in).
+    fetch('/api/comercial/sell-in/periodos')
       .then(r => r.json())
       .then(j => {
         const mm: Record<number, number[]> = {}
@@ -257,6 +260,7 @@ export default function SellInPage() {
           fecha_max:       r.fecha_max ? String(r.fecha_max).slice(0, 10) : null,
           dias_venta:      toNum(r.dias_venta),
           cajas:           toNum(r.cajas),
+          total_lb:        r.total_lb != null ? toNum(r.total_lb) : null,
           ingresos:        toNum(r.ingresos),
           precio_promedio: toNum(r.precio_promedio),
         })))
@@ -265,6 +269,7 @@ export default function SellInPage() {
           total_ingresos: toNum(j.kpi.total_ingresos),
           total_unidades: toNum(j.kpi.total_unidades),
           total_clientes: toNum(j.kpi.total_clientes),
+          total_lb:       toNum(j.kpi.total_lb),
         })
       })
       .finally(() => setLoading(false))
@@ -533,11 +538,13 @@ export default function SellInPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <KpiCard label="Ingresos Totales" borderLeftColor="#f59e0b"
           value={loading ? '...' : fmt(kpi?.total_ingresos ?? 0)} />
         <KpiCard label="Cajas Totales" borderLeftColor="#3b82f6"
           value={loading ? '...' : fmtN(kpi?.total_unidades ?? 0)} />
+        <KpiCard label="Libras Totales (Quesos)" borderLeftColor="#8b5cf6"
+          value={loading ? '...' : `${fmtN(kpi?.total_lb ?? 0)} lb`} />
         <KpiCard label="Clientes Activos" borderLeftColor="#10b981"
           value={loading ? '...' : (kpi?.total_clientes ?? 0).toLocaleString()} />
       </div>
@@ -591,6 +598,7 @@ export default function SellInPage() {
                           className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600 select-none"
                           onClick={() => toggleSort('cajas')}
                         >Cajas{arrow('cajas')}</th>
+                        <th className="text-right py-2 pr-3 whitespace-nowrap">Total Lb</th>
                         <th
                           className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600 select-none"
                           onClick={() => toggleSort('ingresos')}
@@ -616,6 +624,11 @@ export default function SellInPage() {
                           <td className="py-1.5 pr-3 w-1 whitespace-nowrap text-gray-700 font-mono text-[11px]">{r.ano ?? partesFecha(r.fecha_max).ano}</td>
                           <td className="py-1.5 pr-3 w-1 whitespace-nowrap text-gray-800 font-mono text-[11px]">{r.mes != null ? (MES_LBL[r.mes] ?? String(r.mes)) : partesFecha(r.fecha_max).mes}</td>
                           <td className="py-1.5 pr-3 text-right text-gray-700">{fmtN(r.cajas)}</td>
+                          <td className="py-1.5 pr-3 text-right tabular-nums text-gray-600">
+                            {r.total_lb != null && r.total_lb > 0
+                              ? `${fmtN(r.total_lb)} lb`
+                              : <span className="text-gray-300">—</span>}
+                          </td>
                           <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>
                           <td className="py-1.5 pr-3 text-right text-gray-500">{fmt(r.precio_promedio)}</td>
                           <td className="py-1.5 text-right text-gray-500">{r.pct.toFixed(1)}%</td>

@@ -25,6 +25,18 @@ export async function GET(req: NextRequest) {
 
     const cadFilter = cadena ? `AND cadena = '${cadena.replace(/'/g, "''")}'` : ''
 
+    // Universo de PDVs del país en el snapshot más reciente — se comparte
+    // entre todos los SKUs para calcular cobertura % por producto.
+    const univR = await pool.query(`
+      WITH ult AS (
+        SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = $1
+      )
+      SELECT COUNT(DISTINCT punto_venta) AS universo
+      FROM fact_inventario_walmart_pdv
+      WHERE pais = $1 AND fecha = (SELECT f FROM ult)
+    `, [pais])
+    const universoPdvs = parseInt(univR.rows[0]?.universo ?? '0') || 0
+
     // 1. SKUs con primera venta en la ventana
     const catR = await pool.query(`
       WITH primera AS (
@@ -46,7 +58,7 @@ export async function GET(req: NextRequest) {
 
     const items: any[] = []
     for (const it of catR.rows) {
-      const [monthlyR, dailyR, statsR] = await Promise.all([
+      const [monthlyR, dailyR, statsR, stockR, vel90R] = await Promise.all([
         pool.query(`
           SELECT EXTRACT(YEAR FROM fecha)::int  AS ano,
                  EXTRACT(MONTH FROM fecha)::int AS mes,
@@ -80,6 +92,29 @@ export async function GET(req: NextRequest) {
           WHERE pais = $1 AND (sku = $2 OR codigo_barras = $3)
             ${cadFilter}
         `, [pais, it.sku, it.codigo_barras]),
+
+        // Stock actual desde el último snapshot de inventario_walmart_pdv
+        pool.query(`
+          WITH ult AS (
+            SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = $1
+          )
+          SELECT COALESCE(SUM(inv_mano), 0)::float             AS stock_und,
+                 COUNT(DISTINCT punto_venta) FILTER (WHERE inv_mano > 0) AS pdvs_con_stock,
+                 (SELECT f FROM ult)::text                     AS fecha_snap
+          FROM fact_inventario_walmart_pdv
+          WHERE pais = $1
+            AND fecha = (SELECT f FROM ult)
+            AND (sku = $2 OR codigo_barras = $3)
+        `, [pais, it.sku, it.codigo_barras]),
+
+        // Velocidad de venta últimos 90 días — para calcular DOH del SKU
+        pool.query(`
+          SELECT COALESCE(SUM(ventas_unidades), 0)::float AS uds_90d
+          FROM fact_ventas_walmart
+          WHERE pais = $1 AND (sku = $2 OR codigo_barras = $3)
+            AND fecha >= CURRENT_DATE - INTERVAL '90 day'
+            ${cadFilter}
+        `, [pais, it.sku, it.codigo_barras]),
       ])
 
       const monthly = monthlyR.rows.map(r => ({
@@ -92,7 +127,18 @@ export async function GET(req: NextRequest) {
         uds: parseFloat(r.uds ?? '0'), valor: parseFloat(r.valor ?? '0'),
         pdvs: parseInt(r.pdvs ?? '0'),
       }))
-      const s = statsR.rows[0] ?? {}
+      const s        = statsR.rows[0] ?? {}
+      const stock    = stockR.rows[0] ?? {}
+      const stockUnd = parseFloat(stock.stock_und ?? '0')
+      const pdvsCon  = parseInt(stock.pdvs_con_stock ?? '0')
+      // "PDVs" del SKU = puntos de venta donde el SKU se ha vendido históricamente.
+      // La cobertura se calcula sobre ese universo del SKU, no sobre el universo
+      // global del país (un SKU nuevo no cubre todos los PDVs de Walmart).
+      const pdvsSku  = parseInt(s.pdvs_unicos ?? '0')
+      const uds90    = parseFloat(vel90R.rows[0]?.uds_90d ?? '0')
+      const velDia   = uds90 / 90
+      const doh      = velDia > 0 ? stockUnd / velDia : null
+      const cobPct   = pdvsSku > 0 ? (pdvsCon / pdvsSku) * 100 : null
 
       items.push({
         sku:              it.sku,
@@ -110,6 +156,14 @@ export async function GET(req: NextRequest) {
         total_valor:      parseFloat(s.total_valor ?? '0'),
         pdvs_unicos:      parseInt(s.pdvs_unicos ?? '0'),
         cadenas_unicas:   parseInt(s.cadenas_unicas ?? '0'),
+        stock_und:        stockUnd,
+        pdvs_con_stock:   pdvsCon,
+        stock_fecha:      stock.fecha_snap ?? null,
+        doh:              doh !== null ? Math.round(doh * 10) / 10 : null,
+        cobertura_pct:    cobPct !== null ? Math.round(cobPct * 10) / 10 : null,
+        // Universo de PDVs sobre el que se mide la cobertura del SKU
+        // (= los PDVs donde el SKU se ha vendido históricamente).
+        universo_pdvs:    pdvsSku,
         monthly,
         daily,
       })

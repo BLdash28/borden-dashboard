@@ -64,27 +64,30 @@ export const MENUS: Record<string, MenuSection[]> = {
   ],
   mercadeo: [
     {
-      section: 'Análisis',
+      section: 'Ejecución',
       items: [
-        { href: '/tendencias',      icon: TrendingUp, label: 'Tendencias de Ventas' },
-        { href: '/recomendaciones', icon: Target,     label: 'Recomendaciones SKU'  },
-      ],
-    },
-    {
-      section: 'Dimensiones',
-      items: [
-        { href: '/pais',       icon: Globe2,      label: 'Por País'           },
-        { href: '/producto',   icon: ShoppingBag, label: 'Por Producto'       },
-        { href: '/tienda',     icon: Store,       label: 'Por Tienda'         },
-        { href: '/geografica', icon: MapPin,      label: 'Ranking Geográfico' },
-      ],
-    },
-    {
-      section: 'Módulos',
-      items: [
-        { href: '/campanas',    icon: Megaphone,  label: 'Campañas'             },
-        { href: '/share-voice', icon: Share2,     label: 'Share of Voice'       },
-        { href: '/digital',     icon: TrendingUp, label: 'Rendimiento Digital'  },
+        { icon: Globe2, label: 'GT', children: [
+          { href: '/dashboard/mercadeo/gt/walmart',  label: 'Walmart'  },
+          { href: '/dashboard/mercadeo/gt/unisuper', label: 'Unisuper' },
+        ]},
+        { icon: Globe2, label: 'HN', children: [
+          { href: '/dashboard/mercadeo/hn/walmart', label: 'Walmart' },
+        ]},
+        { icon: Globe2, label: 'NI', children: [
+          { href: '/dashboard/mercadeo/ni/walmart', label: 'Walmart' },
+        ]},
+        { icon: Globe2, label: 'SV', children: [
+          { href: '/dashboard/mercadeo/sv/walmart',  label: 'Walmart'  },
+          { href: '/dashboard/mercadeo/sv/selectos', label: 'Selectos' },
+        ]},
+        { icon: Globe2, label: 'CR', children: [
+          { href: '/dashboard/mercadeo/cr/walmart',     label: 'Walmart' },
+          { href: '/dashboard/mercadeo/cr/costa-dairy', label: 'Costa Dairy' },
+          { href: '/dashboard/mercadeo/cr/sensacion',   label: 'Sensación' },
+        ]},
+        { icon: Globe2, label: 'CO', children: [
+          { href: '/dashboard/mercadeo/co/grupo-exito', label: 'Grupo Éxito' },
+        ]},
       ],
     },
   ],

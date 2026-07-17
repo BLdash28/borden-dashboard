@@ -6,7 +6,7 @@
 import type { ReactNode } from 'react'
 
 export function KpiCard({
-  label, value, sub, highlight, borderLeftColor,
+  label, value, sub, highlight, borderLeftColor, className,
 }: {
   label: string
   value: ReactNode
@@ -14,8 +14,10 @@ export function KpiCard({
   highlight?: boolean
   /** Color CSS del border izquierdo (barra vertical de acento). Ej: '#f59e0b' */
   borderLeftColor?: string
+  /** Clases extra — útil para "hide-in-mercadeo" y similares. */
+  className?: string
 }) {
-  const baseCls = `rounded-xl border shadow-sm p-4 ${highlight ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}`
+  const baseCls = `rounded-xl border shadow-sm p-4 ${highlight ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}${className ? ' ' + className : ''}`
   const style = borderLeftColor
     ? { borderLeftWidth: '4px', borderLeftColor, borderLeftStyle: 'solid' as const }
     : undefined

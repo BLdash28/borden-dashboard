@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
     const cutoffQ = await pool.query(`
       SELECT MAX(mes * 100 + dia) AS cut_num
       FROM fact_sales_sellin
-      WHERE ano = 2026 AND ${mesSql} ${paisCond} ${tipoCond} ${clienteNew} ${catCond} ${subcatCond}
+      WHERE ano_pedido = 2026 AND ${mesSql} ${paisCond} ${tipoCond} ${clienteNew} ${catCond} ${subcatCond}
         AND venta_neta > 0
     `)
     const cutNum = parseInt(cutoffQ.rows[0]?.cut_num ?? '0') || 1231
@@ -48,12 +48,12 @@ export async function GET(req: NextRequest) {
     const r = await pool.query(`
       SELECT dim, ano, mes, ROUND(SUM(ingresos)::numeric, 2) AS ingresos
       FROM (
-        SELECT ${dimColNew} AS dim, ano, mes, venta_neta AS ingresos
+        SELECT ${dimColNew} AS dim, ano_pedido AS ano, mes, venta_neta AS ingresos
         FROM fact_sales_sellin
         WHERE ${mesSql} ${paisCond} ${tipoCond} ${clienteNew} ${catCond} ${subcatCond}
           AND (
-            ano = 2026
-            OR (ano = 2025 AND mes * 100 + dia <= ${cutNum})
+            ano_pedido = 2026
+            OR (ano_pedido = 2025 AND mes * 100 + dia <= ${cutNum})
           )
 
         UNION ALL
@@ -63,7 +63,7 @@ export async function GET(req: NextRequest) {
         WHERE ano = 2025 AND mes <= ${cutMes}
           AND ${mesSql} ${paisCondOld} ${clienteOld} ${catCond} ${subcatCond}
           AND (ano, mes) NOT IN (
-            SELECT DISTINCT ano, mes FROM fact_sales_sellin WHERE ano = 2025
+            SELECT DISTINCT ano_pedido AS ano, mes FROM fact_sales_sellin WHERE ano_pedido = 2025
           )
       ) sub
       WHERE dim IS NOT NULL AND dim <> ''

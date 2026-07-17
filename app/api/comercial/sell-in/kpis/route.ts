@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const cutoffR = await pool.query(`
       SELECT COALESCE(MAX(mes), 0) AS ultimo_mes
       FROM fact_sales_sellin
-      WHERE ano = ${ano} AND venta_neta > 0 ${extra}
+      WHERE ano_pedido = ${ano} AND venta_neta > 0 ${extra}
     `)
     const ultimoMes = parseInt(cutoffR.rows[0].ultimo_mes) || 0
 
@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
           COUNT(DISTINCT cliente_nombre)   AS clientes,
           COUNT(DISTINCT sku)              AS skus
         FROM fact_sales_sellin
-        WHERE ano = ${ano} AND mes <= ${ultimoMes} ${extra}
+        WHERE ano_pedido = ${ano} AND mes <= ${ultimoMes} ${extra}
       `),
       pool.query(`
         SELECT
@@ -59,13 +59,13 @@ export async function GET(req: NextRequest) {
           COALESCE(AVG(margen_pct),     0) AS margen_pct_avg
         FROM (
           SELECT venta_neta, cantidad_cajas, margen_valor, margen_pct FROM fact_sales_sellin
-          WHERE ano = ${ano - 1} AND mes <= ${ultimoMes} ${extra}
+          WHERE ano_pedido = ${ano - 1} AND mes <= ${ultimoMes} ${extra}
           UNION ALL
           SELECT ingresos AS venta_neta, 0 AS cantidad_cajas, 0 AS margen_valor, NULL AS margen_pct FROM ventas_sell_in
           WHERE ano = ${ano - 1} AND mes <= ${ultimoMes}
             ${paises.length ? 'AND ' + inC('pais', paises) : ''}
             ${cats.length   ? 'AND ' + inC('categoria', cats) : ''}
-            AND (ano, mes) NOT IN (SELECT DISTINCT ano, mes FROM fact_sales_sellin)
+            AND (ano, mes) NOT IN (SELECT DISTINCT ano_pedido AS ano, mes FROM fact_sales_sellin)
         ) sub
       `),
     ])

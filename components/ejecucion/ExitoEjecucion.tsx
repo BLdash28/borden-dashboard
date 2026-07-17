@@ -1187,7 +1187,7 @@ export default function ExitoEjecucion() {
               </p>
               <p className="text-[10px] text-gray-500 mt-0.5">{kpis.ultimo_mes_nombre ? `Ene–${kpis.ultimo_mes_nombre}` : ''}</p>
             </div>
-            <div className="rounded-lg px-4 py-2.5 bg-amber-50 border border-amber-100">
+            <div className="rounded-lg px-4 py-2.5 bg-amber-50 border border-amber-100 hide-in-mercadeo">
               <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-0.5">YTD 2026 ({monLabel})</p>
               <p className="text-lg font-bold text-amber-700">{isCop ? fmtCOP(totCop2026) : fmt$(kpis.ytd_2026)}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(kpis.uni_2026)} und</p>
@@ -1199,7 +1199,7 @@ export default function ExitoEjecucion() {
               <p className={`text-lg font-bold ${(dCop ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                 {dCop === null ? '—' : `${dCop > 0 ? '+' : ''}${dCop.toFixed(1)}%`}
               </p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{isCop ? fmtCOP(mAct?.cop2026 ?? 0) : fmt$(mAct?.y2026 ?? 0)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5 hide-in-mercadeo">{isCop ? fmtCOP(mAct?.cop2026 ?? 0) : fmt$(mAct?.y2026 ?? 0)}</p>
             </div>
             <div className={`rounded-lg px-4 py-2.5 border ${(dUds ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
               <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
@@ -1244,6 +1244,7 @@ export default function ExitoEjecucion() {
                   label={`Total YTD ${seg.ano} (${moneda.toUpperCase()})`}
                   value={isCop ? fmtCOP(totSeg.ytdCop) : fmt$(totSeg.ytdUsd)}
                   sub={`${ultMesSeg} meses acumulados`}
+                  className="hide-in-mercadeo"
                 />
                 <KpiCard label={`Total YTD ${seg.ano} (und)`} value={fmtNum(totSeg.ytdUnd)} sub={`${ultMesSeg} meses acumulados`} />
                 <KpiCard label={`RR und/día (${mesActualLbl})`} value={fmtRR(totSeg.rrUnd)} sub={`base ${cobertura}`} />
@@ -1252,6 +1253,7 @@ export default function ExitoEjecucion() {
                   value={isCop ? fmtCOP(totSeg.proyCop) : fmt$(totSeg.proyUsd)}
                   sub={`${fmtNum(totSeg.proyUnd)} und`}
                   highlight
+                  className="hide-in-mercadeo"
                 />
               </div>
             </div>
@@ -1262,12 +1264,12 @@ export default function ExitoEjecucion() {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <h4 className="text-sm font-semibold text-gray-800 mb-3">📊 Estadísticas del período</h4>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100 hide-in-mercadeo">
               <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio mensual</p>
               <p className="text-lg font-bold text-gray-800">{isCop ? fmtCOP(promMensualCop) : fmt$(kpis.ytd_2026 / (meses2026.length || 1))}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promMensualUds)} und/mes</p>
             </div>
-            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100 hide-in-mercadeo">
               <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio diario</p>
               <p className="text-lg font-bold text-gray-800">{isCop ? fmtCOP(promDiarioCop) : fmt$(kpis.ytd_2026 / (diasAcumulados || 1))}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promDiarioUds)} und/día</p>
@@ -1275,16 +1277,16 @@ export default function ExitoEjecucion() {
             <div className="rounded-lg px-4 py-2.5 bg-emerald-50 border border-emerald-100">
               <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-0.5">Mejor mes 2026</p>
               <p className="text-lg font-bold text-emerald-700">{mejorMes ? mejorMes.mes_nombre : '—'}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{mejorMes ? (isCop ? fmtCOP(mejorMes.cop2026 ?? 0) : fmt$(mejorMes.y2026 ?? 0)) : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5 hide-in-mercadeo">{mejorMes ? (isCop ? fmtCOP(mejorMes.cop2026 ?? 0) : fmt$(mejorMes.y2026 ?? 0)) : '—'}</p>
             </div>
             <div className="rounded-lg px-4 py-2.5 bg-red-50 border border-red-100">
               <p className="text-[9px] font-bold uppercase tracking-widest text-red-700 mb-0.5">Peor mes 2026</p>
               <p className="text-lg font-bold text-red-700">{peorMes ? peorMes.mes_nombre : '—'}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{peorMes ? (isCop ? fmtCOP(peorMes.cop2026 ?? 0) : fmt$(peorMes.y2026 ?? 0)) : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5 hide-in-mercadeo">{peorMes ? (isCop ? fmtCOP(peorMes.cop2026 ?? 0) : fmt$(peorMes.y2026 ?? 0)) : '—'}</p>
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-            <div className="rounded-lg px-4 py-2.5 bg-blue-50 border border-blue-100">
+            <div className="rounded-lg px-4 py-2.5 bg-blue-50 border border-blue-100 hide-in-mercadeo">
               <p className="text-[9px] font-bold uppercase tracking-widest text-blue-700 mb-0.5">Ticket medio</p>
               <p className="text-lg font-bold text-blue-700">{isCop ? fmtCOP(ticketMedio) : fmt$(kpis.ytd_2026 / (kpis.uni_2026 || 1))}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">por unidad</p>
@@ -4129,10 +4131,10 @@ function MetricCell({
 }
 
 function KpiCard({
-  label, value, sub, highlight,
-}: { label: string; value: React.ReactNode; sub: string; highlight?: boolean }) {
+  label, value, sub, highlight, className,
+}: { label: string; value: React.ReactNode; sub: string; highlight?: boolean; className?: string }) {
   return (
-    <div className={`rounded-xl border shadow-sm p-4 ${highlight ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}`}>
+    <div className={`rounded-xl border shadow-sm p-4 ${highlight ? 'bg-amber-50 border-amber-200' : 'bg-white border-gray-100'}${className ? ' ' + className : ''}`}>
       <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest leading-tight mb-1">
         {label}
       </p>

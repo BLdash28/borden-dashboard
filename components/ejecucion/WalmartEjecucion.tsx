@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/tendencia-chart'
 import { EjecucionLayout, KpiCard } from './shared'
 import { OfertasSection } from './OfertasSection'
+import { useMercadeoMode } from '@/components/mercadeo/MercadeoModeContext'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -377,18 +378,22 @@ interface Props {
 
 export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSellin = 'WALMART' }: Props) {
   const storageKey = `walmart-${pais.toLowerCase()}`
+  const isMercadeoMode = useMercadeoMode()
 
   // Piloto: el tab "Ofertas" solo aparece en CR por ahora. Se replicará al
   // resto de países Walmart cuando el flujo esté validado con datos reales.
   const sections = useMemo(() => {
-    if (pais !== 'CR') return SECTIONS
-    // Insertar Ofertas después de "Calidad Inventario" (índice 4)
-    return [
-      ...SECTIONS.slice(0, 5),
-      { key: 'ofertas', label: 'Ofertas' },
-      ...SECTIONS.slice(5),
-    ]
-  }, [pais])
+    let s: readonly { key: string; label: string }[] = SECTIONS
+    if (pais === 'CR') {
+      // Insertar Ofertas después de "Calidad Inventario" (índice 4)
+      s = [...SECTIONS.slice(0, 5), { key: 'ofertas', label: 'Ofertas' }, ...SECTIONS.slice(5)]
+    }
+    // En modo Mercadeo ocultamos pestañas puramente monetarias / no relevantes
+    if (isMercadeoMode) {
+      s = s.filter(x => x.key !== 'pareto' && x.key !== 'precios')
+    }
+    return s
+  }, [pais, isMercadeoMode])
 
   const [section,      setSection]      = useState('resumen')
   const [div,          setDiv]          = useState('TOTAL')
@@ -738,7 +743,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
     const soTotal  = sellout?.ytd_2026  ?? 0
     const soUnits  = sellout?.uni_2026  ?? 0
+    const soUnits25 = sellout?.uni_2025 ?? 0
     const soDelta  = sellout?.delta_ytd ?? null
+    const soDeltaUds = soUnits25 > 0 ? ((soUnits - soUnits25) / soUnits25) * 100 : null
     const soLast   = sellout?.ultimo_mes_nombre ?? '—'
     const soAvg    = sellout?.ultimo_mes > 0 ? soTotal / sellout.ultimo_mes : 0
     const cadenas  = sellout?.por_cadena ?? []
@@ -757,12 +764,25 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Sell-Out</p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { label: 'Sell-Out YTD 2026', value: fmtFull(soTotal),  sub: `hasta ${soLast}`,                 icon: '🛒', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
-              { label: 'vs YTD 2025',       value: soDelta !== null ? <Delta d={soDelta} /> : <span className="text-sm text-gray-400">Sin hist.</span>, sub: sellout?.ytd_2025 > 0 ? `2025: ${fmtFull(sellout.ytd_2025)}` : 'Sin dato 2025', icon: '📊', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
+              { label: 'Sell-Out YTD 2026', value: fmtFull(soTotal),  sub: `hasta ${soLast}`,                 icon: '🛒', bg: 'bg-white border-gray-100', tc: 'text-gray-800', hideMkt: true },
+              { label: 'vs YTD 2025',
+                value: (
+                  <>
+                    <span className="hide-in-mercadeo">{soDelta !== null ? <Delta d={soDelta} /> : <span className="text-sm text-gray-400">Sin hist.</span>}</span>
+                    <span className="show-only-mercadeo">{soDeltaUds !== null ? <Delta d={soDeltaUds} /> : <span className="text-sm text-gray-400">Sin hist.</span>}</span>
+                  </>
+                ),
+                sub: (
+                  <>
+                    <span className="hide-in-mercadeo">{sellout?.ytd_2025 > 0 ? `2025: ${fmtFull(sellout.ytd_2025)}` : 'Sin dato 2025'}</span>
+                    <span className="show-only-mercadeo">{soUnits25 > 0 ? `2025: ${fmtNum(soUnits25)} und` : 'Sin dato 2025'}</span>
+                  </>
+                ),
+                icon: '📊', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
               { label: 'Unidades YTD',      value: soUnits.toLocaleString('en-US'),  sub: 'cajas vendidas',    icon: '📦', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
-              { label: 'Promedio Mensual',  value: fmt$(soAvg),         sub: `${sellout?.ultimo_mes ?? 0} meses`,  icon: '📅', bg: 'bg-white border-gray-100', tc: 'text-gray-800' },
-            ].map(c => (
-              <div key={c.label} className={`rounded-xl border shadow-sm p-5 ${c.bg}`}>
+              { label: 'Promedio Mensual',  value: fmt$(soAvg),         sub: `${sellout?.ultimo_mes ?? 0} meses`,  icon: '📅', bg: 'bg-white border-gray-100', tc: 'text-gray-800', hideMkt: true },
+            ].map((c: any) => (
+              <div key={c.label} className={`rounded-xl border shadow-sm p-5 ${c.bg}${c.hideMkt ? ' hide-in-mercadeo' : ''}`}>
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
                   <span className="text-lg">{c.icon}</span>
@@ -780,7 +800,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Por Cadena · Sell-Out YTD 2026</p>
             <div className={`grid grid-cols-1 md:grid-cols-${Math.min(cadenas.length, 3)} gap-3`}>
               {cadenas.map((c: any) => {
-                const pct   = soTotal > 0 ? (c.valor_2026 / soTotal * 100) : 0
+                const pctVal = soTotal > 0 ? (c.valor_2026 / soTotal * 100) : 0
+                const pctUds = soUnits > 0 ? ((c.uni_2026 ?? 0) / soUnits * 100) : 0
+                const deltaUds = (c.uni_2025 ?? 0) > 0 ? (((c.uni_2026 ?? 0) - c.uni_2025) / c.uni_2025) * 100 : null
                 const color = CADENA_COLORS[c.cadena] ?? '#6b7280'
                 return (
                   <div key={c.cadena} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
@@ -788,13 +810,21 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
                       <p className="text-xs font-semibold text-gray-600 truncate">{c.cadena}</p>
                     </div>
-                    <p className="text-xl font-bold text-gray-800">{fmtFull(c.valor_2026)}</p>
+                    <p className="text-xl font-bold text-gray-800 hide-in-mercadeo">{fmtFull(c.valor_2026)}</p>
+                    <p className="text-xl font-bold text-gray-800 show-only-mercadeo">{fmtNum(c.uni_2026 ?? 0)} <span className="text-xs text-gray-400 font-normal">und</span></p>
                     <div className="flex items-center justify-between mt-1">
-                      <p className="text-xs text-gray-400">{pct.toFixed(1)}% del total</p>
-                      {c.delta !== null ? <Delta d={c.delta} /> : <span className="text-[11px] text-gray-300">Sin 2025</span>}
+                      <p className="text-xs text-gray-400 hide-in-mercadeo">{pctVal.toFixed(1)}% del total</p>
+                      <p className="text-xs text-gray-400 show-only-mercadeo">{pctUds.toFixed(1)}% del total</p>
+                      <span className="hide-in-mercadeo">
+                        {c.delta !== null ? <Delta d={c.delta} /> : <span className="text-[11px] text-gray-300">Sin 2025</span>}
+                      </span>
+                      <span className="show-only-mercadeo">
+                        {deltaUds !== null ? <Delta d={deltaUds} /> : <span className="text-[11px] text-gray-300">Sin 2025</span>}
+                      </span>
                     </div>
                     <div className="mt-2 bg-gray-100 rounded-full h-1.5">
-                      <div className="h-1.5 rounded-full" style={{ width: `${pct}%`, background: color }} />
+                      <div className="h-1.5 rounded-full hide-in-mercadeo" style={{ width: `${pctVal}%`, background: color }} />
+                      <div className="h-1.5 rounded-full show-only-mercadeo" style={{ width: `${pctUds}%`, background: color }} />
                     </div>
                   </div>
                 )
@@ -820,7 +850,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 return (
                   <p className="text-[11px] text-gray-400">
                     Timeline mensual continuo
-                    {precioUlt > 0 && (
+                    {!isMercadeoMode && precioUlt > 0 && (
                       <>
                         <span className="mx-1.5 text-gray-300">·</span>
                         <span className="font-semibold text-emerald-600">Último precio prom / Und ({refLabel}): {precioFmt}</span>
@@ -830,18 +860,18 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 )
               })()}
             </div>
-            <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} activeClass="bg-amber-500 text-white" />
+            {!isMercadeoMode && <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} activeClass="bg-amber-500 text-white" />}
           </div>
           <TendenciaMensualChart
             tendencia={tendencia}
-            metricas={tendMetricas}
+            metricas={isMercadeoMode ? ['unidades'] : tendMetricas}
             moneda="usd"
             skuFilter={skuSel}
           />
         </div>
 
         {/* Venta Valor vs Unidades — timeline continuo (Bar valor + Line unidades) */}
-        {monthly.length > 0 && (() => {
+        {!isMercadeoMode && monthly.length > 0 && (() => {
           const MN12 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
           const byMes = new Map(monthly.map((m: any) => [m.mes, m]))
           const data: { mes_str: string; valor: number; unidades: number }[] = []
@@ -927,7 +957,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                 <div>
-                  <h3 className="text-sm font-bold text-gray-800">Nivel Inventario vs Sell-Out</h3>
+                  <h3 className="text-sm font-bold text-gray-800">Nivel Inventario vs Sell-Out (Und)</h3>
                   <p className="text-[11px] text-gray-400">
                     Inv actual: <span className="font-semibold text-blue-600">{Math.round(invTotal).toLocaleString('en-US')} un</span>
                     <span className="mx-1.5 text-gray-300">·</span>
@@ -950,7 +980,10 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
                     <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
-                    <YAxis tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
+                    <YAxis
+                      // Aseguramos que el rango incluya `invTotal` para que la ReferenceLine sea visible
+                      domain={[0, (max: number) => Math.ceil(Math.max(max, invTotal) * 1.1)]}
+                      tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
                       tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}/>
                     <Tooltip
                       formatter={(v: any) => [Math.round(Number(v)).toLocaleString('en-US') + ' un', '']}
@@ -998,7 +1031,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         })()}
 
         {/* Hallazgos Críticos */}
-        {(() => {
+        {!isMercadeoMode && (() => {
           const hallazgos = generarHallazgos(sellout, inv, topSkus)
           if (hallazgos.length === 0) return null
           return (
@@ -1117,7 +1150,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           <div className="flex items-center gap-2 mb-1">
             <h3 className="text-sm font-semibold text-gray-800">📈 Evolución de Ventas</h3>
             <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">SELLOUT</span>
-            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">USD</span>
+            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200 hide-in-mercadeo">USD</span>
           </div>
           <p className="text-xs text-gray-400 mb-3">
             Walmart {paisNombre}
@@ -1138,7 +1171,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               </p>
               <p className="text-[10px] text-gray-500 mt-0.5">{soLast ? `Ene–${soLast}` : ''}</p>
             </div>
-            <div className="rounded-lg px-4 py-2.5 bg-amber-50 border border-amber-100">
+            <div className="rounded-lg px-4 py-2.5 bg-amber-50 border border-amber-100 hide-in-mercadeo">
               <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-0.5">YTD 2026 (USD)</p>
               <p className="text-lg font-bold text-amber-700">{fmt$(soTotal)}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(sellout.uni_2026 ?? 0)} und</p>
@@ -1150,7 +1183,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               <p className={`text-lg font-bold ${(dVal ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                 {dVal === null ? '—' : `${dVal > 0 ? '+' : ''}${dVal.toFixed(1)}%`}
               </p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{fmt$(mAct?.y2026 ?? 0)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5 hide-in-mercadeo">{fmt$(mAct?.y2026 ?? 0)}</p>
             </div>
             <div className={`rounded-lg px-4 py-2.5 border ${(dUds ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
               <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
@@ -1173,23 +1206,24 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             </span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <KpiCard label="Total YTD 2026 (USD)" value={fmt$(soTotal)} sub={`${sellout.ultimo_mes ?? 0} meses acumulados`} />
+            <KpiCard label="Total YTD 2026 (USD)" value={fmt$(soTotal)} sub={`${sellout.ultimo_mes ?? 0} meses acumulados`} className="hide-in-mercadeo" />
             <KpiCard label="Total YTD 2026 (und)" value={fmtNum(sellout.uni_2026 ?? 0)} sub={`${sellout.ultimo_mes ?? 0} meses acumulados`} />
-            <KpiCard label="Promedio mensual" value={fmt$(promMensualVal)} sub={`${fmtNum(promMensualUds)} und/mes`} />
-            <KpiCard label={`Prom. diario (${diasAcumulados}d)`} value={fmt$(promDiarioVal)} sub={`${fmtNum(promDiarioUds)} und/día`} highlight />
+            <KpiCard label="Promedio mensual (und)" value={fmtNum(promMensualUds)} sub={`${fmtNum(promMensualUds)} und/mes`} />
+            <KpiCard label={`Prom. diario (${diasAcumulados}d)`} value={fmtNum(promDiarioUds)} sub={`${fmtNum(promDiarioUds)} und/día`} highlight />
           </div>
         </div>
 
         {/* Fila de estadísticas detalladas */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <h4 className="text-sm font-semibold text-gray-800 mb-3">📊 Estadísticas del período</h4>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+          <div className="mercadeo-grid-5-wrapper">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mercadeo-flatten-grid">
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100 hide-in-mercadeo">
               <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio mensual</p>
               <p className="text-lg font-bold text-gray-800">{fmt$(promMensualVal)}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promMensualUds)} und/mes</p>
             </div>
-            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100 hide-in-mercadeo">
               <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio diario</p>
               <p className="text-lg font-bold text-gray-800">{fmt$(promDiarioVal)}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promDiarioUds)} und/día</p>
@@ -1197,16 +1231,16 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             <div className="rounded-lg px-4 py-2.5 bg-emerald-50 border border-emerald-100">
               <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-0.5">Mejor mes 2026</p>
               <p className="text-lg font-bold text-emerald-700">{mejorMes ? mejorMes.mes_nombre : '—'}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{mejorMes ? fmt$(mejorMes.y2026 ?? 0) : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5 hide-in-mercadeo">{mejorMes ? fmt$(mejorMes.y2026 ?? 0) : '—'}</p>
             </div>
             <div className="rounded-lg px-4 py-2.5 bg-red-50 border border-red-100">
               <p className="text-[9px] font-bold uppercase tracking-widest text-red-700 mb-0.5">Peor mes 2026</p>
               <p className="text-lg font-bold text-red-700">{peorMes ? peorMes.mes_nombre : '—'}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{peorMes ? fmt$(peorMes.y2026 ?? 0) : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5 hide-in-mercadeo">{peorMes ? fmt$(peorMes.y2026 ?? 0) : '—'}</p>
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
-            <div className="rounded-lg px-4 py-2.5 bg-blue-50 border border-blue-100">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3 mercadeo-flatten-grid">
+            <div className="rounded-lg px-4 py-2.5 bg-blue-50 border border-blue-100 hide-in-mercadeo">
               <p className="text-[9px] font-bold uppercase tracking-widest text-blue-700 mb-0.5">Ticket medio</p>
               <p className="text-lg font-bold text-blue-700">{fmt$(ticketMedio)}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">por unidad</p>
@@ -1228,6 +1262,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               <p className="text-lg font-bold text-purple-700">{cadenasActivas}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">con ventas 2026</p>
             </div>
+          </div>
           </div>
         </div>
 
@@ -1253,8 +1288,10 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 const precioFmt = '$' + precioUlt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 return (
                   <p className="text-[11px] text-gray-400">
-                    {tendVista === 'mensual' ? 'Comparativo continuo · USD' : 'Tendencia diaria · USD'}
-                    {precioUlt > 0 && (
+                    {tendVista === 'mensual'
+                      ? (isMercadeoMode ? 'Comparativo continuo' : 'Comparativo continuo · USD')
+                      : (isMercadeoMode ? 'Tendencia diaria'     : 'Tendencia diaria · USD')}
+                    {!isMercadeoMode && precioUlt > 0 && (
                       <>
                         <span className="mx-1.5 text-gray-300">·</span>
                         <span className="font-semibold text-emerald-600">Último precio prom / Und ({refLabel}): {precioFmt}</span>
@@ -1273,20 +1310,20 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   </button>
                 ))}
               </div>
-              <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} activeClass="bg-amber-500 text-white" />
+              {!isMercadeoMode && <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} activeClass="bg-amber-500 text-white" />}
             </div>
           </div>
           {tendVista === 'mensual' ? (
             <TendenciaMensualChart
               tendencia={tendencia}
-              metricas={tendMetricas}
+              metricas={isMercadeoMode ? ['unidades'] : tendMetricas}
               moneda="usd"
               skuFilter={skuSel}
             />
           ) : (
             <TendenciaDiariaChart
               rows={tendDaily}
-              metricas={tendMetricas}
+              metricas={isMercadeoMode ? ['unidades'] : tendMetricas}
               moneda="usd"
               loading={tendDailyLoading}
             />
@@ -1342,15 +1379,20 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         {/* Chart 3: Distribución por cadena 2026 — Pie chart */}
         {(() => {
           const pieData = cadenasSell
-            .filter((c: any) => (c.valor_2026 ?? 0) > 0)
-            .map((c: any) => ({ cadena: c.cadena, valor: c.valor_2026 }))
+            .filter((c: any) => (isMercadeoMode ? (c.uni_2026 ?? 0) > 0 : (c.valor_2026 ?? 0) > 0))
+            .map((c: any) => ({
+              cadena: c.cadena,
+              valor: isMercadeoMode ? Number(c.uni_2026 ?? 0) : Number(c.valor_2026 ?? 0),
+            }))
           const totPie = pieData.reduce((s: number, x: { valor: number }) => s + x.valor, 0)
           if (pieData.length === 0) return null
           return (
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
               <div>
                 <h4 className="text-sm font-bold text-gray-800">Distribución por cadena 2026</h4>
-                <p className="text-[11px] text-gray-400">Participación de ventas por cadena · USD</p>
+                <p className="text-[11px] text-gray-400">
+                  Participación de ventas por cadena · {isMercadeoMode ? 'Unidades' : 'USD'}
+                </p>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 items-center">
                 <div className="md:col-span-2 h-[280px]">
@@ -1377,7 +1419,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(v: unknown) => [tipVal(v), '']}
+                        formatter={(v: unknown) => [isMercadeoMode ? `${fmtNum(Number(v))} und` : tipVal(v), '']}
                         contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                       />
                     </PieChart>
@@ -1397,7 +1439,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                           <div className="flex-1 min-w-0">
                             <p className="font-semibold text-gray-700 truncate">{c.cadena}</p>
                             <p className="text-[11px] text-gray-400 tabular-nums">
-                              {tipVal(c.valor)} <span className="text-gray-300">· {pct.toFixed(1)}%</span>
+                              {isMercadeoMode ? `${fmtNum(c.valor)} und` : tipVal(c.valor)} <span className="text-gray-300">· {pct.toFixed(1)}%</span>
                             </p>
                           </div>
                         </div>
@@ -1423,9 +1465,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
                   <tr>
                     <th className="px-3 py-2.5 text-left font-semibold">Cadena</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">Valor 2026 (USD)</th>
+                    <th className="px-3 py-2.5 text-right font-semibold hide-in-mercadeo">Valor 2026 (USD)</th>
                     <th className="px-3 py-2.5 text-right font-semibold">Unidades 2026</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">Valor 2025 (USD)</th>
+                    <th className="px-3 py-2.5 text-right font-semibold hide-in-mercadeo">Valor 2025 (USD)</th>
                     <th className="px-3 py-2.5 text-right font-semibold">vs 2025</th>
                     <th className="px-3 py-2.5 text-right font-semibold bg-amber-50 text-amber-700">Share %</th>
                   </tr>
@@ -1441,9 +1483,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                             {c.cadena}
                           </span>
                         </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-800 font-semibold">{fmt$(c.valor_2026 ?? 0)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-800 font-semibold hide-in-mercadeo">{fmt$(c.valor_2026 ?? 0)}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmtNum(c.uni_2026 ?? 0)}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{c.valor_2025 > 0 ? fmt$(c.valor_2025) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-500 hide-in-mercadeo">{c.valor_2025 > 0 ? fmt$(c.valor_2025) : <span className="text-gray-300">—</span>}</td>
                         <td className="px-3 py-2.5 text-right">
                           {c.delta !== null ? <Delta d={c.delta} /> : <span className="text-[11px] text-gray-300">Sin 2025</span>}
                         </td>
@@ -1460,9 +1502,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                   })}
                   <tr className="bg-gray-900 text-white font-bold">
                     <td className="px-3 py-2.5">TOTAL</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{fmt$(soTotal)}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums hide-in-mercadeo">{fmt$(soTotal)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums">{fmtNum(sellout.uni_2026 ?? 0)}</td>
-                    <td className="px-3 py-2.5 text-right tabular-nums">{soPrev > 0 ? fmt$(soPrev) : '—'}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums hide-in-mercadeo">{soPrev > 0 ? fmt$(soPrev) : '—'}</td>
                     <td className="px-3 py-2.5 text-right">{soDelta !== null ? <Delta d={soDelta} /> : '—'}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-amber-300">100.0%</td>
                   </tr>
@@ -2365,6 +2407,11 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   // ── Render ────────────────────────────────────────────────────────────────
 
   const renderSection = () => {
+    // En modo Mercadeo, pareto y precios no son accesibles — si el user llega
+    // con esos hashes de URL, fallback a Resumen.
+    if (isMercadeoMode && (section === 'pareto' || section === 'precios')) {
+      return Resumen()
+    }
     switch (section) {
       case 'resumen':         return Resumen()
       case 'evolucion':       return Evolucion()

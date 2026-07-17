@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
     const anosArr  = (sp.get('anos')  || ano  || '').split(',').map(Number).filter(n => n > 2000)
     const mesesArr = (sp.get('meses') || mes  || '').split(',').map(Number).filter(n => n >= 1 && n <= 12)
-    if (anosArr.length)  { conds.push(`ano IN (${anosArr.map(() => `$${idx++}`).join(',')})`);  params.push(...anosArr) }
+    if (anosArr.length)  { conds.push(`ano_pedido IN (${anosArr.map(() => `$${idx++}`).join(',')})`);  params.push(...anosArr) }
     if (mesesArr.length) { conds.push(`mes IN (${mesesArr.map(() => `$${idx++}`).join(',')})`); params.push(...mesesArr) }
     if (paises.length)   { conds.push(`pais IN (${paises.map(() => `$${idx++}`).join(',')})`);    params.push(...paises) }
     if (cats.length)     { conds.push(`categoria IN (${cats.map(() => `$${idx++}`).join(',')})`); params.push(...cats) }
