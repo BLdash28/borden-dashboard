@@ -1,0 +1,53 @@
+name: Cobertura Walmart (CR + GT)
+
+# Genera los reportes Cobertura_CR y Cobertura_GT y los publica como artifacts.
+# - Programado: 07:00 CST (13:00 UTC) de lunes a viernes
+# - Manual: workflow_dispatch desde la UI de GitHub Actions
+#
+# Requiere secret: DATABASE_URL (connection string a Supabase/Postgres)
+
+on:
+  schedule:
+    # 13:00 UTC = 07:00 CST (America/Costa_Rica, GMT-6)
+    - cron: '0 13 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NODE_TLS_REJECT_UNAUTHORIZED: '0'
+      OUT_DIR: cobertura_out
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install deps (solo lo necesario para los scripts)
+        run: npm install --no-audit --no-fund pg xlsx
+
+      - name: Preparar directorio de salida
+        run: mkdir -p ${OUT_DIR}
+
+      - name: Generar Cobertura CR (v5)
+        run: node scripts/gen-cobertura-cr-v5.mjs
+
+      - name: Generar Cobertura GT (v5)
+        run: node scripts/gen-cobertura-gt-v5.mjs
+
+      - name: Listar archivos generados
+        run: |
+          echo "── Archivos en ${OUT_DIR} ──"
+          ls -la "${OUT_DIR}/"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-walmart-${{ github.run_number }}
+          path: ${{ env.OUT_DIR }}/*.xlsx
+          if-no-files-found: error
+          retention-days: 30
