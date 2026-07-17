@@ -1,15 +1,33 @@
 name: Cobertura Walmart (CR + GT)
 
 # Genera los reportes Cobertura_CR y Cobertura_GT y los publica como artifacts.
-# - Programado: 07:00 CST (13:00 UTC) de lunes a viernes
-# - Manual: workflow_dispatch desde la UI de GitHub Actions
+# Se dispara CUANDO se cargan las ventas / inventario nuevos:
+#   1. repository_dispatch con event_type='ventas-inventario-cargados'
+#      (llamar al final del script de ingesta con curl a GitHub API — ver
+#       docs abajo).
+#   2. Manual desde la UI de Actions (workflow_dispatch).
 #
 # Requiere secret: DATABASE_URL (connection string a Supabase/Postgres)
+#
+# ── Cómo disparar desde el bot de ingesta ─────────────────────────────
+# Al final de cargar_inventario_hoy.py / sellout ingest, hacer:
+#
+#   import os, requests
+#   requests.post(
+#     'https://api.github.com/repos/BLdash28/borden-dashboard/dispatches',
+#     headers={
+#       'Authorization': f'token {os.environ["GH_DISPATCH_TOKEN"]}',
+#       'Accept': 'application/vnd.github+json',
+#     },
+#     json={'event_type': 'ventas-inventario-cargados'},
+#   ).raise_for_status()
+#
+# Crear GH_DISPATCH_TOKEN como PAT con scope 'repo' (Fine-grained:
+# Contents=Read, Actions=Read/Write sobre este repo).
 
 on:
-  schedule:
-    # 13:00 UTC = 07:00 CST (America/Costa_Rica, GMT-6)
-    - cron: '0 13 * * 1-5'
+  repository_dispatch:
+    types: [ventas-inventario-cargados]
   workflow_dispatch:
 
 jobs:
