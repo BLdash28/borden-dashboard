@@ -1600,12 +1600,21 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         </div>
 
         {/* Cobertura por Cadena */}
-        {porCadena.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-50">
-              <h3 className="text-sm font-semibold text-gray-700">📍 Cobertura por Cadena</h3>
-              <p className="text-[11px] text-gray-400 mt-0.5">PDVs con stock vs universo · Walmart {paisNombre}</p>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">📍 Cobertura por Cadena</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">PDVs con stock vs universo · Walmart {paisNombre}</p>
+          </div>
+          {porCadena.length === 0 ? (
+            <div className="p-6 text-center text-sm text-gray-400">
+              Sin cadenas con datos en el snapshot ({cob.fecha ?? '—'})
+              {(cadenasSel.length + puntoSel.length + skuSel.length + categoriaSel.length) > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  Es posible que alguno de tus filtros globales esté reduciendo la vista. Probá limpiar filtros.
+                </p>
+              )}
             </div>
+          ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
@@ -1648,8 +1657,8 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Matriz por SKU: # PDVs por nivel de stock */}
         <CoberturaSkuTable rows={porSku} universo={universo} coberturaEfectiva={cobEfectiva}

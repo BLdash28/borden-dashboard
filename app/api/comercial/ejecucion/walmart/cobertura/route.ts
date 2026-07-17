@@ -30,9 +30,11 @@ export async function GET(req: NextRequest) {
 
     // KPIs globales (respeta todos los filtros aplicables)
     const wG   = buildWalmartWhere(f, { startAt: 2, omit: ['subcategoria', 'formato'] })
-    // Universo por cadena: NO filtrar por cadena así vemos todas
+    // Universo por cadena: NO filtrar por cadena/skus/puntos así vemos todas
+    // (si el user tiene puntos o skus filtrados globalmente, esta sección igual
+    //  debe mostrar el mapa completo por cadena).
     const wCad = buildWalmartWhere(
-      { ...f, cadenas: [], skus: [] },
+      { ...f, cadenas: [], skus: [], puntos: [] },
       { startAt: 2, omit: ['subcategoria', 'formato'] },
     )
     // Universo global (para cobertura % del SKU): sin filtro de SKU

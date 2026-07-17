@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { CADENA_NORM_SQL, cadenaWhereSQL } from '@/lib/db/walmart-cadena'
 
 export const dynamic   = 'force-dynamic'
 export const revalidate = 0
@@ -14,12 +15,16 @@ export async function GET(req: NextRequest) {
     const saludF    = sp.get('salud')     ?? ''
     const prod      = sp.get('prod')      ?? ''
 
-    const paisSafe   = pais.replace(/'/g, "''")
+    // Filtro cadena: expande alias (WALMART matchea HM y WALMART, PALI matchea PI y PALI, etc.)
+    // — resuelve el bug donde filtrar por "WALMART" devolvía 0 filas porque
+    //   la tabla guarda el rptcode "HM".
+    const cadFilter  = cadena ? cadenaWhereSQL(cadena).replace(/\bcadena\b/g, 't.cadena') : ''
     const catFilter  = categoria ? `AND COALESCE(dp.categoria, '') = '${categoria.replace(/'/g, "''")}'` : ''
-    const cadFilter  = cadena    ? `AND COALESCE(t.cadena, '') = '${cadena.replace(/'/g, "''")}'`        : ''
     const prodFilter = prod
       ? `AND (LOWER(COALESCE(dp.descripcion, t.descripcion, '')) LIKE LOWER('%${prod.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_')}%') OR COALESCE(dp.sku, t.codigo_barras, '') ILIKE '%${prod.replace(/'/g, "''")}%')`
       : ''
+
+    const paisSafe = pais.replace(/'/g, "''")
 
     const { rows } = await pool.query(`
       WITH ultima AS (
@@ -43,7 +48,7 @@ export async function GET(req: NextRequest) {
         COALESCE(dp.categoria,    '')  AS categoria,
         COALESCE(dp.subcategoria, '')  AS subcategoria,
         t.punto_venta,
-        COALESCE(t.cadena, '')         AS cadena,
+        ${CADENA_NORM_SQL.replace(/\bcadena\b/g, 't.cadena')}  AS cadena,
         t.inv_mano,
         COALESCE(v.venta_dia,       0) AS venta_dia,
         COALESCE(v.precio_unitario, 0) AS precio_unitario,
