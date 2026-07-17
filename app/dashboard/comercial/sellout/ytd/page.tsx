@@ -2,8 +2,14 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { Download, RefreshCw, ChevronRight } from 'lucide-react'
 import FiltroMulti from '@/components/ui/FiltroMulti'
+import { useDashboardFilters } from '@/lib/context/DashboardFilters'
+import { readScoped, writeScoped } from '@/lib/storage/userScopedStorage'
+import { useUserId } from '@/lib/hooks/useUserId'
 
-const STORAGE_KEY = 'bl_sellout_ytd_v1'
+// El único estado local que persiste es el toggle de vista (Cliente/Categoría);
+// los filtros multi-select (país/cliente/categoría/subcat) viven en el context
+// global y se comparten con el resto del dashboard.
+const DIM_KEY = 'bl_sellout_ytd_dim'
 
 const MESES_LABEL = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
 const PAISES      = ['CR','GT','SV','NI','HN','CO']
@@ -59,12 +65,15 @@ interface Totals {
 }
 
 export default function SellOutYTD() {
-  const [dim,        setDim]        = useState<DimKey>('cliente')
-  const [paises,     setPaises]     = useState<string[]>([])
-  const [clientes,   setClientes]   = useState<string[]>([])
-  const [categorias, setCategorias] = useState<string[]>([])
-  const [subcats,    setSubcats]    = useState<string[]>([])
-  const initDone = useRef(false)
+  const [dim, setDim] = useState<DimKey>('cliente')
+  const {
+    fPaises:   paises,     setPaises,
+    fClientes: clientes,   setClientes,
+    fCats:     categorias, setCats:    setCategorias,
+    fSubcats:  subcats,    setSubcats,
+  } = useDashboardFilters()
+  const userId = useUserId()
+  const dimInitDone = useRef(false)
   const [rows,   setRows]   = useState<VarRow[]>([])
   const [totals, setTotals] = useState<Totals>({ total2025: 0, total2026: 0, meses: {} })
   const [ultimoDia, setUltimoDia] = useState<number | null>(null)
@@ -106,29 +115,22 @@ export default function SellOutYTD() {
 
   useEffect(() => { cargar() }, [cargar])
 
+  // Hidratar el toggle `dim` desde el namespace del usuario actual.
+  // Se re-dispara cuando cambia el userId (login/logout en misma pestaña).
   useEffect(() => {
-    if (initDone.current) return
-    initDone.current = true
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) {
-        const s = JSON.parse(raw)
-        if (s.dim)                setDim(s.dim)
-        if (s.paises?.length)     setPaises(s.paises)
-        if (s.clientes?.length)   setClientes(s.clientes)
-        if (s.categorias?.length) setCategorias(s.categorias)
-        if (s.subcats?.length)    setSubcats(s.subcats)
-      }
-    } catch {}
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    dimInitDone.current = false
+    if (!userId) { setDim('cliente'); return }
+    const raw = readScoped(DIM_KEY)
+    if (raw === 'cliente' || raw === 'categoria') setDim(raw)
+    else setDim('cliente')
+    dimInitDone.current = true
+  }, [userId])
 
-  const saveStorage = useCallback((patch: Record<string, unknown>) => {
-    try {
-      const base = { dim, paises, clientes, categorias, subcats }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...base, ...patch }))
-    } catch {}
-  }, [dim, paises, clientes, categorias, subcats])
+  // Persistir el toggle en el namespace scoped
+  useEffect(() => {
+    if (!dimInitDone.current) return
+    writeScoped(DIM_KEY, dim)
+  }, [dim])
 
   // Cascada de opciones — usa /api/ventas/dimension (mv_sellout_agg)
   useEffect(() => {
@@ -248,7 +250,7 @@ export default function SellOutYTD() {
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Vista</p>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               {(['cliente','categoria'] as DimKey[]).map(d => (
-                <button key={d} onClick={() => { setDim(d); saveStorage({ dim: d }) }}
+                <button key={d} onClick={() => setDim(d)}
                   className={`px-4 py-2 text-sm font-medium transition-colors ${dim===d?'bg-amber-500 text-white':'bg-white text-gray-600 hover:bg-gray-50'}`}>
                   {d === 'cliente' ? 'Por Cliente' : 'Por Categoría'}
                 </button>
@@ -256,17 +258,13 @@ export default function SellOutYTD() {
             </div>
           </div>
           <FiltroMulti label="País" options={PAISES_OPT} value={paises}
-            onChange={ps => { setPaises(ps); saveStorage({ paises: ps }) }}
-            placeholder="Todos los países" />
+            onChange={setPaises} placeholder="Todos los países" />
           <FiltroMulti label="Cliente" options={clienteOpts} value={clientes}
-            onChange={cs => { setClientes(cs); saveStorage({ clientes: cs }) }}
-            placeholder="Todos los clientes" />
+            onChange={setClientes} placeholder="Todos los clientes" />
           <FiltroMulti label="Categoría" options={categoriaOpts} value={categorias}
-            onChange={cs => { setCategorias(cs); saveStorage({ categorias: cs }) }}
-            placeholder="Todas las categorías" />
+            onChange={setCategorias} placeholder="Todas las categorías" />
           <FiltroMulti label="Subcategoría" options={subcatOpts} value={subcats}
-            onChange={ss => { setSubcats(ss); saveStorage({ subcats: ss }) }}
-            placeholder="Todas las subcategorías" />
+            onChange={setSubcats} placeholder="Todas las subcategorías" />
         </div>
       </div>
 

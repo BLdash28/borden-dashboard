@@ -9,7 +9,7 @@ import BarChartPro from '@/components/dashboard/BarChartPro'
 import LineChartPro from '@/components/dashboard/LineChartPro'
 import DonutChartPro from '@/components/dashboard/DonutChartPro'
 import { useDashboardFilters, MESES_LABEL } from '@/lib/context/DashboardFilters'
-import GlobalFilterBar from '@/components/dashboard/GlobalFilterBar'
+import FiltroMulti from '@/components/ui/FiltroMulti'
 import {
   LineChart, Line, BarChart, Bar, Cell, LabelList,
   ComposedChart, Area, ReferenceLine,
@@ -111,7 +111,13 @@ function ChartEmpty() {
 //  PÁGINA PRINCIPAL
 // ══════════════════════════════════════════════════════════
 export default function ResumenPage() {
-  const { fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses, buildParams, setCats: setFilterCats, setClientes: setFilterClientes } = useDashboardFilters()
+  const {
+    fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses, buildParams,
+    setPaises: setFPaises, setSubcats: setFSubcats, setFormatos: setFFormatos,
+    setAnos: setFAnos, setMeses: setFMeses, limpiar,
+    anosOpts, paisesOpts, catsOpts, subcatsOpts, clientesOpts, formatosOpts, mesOpts,
+    setCats: setFilterCats, setClientes: setFilterClientes,
+  } = useDashboardFilters()
 
   const [kpi,           setKpi]          = useState<any>(null)
   const [dias,          setDias]         = useState<any[]>([])
@@ -338,8 +344,37 @@ export default function ResumenPage() {
         </button>
       </div>
 
-      {/* Global filters */}
-      <GlobalFilterBar />
+      {/* Filtros — mismo formato que sell-in/resumen (4×2, Formato en vez de Proveedor) */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">Filtros</p>
+          <button onClick={limpiar} className="text-xs text-gray-400 hover:text-gray-600 underline">↺ Limpiar todo</button>
+        </div>
+
+        {/* Row 1: Año · Mes · País · Categoría */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+          <FiltroMulti label="Año"
+            options={anosOpts.map(a => ({ value: String(a), label: String(a) }))}
+            value={fAnos} onChange={setFAnos} placeholder="Todos los años" className="" />
+          <FiltroMulti label="Mes" options={mesOpts} value={fMeses} onChange={setFMeses}
+            placeholder="Todos los meses" className="" />
+          <FiltroMulti label="País" options={paisesOpts.map(p => ({ value: p }))}
+            value={fPaises} onChange={setFPaises} placeholder="Todos los países" className="" />
+          <FiltroMulti label="Categoría" options={catsOpts.map(c => ({ value: c }))}
+            value={fCats} onChange={setFilterCats} placeholder="Todas las categorías" className="" />
+        </div>
+
+        {/* Row 2: Subcategoría · Cliente · Formato · (vacío) */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <FiltroMulti label="Subcategoría" options={subcatsOpts.map(s => ({ value: s }))}
+            value={fSubcats} onChange={setFSubcats} placeholder="Todas" className="" />
+          <FiltroMulti label="Cliente" options={clientesOpts.map(c => ({ value: c }))}
+            value={fClientes} onChange={setFilterClientes} placeholder="Todos" className="" />
+          <FiltroMulti label="Formato" options={formatosOpts.map(f => ({ value: f }))}
+            value={fFormatos} onChange={setFFormatos} placeholder="Todos" className="" />
+          <div />
+        </div>
+      </div>
 
       {/* KPIs — 3 cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

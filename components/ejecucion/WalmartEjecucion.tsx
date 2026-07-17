@@ -14,6 +14,7 @@ import {
   type TendMetrica, type TendData, type TendDailyRow,
 } from '@/components/ui/tendencia-chart'
 import { EjecucionLayout, KpiCard } from './shared'
+import { OfertasSection } from './OfertasSection'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -377,6 +378,18 @@ interface Props {
 export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSellin = 'WALMART' }: Props) {
   const storageKey = `walmart-${pais.toLowerCase()}`
 
+  // Piloto: el tab "Ofertas" solo aparece en CR por ahora. Se replicará al
+  // resto de países Walmart cuando el flujo esté validado con datos reales.
+  const sections = useMemo(() => {
+    if (pais !== 'CR') return SECTIONS
+    // Insertar Ofertas después de "Calidad Inventario" (índice 4)
+    return [
+      ...SECTIONS.slice(0, 5),
+      { key: 'ofertas', label: 'Ofertas' },
+      ...SECTIONS.slice(5),
+    ]
+  }, [pais])
+
   const [section,      setSection]      = useState('resumen')
   const [div,          setDiv]          = useState('TOTAL')
   // Filtros globales (multi-select)
@@ -432,6 +445,24 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [invSkuTiendaLoading, setInvSkuTiendaLoading] = useState(false)
   const [invSkuTiendaFilters, setInvSkuTiendaFilters] = useState({ cadena: '', salud: '', prod: '' })
 
+  // Drill-down PDVs desde tabla Cobertura por SKU (buckets < 3, 3-10, > 10, todos)
+  const [cobDetalle, setCobDetalle] = useState<{
+    sku: string
+    descripcion: string | null
+    bucket: 'todos' | 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10'
+    loading: boolean
+    pdvs: {
+      punto_venta: string
+      store_nbr: string | null
+      cadena: string
+      categoria: string | null
+      sku: string
+      codigo_barras: string
+      descripcion: string | null
+      inv_mano: number
+    }[]
+  } | null>(null)
+
   // Tendencia reusable (chart Sell-Out Mensual · Walmart)
   const [tendencia, setTendencia] = useState<TendData | null>(null)
   const [tendMetricas, setTendMetricas] = useState<TendMetrica[]>(['valor', 'unidades', 'precio'])
@@ -470,6 +501,38 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     [cadenasSel, categoriaSel, subcatSel, formatoSel, puntoSel, skuSel])
 
   useEffect(() => { loadedRef.current = {} }, [filterKey])
+
+  // Drill-down PDVs — se dispara desde CoberturaSkuTable (celdas cliqueables)
+  const openCobDetalle = (
+    sku: string,
+    descripcion: string | null,
+    bucket: 'todos' | 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10' = 'todos',
+  ) => {
+    setCobDetalle({ sku, descripcion, bucket, loading: true, pdvs: [] })
+    const qs = buildFilterQS({ sku, bucket })
+    fetch(`/api/comercial/ejecucion/walmart/cobertura/pdvs?${qs}`)
+      .then(r => r.json())
+      .then(d => setCobDetalle(prev => prev ? { ...prev, loading: false, pdvs: d.pdvs ?? [] } : null))
+      .catch(() => setCobDetalle(prev => prev ? { ...prev, loading: false } : null))
+  }
+
+  // Drill-down por Cadena — muestra todos los PDVs con stock de esa cadena
+  const openCobDetalleCadena = (cadena: string) => {
+    setCobDetalle({
+      sku: `Cadena: ${cadena}`,
+      descripcion: `Todos los PDVs con stock · ${cadena}`,
+      bucket: 'todos',
+      loading: true,
+      pdvs: [],
+    })
+    const q = new URLSearchParams({ pais })
+    q.set('cadenas', cadena)
+    q.set('bucket', 'todos')
+    fetch(`/api/comercial/ejecucion/walmart/cobertura/pdvs?${q}`)
+      .then(r => r.json())
+      .then(d => setCobDetalle(prev => prev ? { ...prev, loading: false, pdvs: d.pdvs ?? [] } : null))
+      .catch(() => setCobDetalle(prev => prev ? { ...prev, loading: false } : null))
+  }
 
   // Cargar catálogo de opciones (una vez por país)
   useEffect(() => {
@@ -1557,7 +1620,10 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 </thead>
                 <tbody>
                   {porCadena.map((r, i) => (
-                    <tr key={r.cadena} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                    <tr key={r.cadena}
+                        onClick={() => r.cadena && openCobDetalleCadena(r.cadena)}
+                        className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} cursor-pointer hover:bg-blue-50/40 transition-colors`}
+                        title="Click para ver PDVs de esta cadena">
                       <td className="px-3 py-2.5">
                         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
                               style={{ background: CADENA_COLORS[r.cadena] ?? '#6b7280' }}>
@@ -1586,7 +1652,8 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         )}
 
         {/* Matriz por SKU: # PDVs por nivel de stock */}
-        <CoberturaSkuTable rows={porSku} universo={universo} coberturaEfectiva={cobEfectiva} />
+        <CoberturaSkuTable rows={porSku} universo={universo} coberturaEfectiva={cobEfectiva}
+          onCellClick={openCobDetalle} />
 
       </div>
     )
@@ -2297,7 +2364,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       case 'calidad':         return Calidad()
       case 'pareto':          return Pareto()
       case 'pedidos':         return <ProximamentePlaceholder section="pedidos" />
-      case 'ofertas':         return inv?.disponible ? Inventarios() : <ProximamentePlaceholder section="ofertas" />
+      case 'ofertas':         return <OfertasSection pais={pais} cadena="WALMART" />
       case 'innovaciones':    return (
         <InnovacionesSection
           apiUrl={`/api/comercial/ejecucion/wm/innovaciones?pais=${pais}`}
@@ -2323,7 +2390,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         loading={Object.values(loading).some(Boolean)}
         accent="blue"
         storageKey={storageKey}
-        sections={SECTIONS}
+        sections={sections}
         section={section}
         onSection={goSection}
         filters={[
@@ -2346,6 +2413,132 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         ]}
       >
         {renderSection()}
+
+        {/* Modal drill-down PDVs — accesible desde CoberturaSkuTable */}
+        {cobDetalle && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+               onClick={() => setCobDetalle(null)}>
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden"
+                 onClick={e => e.stopPropagation()}>
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
+                <div>
+                  {cobDetalle.sku.startsWith('Cadena: ') ? (
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest bg-blue-100 text-blue-700">
+                        🏬 Cadena completa
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-400">{cobDetalle.sku.replace('Cadena: ', '')}</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest ${
+                        cobDetalle.bucket === 'menos_de_3'   ? 'bg-red-100 text-red-700' :
+                        cobDetalle.bucket === 'entre_3_y_10' ? 'bg-amber-100 text-amber-700' :
+                        cobDetalle.bucket === 'mayor_a_10'   ? 'bg-emerald-100 text-emerald-700' :
+                                                               'bg-blue-100 text-blue-700'
+                      }`}>
+                        {cobDetalle.bucket === 'menos_de_3'   ? '🚨 Stock < 3' :
+                         cobDetalle.bucket === 'entre_3_y_10' ? '⚠️ Stock 3–10' :
+                         cobDetalle.bucket === 'mayor_a_10'   ? '✓ Stock > 10' :
+                                                                '📦 Todos'}
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-400">SKU {cobDetalle.sku}</span>
+                    </div>
+                  )}
+                  <h3 className="text-base font-bold text-gray-800">{cobDetalle.descripcion ?? cobDetalle.sku}</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {cobDetalle.loading ? 'Cargando...' : `${cobDetalle.pdvs.length} PDVs · Snapshot ${cob?.fecha ?? ''}`}
+                  </p>
+                </div>
+                <button onClick={() => setCobDetalle(null)}
+                        className="text-gray-400 hover:text-gray-700 text-2xl leading-none">×</button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-auto">
+                {cobDetalle.loading ? (
+                  <div className="py-16 text-center text-gray-400 text-sm">Cargando PDVs...</div>
+                ) : cobDetalle.pdvs.length === 0 ? (
+                  <div className="py-16 text-center text-gray-400 text-sm">Sin PDVs para este SKU.</div>
+                ) : (
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0 z-10">
+                      <tr>
+                        <th className="px-4 py-2.5 text-left font-semibold w-8">#</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Punto de Venta</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Store Nbr</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Cadena</th>
+                        <th className="px-3 py-2.5 text-left font-semibold">Categoría</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Unidades</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {cobDetalle.pdvs.map((p, i) => (
+                        <tr key={`${p.punto_venta}-${p.store_nbr ?? ''}-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                          <td className="px-4 py-2 text-gray-400 tabular-nums">{i + 1}</td>
+                          <td className="px-3 py-2 text-gray-800">{p.punto_venta}</td>
+                          <td className="px-3 py-2 text-[11px] font-mono text-gray-500">{p.store_nbr ?? '—'}</td>
+                          <td className="px-3 py-2">
+                            {p.cadena ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                                    style={{ background: CADENA_COLORS[p.cadena] ?? '#6b7280' }}>
+                                {p.cadena}
+                              </span>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-gray-600 text-[11px]">
+                            {p.categoria ?? <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className={`px-3 py-2 text-right tabular-nums font-bold ${
+                            p.inv_mano < 3   ? 'text-red-600' :
+                            p.inv_mano <= 10 ? 'text-amber-600' :
+                                               'text-emerald-600'
+                          }`}>
+                            {Math.round(p.inv_mano)}
+                          </td>
+                        </tr>
+                      ))}
+                      {/* Total */}
+                      <tr className="bg-gray-900 text-white font-bold">
+                        <td className="px-4 py-2.5" colSpan={5}>TOTAL · {cobDetalle.pdvs.length} PDVs</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">
+                          {Math.round(cobDetalle.pdvs.reduce((s, p) => s + p.inv_mano, 0))}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between">
+                <p className="text-[10px] text-gray-500">
+                  Click fuera del modal o el botón × para cerrar.
+                </p>
+                <button onClick={() => {
+                  const rows = cobDetalle.pdvs.map(p => [
+                    p.punto_venta, p.store_nbr ?? '', p.cadena, p.categoria ?? '',
+                    p.sku, p.codigo_barras, p.descripcion ?? '',
+                    Math.round(p.inv_mano),
+                  ])
+                  const header = ['Punto de Venta','Store Nbr','Cadena','Categoría','SKU','UPC','Descripción','Unidades']
+                  const csv = [header, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n')
+                  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+                  const url  = URL.createObjectURL(blob)
+                  const a    = document.createElement('a')
+                  a.href = url
+                  a.download = `PDVs_WM_${cobDetalle.sku}_${cobDetalle.bucket}.csv`
+                  a.click()
+                  URL.revokeObjectURL(url)
+                }}
+                        className="text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+                  <Download size={12}/> Exportar CSV
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </EjecucionLayout>
   )
 }
@@ -2503,10 +2696,12 @@ function CoberturaSkuTable({
   rows,
   universo,
   coberturaEfectiva,
+  onCellClick,
 }: {
   rows: any[]
   universo: number
   coberturaEfectiva: number
+  onCellClick?: (sku: string, descripcion: string | null, bucket: 'todos' | 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10') => void
 }) {
   type Col = 'descripcion' | 'menos_de_3' | 'entre_3_y_10' | 'mayor_a_10' | 'total_pdvs' | 'cobertura_pct'
   const { toggleSort, sorted, SortArrow } = useTableSort<any, Col>(
@@ -2561,21 +2756,57 @@ function CoberturaSkuTable({
                   <span className="ml-2 text-[10px] text-gray-400 font-mono">{r.sku}</span>
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">
-                  {r.menos_de_3 > 0
-                    ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-red-100 text-red-700">{r.menos_de_3}</span>
-                    : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                  {r.menos_de_3 > 0 ? (
+                    onCellClick ? (
+                      <button
+                        onClick={() => onCellClick(r.sku, r.descripcion ?? null, 'menos_de_3')}
+                        className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-red-100 text-red-700 hover:bg-red-200 hover:ring-2 hover:ring-red-300 transition-all cursor-pointer"
+                        title="Ver PDVs con stock < 3">
+                        {r.menos_de_3}
+                      </button>
+                    ) : (
+                      <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-red-100 text-red-700">{r.menos_de_3}</span>
+                    )
+                  ) : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">
-                  {r.entre_3_y_10 > 0
-                    ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-amber-100 text-amber-700">{r.entre_3_y_10}</span>
-                    : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                  {r.entre_3_y_10 > 0 ? (
+                    onCellClick ? (
+                      <button
+                        onClick={() => onCellClick(r.sku, r.descripcion ?? null, 'entre_3_y_10')}
+                        className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-amber-100 text-amber-700 hover:bg-amber-200 hover:ring-2 hover:ring-amber-300 transition-all cursor-pointer"
+                        title="Ver PDVs con stock 3–10">
+                        {r.entre_3_y_10}
+                      </button>
+                    ) : (
+                      <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-amber-100 text-amber-700">{r.entre_3_y_10}</span>
+                    )
+                  ) : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">
-                  {r.mayor_a_10 > 0
-                    ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-700">{r.mayor_a_10}</span>
-                    : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                  {r.mayor_a_10 > 0 ? (
+                    onCellClick ? (
+                      <button
+                        onClick={() => onCellClick(r.sku, r.descripcion ?? null, 'mayor_a_10')}
+                        className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-700 hover:bg-emerald-200 hover:ring-2 hover:ring-emerald-300 transition-all cursor-pointer"
+                        title="Ver PDVs con stock > 10">
+                        {r.mayor_a_10}
+                      </button>
+                    ) : (
+                      <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-700">{r.mayor_a_10}</span>
+                    )
+                  ) : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
                 </td>
-                <td className="px-3 py-2.5 text-right tabular-nums bg-gray-50/60 font-bold text-gray-800">{r.total_pdvs}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums bg-gray-50/60 font-bold text-gray-800">
+                  {onCellClick ? (
+                    <button
+                      onClick={() => onCellClick(r.sku, r.descripcion ?? null, 'todos')}
+                      className="hover:text-blue-700 hover:underline cursor-pointer"
+                      title="Ver todos los PDVs con stock">
+                      {r.total_pdvs}
+                    </button>
+                  ) : r.total_pdvs}
+                </td>
                 <td className="px-3 py-2.5 text-right tabular-nums bg-blue-50/40">
                   <div className="flex items-center justify-end gap-2">
                     <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">

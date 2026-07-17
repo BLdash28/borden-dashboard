@@ -64,11 +64,13 @@ interface Reporte {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TIPO_LABELS: Record<string, string> = {
-  ventas_por_pais:    'Ventas por País',
-  top_productos:      'Top Productos',
-  kpis_resumen:       'KPIs Resumen',
-  top_tiendas:        'Top Tiendas',
-  cobertura_quiebres: 'Cobertura / Quiebres',
+  ventas_por_pais:      'Ventas por País',
+  top_productos:        'Top Productos',
+  kpis_resumen:         'KPIs Resumen',
+  top_tiendas:          'Top Tiendas',
+  cobertura_quiebres:   'Cobertura / Quiebres',
+  cobertura_walmart_cr: 'Cobertura Walmart CR',
+  cobertura_walmart_gt: 'Cobertura Walmart GT',
 }
 
 const DIAS_SEMANA = [
@@ -898,7 +900,9 @@ export default function ReporteriaPage() {
                   </div>
 
                   {/* Período — no aplica para cobertura (siempre usa fecha más reciente) */}
-                  {form.tipo_reporte === 'cobertura_quiebres' ? (
+                  {form.tipo_reporte === 'cobertura_quiebres'
+                    || form.tipo_reporte === 'cobertura_walmart_cr'
+                    || form.tipo_reporte === 'cobertura_walmart_gt' ? (
                     <div className="flex items-center gap-2 pt-5">
                       <span className="text-xs text-gray-400 italic">Período: siempre usa el corte más reciente disponible</span>
                     </div>

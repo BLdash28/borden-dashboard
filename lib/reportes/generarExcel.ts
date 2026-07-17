@@ -1,6 +1,8 @@
 import * as XLSX from 'xlsx'
 import ExcelJS from 'exceljs'
 import { pool } from '@/lib/db/pool'
+import { generarCoberturaCR } from './cobertura-walmart-cr'
+import { generarCoberturaGT } from './cobertura-walmart-gt'
 
 export type TipoReporte =
   | 'ventas_por_pais'
@@ -8,6 +10,8 @@ export type TipoReporte =
   | 'kpis_resumen'
   | 'top_tiendas'
   | 'cobertura_quiebres'
+  | 'cobertura_walmart_cr'
+  | 'cobertura_walmart_gt'
 
 interface Filtros {
   pais?:      string[]
@@ -87,6 +91,14 @@ export async function generarExcel(
 
     case 'cobertura_quiebres': {
       return await _generarCobertura(filtros)
+    }
+
+    case 'cobertura_walmart_cr': {
+      return await generarCoberturaCR(filtros)
+    }
+
+    case 'cobertura_walmart_gt': {
+      return await generarCoberturaGT(filtros)
     }
   }
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
+import { CADENA_NORM_SQL } from '@/lib/db/walmart-cadena'
 
 export const revalidate = 300
 
@@ -90,13 +91,13 @@ export async function GET(req: NextRequest) {
         [pais, ...wG.params],
       ),
 
-      // Por cadena — todos los PDVs y los con stock
+      // Por cadena — todos los PDVs y los con stock (normaliza rptcodes MI/ME/HM/PI → nombres)
       pool.query(
         `WITH ult AS (
            SELECT MAX(fecha) AS f FROM fact_inventario_walmart_pdv WHERE pais = $1
          )
          SELECT
-           cadena,
+           ${CADENA_NORM_SQL} AS cadena,
            COUNT(DISTINCT punto_venta)                                             AS pdvs_total,
            COUNT(DISTINCT punto_venta) FILTER (WHERE inv_mano > 0)                 AS pdvs_con_stock,
            COUNT(DISTINCT COALESCE(sku, codigo_barras)) FILTER (WHERE inv_mano > 0) AS skus,
@@ -106,7 +107,7 @@ export async function GET(req: NextRequest) {
            AND fecha = (SELECT f FROM ult)
            AND cadena IS NOT NULL AND cadena <> ''
            AND ${wCad.where}
-         GROUP BY cadena
+         GROUP BY ${CADENA_NORM_SQL}
          ORDER BY pdvs_total DESC`,
         [pais, ...wCad.params],
       ),
