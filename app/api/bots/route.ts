@@ -5,6 +5,19 @@ export const dynamic = 'force-dynamic'
 
 export async function GET() {
   try {
+    // Auto-reset de bots pegados en 'running' > 2h — cubre el caso donde el
+    // workflow del bot falla antes de enviar el callback a /api/bots/status
+    // (network, timeout, workflow apagado, etc.) y evita que el estado se
+    // quede en "En proceso" indefinidamente en la UI.
+    await pool.query(`
+      UPDATE config_bots
+      SET ultimo_status  = 'error',
+          ultimo_mensaje = 'Sin callback del workflow tras 2h — revisar GitHub Actions',
+          updated_at     = NOW()
+      WHERE ultimo_status = 'running'
+        AND ultima_ejecucion < NOW() - INTERVAL '2 hours'
+    `)
+
     const { rows } = await pool.query(`
       SELECT id, nombre, tipo, descripcion, endpoint_url,
              '••••••••' AS api_key,
