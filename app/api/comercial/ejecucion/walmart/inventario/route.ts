@@ -3,8 +3,9 @@ import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
 
-export const dynamic   = 'force-dynamic'
-export const revalidate = 0
+// Snapshot de inventario Walmart — el bot RetailLink lo actualiza 1×día.
+// 30 min de cache reduce carga masivamente sin desactualizar percepciblemente.
+export const revalidate = 1800
 
 export async function GET(req: NextRequest) {
   try {

@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const revalidate = 600
+// Filtros de dimensiones (cadena, subcategoria, formato, PDV, SKU) — casi
+// estáticos. Solo cambian cuando entra un producto nuevo o abre una tienda.
+export const revalidate = 3600
 
 /**
  * Opciones de filtros globales del módulo Walmart CA por país.

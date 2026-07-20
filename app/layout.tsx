@@ -1,8 +1,25 @@
 import React from 'react'
 import type { Metadata } from 'next'
+import { DM_Sans, Syne } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'sonner'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+
+// Self-host de fuentes con next/font — elimina round trip a Google Fonts,
+// preload automático, CLS = 0. Reemplaza el <link rel="stylesheet"> que
+// bloqueaba render y agregaba ~300ms de latencia a Google.
+const dmSans = DM_Sans({
+  subsets: ['latin'],
+  weight: ['300', '400', '500', '600'],
+  display: 'swap',
+  variable: '--font-dm-sans',
+})
+const syne = Syne({
+  subsets: ['latin'],
+  weight: ['400', '600', '700', '800'],
+  display: 'swap',
+  variable: '--font-syne',
+})
 
 export const metadata: Metadata = {
   title: 'BL Food · Dashboard BI',
@@ -12,15 +29,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="es" suppressHydrationWarning>
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="es" suppressHydrationWarning className={`${dmSans.variable} ${syne.variable}`}>
       <body>
         {children}
         <Toaster richColors position="top-right" />

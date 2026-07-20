@@ -501,10 +501,19 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
     return q.toString()
   }
 
-  const filterKey = useMemo(() =>
+  const rawFilterKey = useMemo(() =>
     [cadenasSel, categoriaSel, subcatSel, formatoSel, puntoSel, skuSel]
       .map(a => a.join('|')).join('::'),
     [cadenasSel, categoriaSel, subcatSel, formatoSel, puntoSel, skuSel])
+
+  // Debounce del filterKey — cada toggle en un multi-select cambia el key y
+  // dispara refetch de 5+ endpoints. 300ms permite al user clicar varios
+  // items antes de disparar una sola tanda de fetches.
+  const [filterKey, setFilterKey] = useState(rawFilterKey)
+  useEffect(() => {
+    const t = setTimeout(() => setFilterKey(rawFilterKey), 300)
+    return () => clearTimeout(t)
+  }, [rawFilterKey])
 
   useEffect(() => { loadedRef.current = {} }, [filterKey])
 

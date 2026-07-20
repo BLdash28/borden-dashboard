@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const dynamic = 'force-dynamic'
-export const revalidate = 0
+// Snapshot inventario Selectos — se actualiza junto con la carga del bot/scripts.
+export const revalidate = 1800
 
 const IS_PDV  = `NOT (tienda ILIKE '1001%' OR tienda ILIKE '1017%')`
 const IS_CEDI = `(tienda ILIKE '1001%' OR tienda ILIKE '1017%')`

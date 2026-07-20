@@ -1,8 +1,16 @@
 'use client'
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import { ArrowLeft, ExternalLink, RefreshCw } from 'lucide-react'
-import InnovacionesSection from '@/components/ejecucion/InnovacionesSection'
+import ChartSkeleton from '@/components/ui/ChartSkeleton'
+
+// Innovaciones trae recharts + toda su lógica — solo se necesita cuando el
+// user clica el tab correspondiente. Dynamic corta el bundle inicial.
+const InnovacionesSection = dynamic(
+  () => import('@/components/ejecucion/InnovacionesSection'),
+  { loading: () => <ChartSkeleton />, ssr: false },
+)
 
 const SLUG         = 'gt-unisuper'
 const PAIS_NOMBRE  = 'Guatemala'

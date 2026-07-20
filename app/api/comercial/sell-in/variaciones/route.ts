@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const revalidate = 0
+// Sell-in variaciones — data que solo cambia con nueva carga de facturas.
+export const revalidate = 1800
 
 const inC = (col: string, vals: string[]) =>
   `${col} IN (${vals.map(v => `'${v.replace(/'/g, "''")}'`).join(',')})`
