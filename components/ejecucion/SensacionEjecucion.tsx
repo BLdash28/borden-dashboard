@@ -51,8 +51,13 @@ const TABS = [
 ] as const
 type TabKey = typeof TABS[number]['key']
 
-export default function SensacionEjecucion() {
-  const [tab,        setTab]        = useState<TabKey>('resumen')
+interface SensacionEjecucionProps {
+  /** Tab inicial cuando el componente se embebe fuera de su ruta (ej. licenciamiento). */
+  initialTab?: TabKey
+}
+
+export default function SensacionEjecucion({ initialTab }: SensacionEjecucionProps = {}) {
+  const [tab,        setTab]        = useState<TabKey>(initialTab ?? 'resumen')
   const [moneda,     setMoneda]     = useState<'usd' | 'crc'>('usd')
   const [cadenas,    setCadenas]    = useState<string[]>([])
   const [productos,  setProductos]  = useState<string[]>([])

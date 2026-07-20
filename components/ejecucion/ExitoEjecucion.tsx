@@ -315,10 +315,17 @@ type InnovItem = {
 
 // ── Componente ────────────────────────────────────────────────────────────
 
-export default function ExitoEjecucion() {
+interface ExitoEjecucionProps {
+  /** Sección inicial cuando el componente se embebe fuera de su ruta (ej. licenciamiento). */
+  initialSection?: string
+  /** Cuando true, oculta la nav de secciones — el user queda "bloqueado" en initialSection. */
+  hideSectionNav?: boolean
+}
+
+export default function ExitoEjecucion({ initialSection, hideSectionNav }: ExitoEjecucionProps = {}) {
   const storageKey = 'exito-co'
 
-  const [section,      setSection]      = useState('resumen')
+  const [section,      setSection]      = useState(initialSection ?? 'resumen')
   const [div,          setDiv]          = useState('TOTAL')
   // Filtros globales (multi-select)
   const [cadenasSel,    setCadenasSel]    = useState<string[]>([])
@@ -3469,22 +3476,24 @@ export default function ExitoEjecucion() {
         </div>
       </div>
 
-      {/* Section nav */}
-      <div className="px-6 pt-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-          <div className="flex overflow-x-auto">
-            {SECTIONS.map(s => (
-              <button key={s.key} onClick={() => goSection(s.key)}
-                className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors flex-shrink-0
-                  ${section === s.key
-                    ? 'border-amber-500 text-amber-600 bg-amber-50/40'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
-                {s.label}
-              </button>
-            ))}
+      {/* Section nav — se oculta cuando el componente se embebe con lock de sección */}
+      {!hideSectionNav && (
+        <div className="px-6 pt-4">
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex overflow-x-auto">
+              {SECTIONS.map(s => (
+                <button key={s.key} onClick={() => goSection(s.key)}
+                  className={`px-4 py-3 text-sm font-medium whitespace-nowrap border-b-2 transition-colors flex-shrink-0
+                    ${section === s.key
+                      ? 'border-amber-500 text-amber-600 bg-amber-50/40'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Contenido */}
       <div className="px-6 py-6 flex-1">

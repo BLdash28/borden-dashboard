@@ -39,7 +39,24 @@ export default function MobileNav({ profile }: { profile?: any }) {
     router.refresh()
   }
 
-  const isSectionOpen = (s: string) => openSections[s] !== false
+  // Mismo comportamiento que Sidebar desktop: auto-abrir la sección cuya URL
+  // activa esté dentro (en lugar de "todas abiertas por default"). Permite
+  // override manual con toggle.
+  const sectionHasActiveItem = (section: string) => {
+    const group = menus.find(g => g.section === section)
+    if (!group) return false
+    return group.items.some(item => {
+      if (item.children) {
+        return item.children.some(c => pathname === c.href || pathname.startsWith(c.href + '/'))
+      }
+      const fullHref = currentDept ? `/dashboard/${currentDept}${item.href}` : '#'
+      return pathname === fullHref || pathname.startsWith(fullHref + '/')
+    })
+  }
+  const isSectionOpen = (s: string) => {
+    if (openSections[s] !== undefined) return openSections[s]
+    return sectionHasActiveItem(s)
+  }
   const toggleSection = (s: string) =>
     setOpenSections(prev => ({ ...prev, [s]: !isSectionOpen(s) }))
 
@@ -180,6 +197,9 @@ export default function MobileNav({ profile }: { profile?: any }) {
                 }
 
                 const fullHref = currentDept ? `/dashboard/${currentDept}${item.href}` : '#'
+                // Mismo criterio que Sidebar: no marcar como active si el path
+                // es un subitem de sell-in/sellout (esos padres tienen sus
+                // propios items hijos y no deben verse "activos" desde ellos).
                 const isActive = pathname === fullHref ||
                   (pathname.startsWith(fullHref + '/') &&
                     fullHref !== `/dashboard/${currentDept}/sell-in` &&
