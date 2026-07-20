@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
+import { withTiming } from '@/lib/api/withTiming'
 
 export const revalidate = 300
 
-export async function GET(req: NextRequest) {
+export const GET = withTiming(async function GET(req: NextRequest) {
   try {
     const sp   = req.nextUrl.searchParams
     const pais = sp.get('pais') ?? 'CR'
@@ -83,4 +84,4 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     return handleApiError(err)
   }
-}
+})

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { withTiming } from '@/lib/api/withTiming'
 
 export const revalidate = 300
 
@@ -8,7 +9,7 @@ export const revalidate = 300
  * Innovaciones · Selectos SV
  * Heurística: primera venta en los últimos N días (default 180).
  */
-export async function GET(req: NextRequest) {
+export const GET = withTiming(async function GET(req: NextRequest) {
   try {
     const dias = parseInt(req.nextUrl.searchParams.get('dias') ?? '180')
 
@@ -94,4 +95,4 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     return handleApiError(err)
   }
-}
+})

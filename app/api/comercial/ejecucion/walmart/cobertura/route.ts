@@ -3,6 +3,7 @@ import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { parseWalmartFilters, buildWalmartWhere } from '@/lib/api/walmart-filtros'
 import { CADENA_NORM_SQL } from '@/lib/db/walmart-cadena'
+import { withTiming } from '@/lib/api/withTiming'
 
 export const revalidate = 300
 
@@ -23,7 +24,7 @@ export const revalidate = 300
  * NB: fact_inventario_walmart_pdv NO tiene subcategoría/formato — se omiten
  * ambos filtros. El filtro por cadena SÍ aplica.
  */
-export async function GET(req: NextRequest) {
+export const GET = withTiming(async function GET(req: NextRequest) {
   try {
     const pais = req.nextUrl.searchParams.get('pais') ?? 'CR'
     const f    = parseWalmartFilters(req)
@@ -194,4 +195,4 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     return handleApiError(err)
   }
-}
+})

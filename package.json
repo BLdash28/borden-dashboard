@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "analyze": "ANALYZE=true next build"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.81",
@@ -40,6 +41,7 @@
     "zustand": "^5.0.2"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.2.10",
     "@types/node": "^22.9.0",
     "@types/pdfkit": "^0.17.6",
     "@types/react": "^18.3.12",

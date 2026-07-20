@@ -44,6 +44,8 @@ interface KpiData {
   ingresos: Kpi; cajas: Kpi; margen: Kpi
   margen_pct: number; margen_pct_delta: number
   clientes: number; skus: number
+  libras?: Kpi
+  litros?: Kpi
 }
 
 const COLORS = { 2025: '#60a5fa', proyeccion: '#94a3b8', 2026: '#c8873a' }
@@ -272,6 +274,8 @@ export default function SellInResumen() {
     { label: 'Utilidad Bruta YTD', value: '$' + kpi.margen.valor.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }), delta: kpi.margen.delta, icon: '💵', sub: null },
     { label: 'Margen Bruto Prom. YTD', value: kpi.margen_pct.toFixed(1) + '%', delta: kpi.margen_pct_delta, icon: '📊', sub: null, isPct: true },
     { label: 'Cajas YTD',          value: Math.round(kpi.cajas.valor).toLocaleString('en-US'), delta: kpi.cajas.delta, icon: '📦', sub: null },
+    { label: 'Libras Totales (Quesos) YTD', value: Math.round(kpi.libras?.valor ?? 0).toLocaleString('en-US') + ' lb', delta: kpi.libras?.delta ?? 0, icon: '⚖️', sub: null },
+    { label: 'Litros Totales (Leches) YTD', value: Math.round(kpi.litros?.valor ?? 0).toLocaleString('en-US') + ' L',  delta: kpi.litros?.delta ?? 0, icon: '🥛', sub: null },
   ] : []
 
   return (
@@ -341,9 +345,9 @@ export default function SellInResumen() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
         {loading
-          ? Array(4).fill(0).map((_,i) => (
+          ? Array(6).fill(0).map((_,i) => (
               <div key={i} className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 animate-pulse">
                 <div className="h-3 bg-gray-100 rounded w-2/3 mb-3"/>
                 <div className="h-7 bg-gray-100 rounded w-1/2 mb-2"/>

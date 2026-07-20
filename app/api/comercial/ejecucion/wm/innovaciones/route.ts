@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
+import { withTiming } from '@/lib/api/withTiming'
 
 export const revalidate = 300
 
@@ -15,7 +16,7 @@ export const revalidate = 300
  *   - cadena (opcional): filtra por cadena
  *   - dias (opcional, default 180): ventana de "primera venta reciente"
  */
-export async function GET(req: NextRequest) {
+export const GET = withTiming(async function GET(req: NextRequest) {
   try {
     const pais   = req.nextUrl.searchParams.get('pais') ?? ''
     const cadena = req.nextUrl.searchParams.get('cadena') ?? ''
@@ -180,4 +181,4 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     return handleApiError(err)
   }
-}
+})

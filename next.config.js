@@ -1,3 +1,9 @@
+// Bundle analyzer — activar con `ANALYZE=true npm run build` (o `analyze` script).
+// Genera reports HTML en .next/analyze/ con el peso de cada chunk.
+const withBundleAnalyzer = require('@next/bundle-analyzer')({
+  enabled: process.env.ANALYZE === 'true',
+})
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   compress: true,
@@ -17,4 +23,4 @@ const nextConfig = {
   },
   eslint: { ignoreDuringBuilds: true },
 }
-module.exports = nextConfig
+module.exports = withBundleAnalyzer(nextConfig)

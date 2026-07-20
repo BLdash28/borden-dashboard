@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 import { parseExitoFilters, buildExitoWhere } from '@/lib/api/exito-filtros'
+import { withTiming } from '@/lib/api/withTiming'
 
 export const revalidate = 300
 
@@ -13,7 +14,7 @@ export const revalidate = 300
  * Si aún no hay ventas, se marca con `sin_ventas: true` — la sección UI
  * puede mostrar el catálogo y esperar a que arranquen.
  */
-export async function GET(req: NextRequest) {
+export const GET = withTiming(async function GET(req: NextRequest) {
   try {
     const filt = parseExitoFilters(req)
     // WHERE parametrizado que se agrega a cada sub-query — $3+ (ya usamos $1,$2 para skus/barras)
@@ -132,4 +133,4 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     return handleApiError(err)
   }
-}
+})

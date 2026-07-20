@@ -39,7 +39,9 @@ export async function GET(req: NextRequest) {
 
     // Año actual: YTD completo
     // Año anterior: solo los mismos meses (1..ultimoMes) para comparación justa
-    const [currR, prevR] = await Promise.all([
+    // total_lb: solo Quesos (dp.peso_lb NOT NULL)
+    // total_litros: solo Leches (cajas × VNPK × litros)
+    const [currR, prevR, lbltR] = await Promise.all([
       pool.query(`
         SELECT
           COALESCE(SUM(venta_neta),     0) AS ingresos,
@@ -68,10 +70,31 @@ export async function GET(req: NextRequest) {
             AND (ano, mes) NOT IN (SELECT DISTINCT ano_pedido AS ano, mes FROM fact_sales_sellin)
         ) sub
       `),
+      // Libras (Quesos) + Litros (Leches) YTD año actual y YTD año anterior
+      pool.query(`
+        WITH cur AS (
+          SELECT sku, cantidad_cajas FROM fact_sales_sellin
+          WHERE ano_pedido = ${ano} AND mes <= ${ultimoMes} ${extra}
+        ),
+        prev AS (
+          SELECT sku, cantidad_cajas FROM fact_sales_sellin
+          WHERE ano_pedido = ${ano - 1} AND mes <= ${ultimoMes} ${extra}
+        )
+        SELECT
+          COALESCE((SELECT ROUND(SUM(c.cantidad_cajas * dp.peso_lb)::numeric, 1) FROM cur c JOIN dim_producto dp ON dp.sku=c.sku WHERE dp.peso_lb IS NOT NULL), 0) AS cur_lb,
+          COALESCE((SELECT ROUND(SUM(c.cantidad_cajas * COALESCE(dp.vnpk_qty,1) * dp.litros)::numeric, 1) FROM cur c JOIN dim_producto dp ON dp.sku=c.sku WHERE dp.litros IS NOT NULL), 0) AS cur_l,
+          COALESCE((SELECT ROUND(SUM(p.cantidad_cajas * dp.peso_lb)::numeric, 1) FROM prev p JOIN dim_producto dp ON dp.sku=p.sku WHERE dp.peso_lb IS NOT NULL), 0) AS prev_lb,
+          COALESCE((SELECT ROUND(SUM(p.cantidad_cajas * COALESCE(dp.vnpk_qty,1) * dp.litros)::numeric, 1) FROM prev p JOIN dim_producto dp ON dp.sku=p.sku WHERE dp.litros IS NOT NULL), 0) AS prev_l
+      `),
     ])
 
     const cur  = currR.rows[0]
     const prev = prevR.rows[0]
+    const lblt = lbltR.rows[0] ?? { cur_lb: 0, cur_l: 0, prev_lb: 0, prev_l: 0 }
+    const curLb = parseFloat(lblt.cur_lb) || 0
+    const curL  = parseFloat(lblt.cur_l)  || 0
+    const prevLb = parseFloat(lblt.prev_lb) || 0
+    const prevL  = parseFloat(lblt.prev_l)  || 0
 
     const delta = (c: number, p: number) =>
       p > 0 ? ((c - p) / p) * 100 : c > 0 ? 100 : 0
@@ -93,6 +116,8 @@ export async function GET(req: NextRequest) {
         margen_pct_delta: margenPct - margenPctPrev,
         clientes: parseInt(cur.clientes),
         skus:     parseInt(cur.skus),
+        libras:   { valor: curLb, delta: delta(curLb, prevLb) },
+        litros:   { valor: curL,  delta: delta(curL,  prevL) },
       },
     })
   } catch (err) {
