@@ -4,19 +4,20 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { RefreshCw, Download, ChevronDown, ChevronRight } from 'lucide-react'
 import MultiSelect from '@/components/dashboard/MultiSelect'
 import { KpiCard } from '@/components/ejecucion/shared'
+import { useUserId } from '@/lib/hooks/useUserId'
+import { readScopedFor, writeScopedFor, removeScopedFor } from '@/lib/storage/userScopedStorage'
 
 const STORAGE_KEY = 'bl_sellin_v1'
-function readStorage() {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return null
-    return JSON.parse(raw) as {
-      fAnos?: string[]; fMeses?: string[]; fPaises?: string[]; fCats?: string[]
-      fSubcats?: string[]; fClientes?: string[]; fSkus?: string[]; fProveedor?: string[]
-      fTipos?: string[]
-    }
-  } catch { return null }
+type StoredFilters = {
+  fAnos?: string[]; fMeses?: string[]; fPaises?: string[]; fCats?: string[]
+  fSubcats?: string[]; fClientes?: string[]; fSkus?: string[]; fProveedor?: string[]
+  fTipos?: string[]
+}
+function readStorage(userId: string | null): StoredFilters | null {
+  if (!userId) return null
+  const raw = readScopedFor(STORAGE_KEY, userId)
+  if (!raw) return null
+  try { return JSON.parse(raw) as StoredFilters } catch { return null }
 }
 
 const MESES = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
@@ -50,6 +51,7 @@ interface SellInRow {
   dias_venta:      number
   cajas:           number
   total_lb:        number | null
+  total_litros:    number | null
   ingresos:        number
   precio_promedio: number
 }
@@ -95,7 +97,7 @@ export default function SellInPage() {
   // Data
   const [rows,    setRows]    = useState<SellInRow[]>([])
   const [total,   setTotal]   = useState(0)
-  const [kpi,     setKpi]     = useState<{ total_ingresos: number; total_unidades: number; total_clientes: number; total_lb: number } | null>(null)
+  const [kpi,     setKpi]     = useState<{ total_ingresos: number; total_unidades: number; total_clientes: number; total_lb: number; total_litros: number } | null>(null)
   const [page,    setPage]    = useState(1)
   const [loading,         setLoading]         = useState(true)
   const [sort,            setSort]            = useState<SortState>({ key: 'ingresos', dir: 'desc' })
@@ -103,16 +105,19 @@ export default function SellInPage() {
   const [filtrosOpen,     setFiltrosOpen]     = useState(false)
 
   const PAGE_SIZE = 500
+  const userId    = useUserId()
   const initDone  = useRef(false)
 
   // ── Cargar períodos disponibles + estado inicial ────────────────────────────
+  // Se dispara una vez que hay userId (para leer los filtros scoped al usuario).
   useEffect(() => {
     if (initDone.current) return
+    if (userId === null) return   // esperar a que useUserId resuelva la sesión
     initDone.current = true
 
     // Hidratar filtros desde localStorage al montar (evita hydration mismatch
     // porque no leemos localStorage en el initializer de useState).
-    const saved = readStorage()
+    const saved = readStorage(userId)
     const sAnos    = saved?.fAnos      ?? []
     const sMeses   = saved?.fMeses     ?? []
     const sPaises  = saved?.fPaises    ?? []
@@ -149,7 +154,7 @@ export default function SellInPage() {
         setAnos(Object.keys(mm).map(Number).sort((a, b) => b - a))
       })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [userId])
 
   // ── helpers para fetch de opciones ─────────────────────────────────────────
   const buildPeriodParams = useCallback((p = new URLSearchParams()) => {
@@ -164,11 +169,10 @@ export default function SellInPage() {
     fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => setPaisOpts(j.opts ?? []))
   }, [buildPeriodParams])
 
-  // ── NIVEL 2 — Cliente: requiere País ─────────────────────────────────────────
+  // ── Cliente: siempre disponible (respeta período + país si aplica) ─────────
   useEffect(() => {
-    if (!fPaises.length) { setClienteOpts([]); setFClientes([]); return }
     const p = buildPeriodParams(new URLSearchParams({ dim: 'cliente' }))
-    p.set('paises', fPaises.join(','))
+    if (fPaises.length) p.set('paises', fPaises.join(','))
     fetch('/api/ventas/sell-in/opts?' + p).then(r => r.json()).then(j => {
       const opts = j.opts ?? []
       setClienteOpts(opts)
@@ -261,6 +265,7 @@ export default function SellInPage() {
           dias_venta:      toNum(r.dias_venta),
           cajas:           toNum(r.cajas),
           total_lb:        r.total_lb != null ? toNum(r.total_lb) : null,
+          total_litros:    r.total_litros != null ? toNum(r.total_litros) : null,
           ingresos:        toNum(r.ingresos),
           precio_promedio: toNum(r.precio_promedio),
         })))
@@ -270,6 +275,7 @@ export default function SellInPage() {
           total_unidades: toNum(j.kpi.total_unidades),
           total_clientes: toNum(j.kpi.total_clientes),
           total_lb:       toNum(j.kpi.total_lb),
+          total_litros:   toNum(j.kpi.total_litros),
         })
       })
       .finally(() => setLoading(false))
@@ -279,12 +285,11 @@ export default function SellInPage() {
     anos = fAnos, meses = fMeses, paises = fPaises, cats = fCats, subcats = fSubcats,
     clientes = fClientes, skus = fSkus, proveedores = fProveedor, tipos = fTipos
   ) => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify({
-        fAnos: anos, fMeses: meses, fPaises: paises, fCats: cats, fSubcats: subcats,
-        fClientes: clientes, fSkus: skus, fProveedor: proveedores, fTipos: tipos,
-      }))
-    } catch {}
+    if (!userId) return
+    writeScopedFor(STORAGE_KEY, userId, JSON.stringify({
+      fAnos: anos, fMeses: meses, fPaises: paises, fCats: cats, fSubcats: subcats,
+      fClientes: clientes, fSkus: skus, fProveedor: proveedores, fTipos: tipos,
+    }))
   }
 
   const triggerCargar = (
@@ -304,7 +309,7 @@ export default function SellInPage() {
     setFPaises([]); setFCats([]); setFSubcats([]); setFClientes([]); setFSkus([]); setFProveedor([])
     setFTipos([])
     setPage(1)
-    localStorage.removeItem(STORAGE_KEY)
+    removeScopedFor(STORAGE_KEY, userId)
     cargar([], [], [], [], [], [], [], [], [], 1)
   }
 
@@ -538,13 +543,15 @@ export default function SellInPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
         <KpiCard label="Ingresos Totales" borderLeftColor="#f59e0b"
           value={loading ? '...' : fmt(kpi?.total_ingresos ?? 0)} />
         <KpiCard label="Cajas Totales" borderLeftColor="#3b82f6"
           value={loading ? '...' : fmtN(kpi?.total_unidades ?? 0)} />
         <KpiCard label="Libras Totales (Quesos)" borderLeftColor="#8b5cf6"
           value={loading ? '...' : `${fmtN(kpi?.total_lb ?? 0)} lb`} />
+        <KpiCard label="Litros Totales (Leches)" borderLeftColor="#06b6d4"
+          value={loading ? '...' : `${fmtN(kpi?.total_litros ?? 0)} L`} />
         <KpiCard label="Clientes Activos" borderLeftColor="#10b981"
           value={loading ? '...' : (kpi?.total_clientes ?? 0).toLocaleString()} />
       </div>
@@ -599,6 +606,7 @@ export default function SellInPage() {
                           onClick={() => toggleSort('cajas')}
                         >Cajas{arrow('cajas')}</th>
                         <th className="text-right py-2 pr-3 whitespace-nowrap">Total Lb</th>
+                        <th className="text-right py-2 pr-3 whitespace-nowrap">Total L</th>
                         <th
                           className="text-right py-2 pr-3 cursor-pointer hover:text-gray-600 select-none"
                           onClick={() => toggleSort('ingresos')}
@@ -627,6 +635,11 @@ export default function SellInPage() {
                           <td className="py-1.5 pr-3 text-right tabular-nums text-gray-600">
                             {r.total_lb != null && r.total_lb > 0
                               ? `${fmtN(r.total_lb)} lb`
+                              : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="py-1.5 pr-3 text-right tabular-nums text-cyan-700">
+                            {r.total_litros != null && r.total_litros > 0
+                              ? `${fmtN(r.total_litros)} L`
                               : <span className="text-gray-300">—</span>}
                           </td>
                           <td className="py-1.5 pr-3 text-right font-semibold text-gray-800">{fmt(r.ingresos)}</td>

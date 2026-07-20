@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
   try {
     const sp   = req.nextUrl.searchParams
     const pais = sp.get('pais') ?? 'CR'
-    const top  = Math.min(parseInt(sp.get('top') ?? '20'), 50)
+    const top  = Math.min(parseInt(sp.get('top') ?? '20'), 200)
     const f    = parseWalmartFilters(req)
     const w    = buildWalmartWhere(f, { startAt: 2 })
 
@@ -54,7 +54,8 @@ export async function GET(req: NextRequest) {
         CASE WHEN t.grand_total > 0
              THEN ROUND((c.valor_2026 / t.grand_total * 100)::numeric, 1)
              ELSE 0 END AS share_pct
-      FROM cur c, total t
+      FROM cur c
+      CROSS JOIN total t
       LEFT JOIN prev p ON p.descripcion = c.descripcion
       ORDER BY c.valor_2026 DESC
       LIMIT ${top}

@@ -37,10 +37,16 @@ export async function GET(req: NextRequest) {
     `, [pais])
     const universoPdvs = parseInt(univR.rows[0]?.universo ?? '0') || 0
 
-    // 1. SKUs con primera venta en la ventana
+    // 1. SKUs con primera venta en la ventana.
+    // Agrupamos por una key normalizada — SKU si existe, si no UPC.
+    // Esto evita duplicados cuando un mismo SKU aparece con distinto codigo_barras
+    // (ej. filas con UPC null vs UPC completo) y viceversa.
     const catR = await pool.query(`
       WITH primera AS (
-        SELECT sku, codigo_barras,
+        SELECT
+          COALESCE(NULLIF(sku, ''), codigo_barras) AS product_key,
+          MAX(NULLIF(sku, ''))              AS sku,
+          MAX(NULLIF(codigo_barras, ''))    AS codigo_barras,
           MAX(descripcion)                  AS descripcion,
           MAX(categoria)                    AS categoria,
           MAX(subcategoria)                 AS subcategoria,
@@ -48,8 +54,9 @@ export async function GET(req: NextRequest) {
           MAX(fecha)                        AS ultima_venta
         FROM fact_ventas_walmart
         WHERE pais = $1 AND ventas_unidades > 0
+          AND COALESCE(NULLIF(sku, ''), codigo_barras) IS NOT NULL
           ${cadFilter}
-        GROUP BY sku, codigo_barras
+        GROUP BY COALESCE(NULLIF(sku, ''), codigo_barras)
       )
       SELECT * FROM primera
       WHERE primera_venta >= CURRENT_DATE - ($2::int * INTERVAL '1 day')

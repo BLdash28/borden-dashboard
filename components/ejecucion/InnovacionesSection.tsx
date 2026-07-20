@@ -195,7 +195,10 @@ export function InnovacionesSection({
                 </div>
               ) : (
                 <>
-                  <div className={`grid ${isMercadeoMode ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-6' : 'grid-cols-4'} gap-x-3 gap-y-2 mt-3`}>
+                  {/* Los 7 KPIs se muestran en ambos modos. Valor USD lleva `hide-in-mercadeo`
+                      para que en modo Mercadeo (regla: no mostrar montos) desaparezca vía CSS
+                      y el grid queda con 6 columnas. */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-x-3 gap-y-2 mt-3">
                     <div className="text-center px-1">
                       <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Primera venta</p>
                       <p className="text-xs font-semibold text-gray-800 mt-0.5">{it.primera_venta ?? '—'}</p>
@@ -206,59 +209,47 @@ export function InnovacionesSection({
                     <div className="text-center px-1">
                       <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Unidades</p>
                       <p className="text-sm font-bold text-gray-800 mt-0.5">{fmtNum(it.total_uds)}</p>
-                      {isMercadeoMode && (
-                        <p className="text-[9px] text-gray-400 leading-tight">vendidas</p>
-                      )}
+                      <p className="text-[9px] text-gray-400 leading-tight">vendidas</p>
+                    </div>
+                    <div className="text-center px-1 hide-in-mercadeo">
+                      <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Valor {monedaLabel}</p>
+                      <p className="text-sm font-bold text-amber-700 mt-0.5">{formatValor(it.total_valor)}</p>
+                      <p className="text-[9px] text-gray-400 leading-tight">acumulado</p>
                     </div>
                     <div className="text-center px-1">
-                      {isMercadeoMode ? (
-                        <>
-                          <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Stock actual</p>
-                          <p className="text-sm font-bold text-emerald-700 mt-0.5">{fmtNum(it.stock_und ?? 0)}</p>
-                          <p className="text-[9px] text-gray-400 leading-tight">und en tienda</p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Valor {monedaLabel}</p>
-                          <p className="text-sm font-bold text-emerald-700 mt-0.5">{formatValor(it.total_valor)}</p>
-                        </>
-                      )}
+                      <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Stock actual</p>
+                      <p className="text-sm font-bold text-emerald-700 mt-0.5">{fmtNum(it.stock_und ?? 0)}</p>
+                      <p className="text-[9px] text-gray-400 leading-tight">und en tienda</p>
                     </div>
-                    {isMercadeoMode && (
-                      <>
-                        <div className="text-center px-1">
-                          <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">DOH</p>
-                          <p className={`text-sm font-bold mt-0.5 ${
-                            it.doh === null || it.doh === undefined ? 'text-gray-400' :
-                            it.doh <= 7 ? 'text-red-600' :
-                            it.doh <= 14 ? 'text-amber-600' :
-                            it.doh <= 60 ? 'text-emerald-700' :
-                            it.doh <= 120 ? 'text-blue-600' :
-                                            'text-purple-600'
-                          }`}>
-                            {it.doh !== null && it.doh !== undefined ? Math.round(it.doh) : '—'}
-                          </p>
-                          <p className="text-[9px] text-gray-400 leading-tight">días</p>
-                        </div>
-                        <div className="text-center px-1">
-                          <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Cobertura</p>
-                          <p className="text-sm font-bold text-blue-700 mt-0.5">
-                            {it.cobertura_pct !== null && it.cobertura_pct !== undefined
-                              ? `${it.cobertura_pct.toFixed(1)}%`
-                              : '—'}
-                          </p>
-                          <p className="text-[9px] text-gray-400 leading-tight tabular-nums">
-                            {it.pdvs_con_stock ?? 0}/{it.universo_pdvs ?? 0} PDVs
-                          </p>
-                        </div>
-                      </>
-                    )}
+                    <div className="text-center px-1">
+                      <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">DOH</p>
+                      <p className={`text-sm font-bold mt-0.5 ${
+                        it.doh === null || it.doh === undefined ? 'text-gray-400' :
+                        it.doh <= 7 ? 'text-red-600' :
+                        it.doh <= 14 ? 'text-amber-600' :
+                        it.doh <= 60 ? 'text-emerald-700' :
+                        it.doh <= 120 ? 'text-blue-600' :
+                                        'text-purple-600'
+                      }`}>
+                        {it.doh !== null && it.doh !== undefined ? Math.round(it.doh) : '—'}
+                      </p>
+                      <p className="text-[9px] text-gray-400 leading-tight">días</p>
+                    </div>
+                    <div className="text-center px-1">
+                      <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Cobertura</p>
+                      <p className="text-sm font-bold text-blue-700 mt-0.5">
+                        {it.cobertura_pct !== null && it.cobertura_pct !== undefined
+                          ? `${it.cobertura_pct.toFixed(1)}%`
+                          : '—'}
+                      </p>
+                      <p className="text-[9px] text-gray-400 leading-tight tabular-nums">
+                        {it.pdvs_con_stock ?? 0}/{it.universo_pdvs ?? 0} PDVs
+                      </p>
+                    </div>
                     <div className="text-center px-1">
                       <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">PDVs</p>
                       <p className="text-sm font-bold text-gray-800 mt-0.5">{it.pdvs_unicos}</p>
-                      {isMercadeoMode && (
-                        <p className="text-[9px] text-gray-400 leading-tight">con historial</p>
-                      )}
+                      <p className="text-[9px] text-gray-400 leading-tight">con historial</p>
                     </div>
                   </div>
 

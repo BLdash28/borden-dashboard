@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const revalidate = 300
+export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/comercial/sell-in/periodos

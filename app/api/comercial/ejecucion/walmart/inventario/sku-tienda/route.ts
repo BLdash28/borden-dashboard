@@ -11,14 +11,21 @@ export async function GET(req: NextRequest) {
     const sp        = req.nextUrl.searchParams
     const pais      = sp.get('pais')      ?? 'CR'
     const categoria = sp.get('categoria') ?? ''
-    const cadena    = sp.get('cadena')    ?? ''
-    const saludF    = sp.get('salud')     ?? ''
+    // Compat: acepta `cadena` (singular, legacy) o `cadenas` (plural, CSV, multi-select).
+    // Ídem para `salud` / `saludes`.
+    const cadenasArr = (sp.get('cadenas') ?? sp.get('cadena') ?? '')
+      .split(',').map(s => s.trim()).filter(Boolean)
+    const saludArr   = (sp.get('saludes') ?? sp.get('salud') ?? '')
+      .split(',').map(s => s.trim()).filter(Boolean)
     const prod      = sp.get('prod')      ?? ''
 
     // Filtro cadena: expande alias (WALMART matchea HM y WALMART, PALI matchea PI y PALI, etc.)
-    // — resuelve el bug donde filtrar por "WALMART" devolvía 0 filas porque
-    //   la tabla guarda el rptcode "HM".
-    const cadFilter  = cadena ? cadenaWhereSQL(cadena).replace(/\bcadena\b/g, 't.cadena') : ''
+    // Con múltiples cadenas seleccionadas hacemos OR de todos los alias.
+    const cadFilter = cadenasArr.length
+      ? 'AND (' + cadenasArr
+          .map(c => cadenaWhereSQL(c).replace(/^AND\s*/, '').replace(/\bcadena\b/g, 't.cadena'))
+          .join(' OR ') + ')'
+      : ''
     const catFilter  = categoria ? `AND COALESCE(dp.categoria, '') = '${categoria.replace(/'/g, "''")}'` : ''
     const prodFilter = prod
       ? `AND (LOWER(COALESCE(dp.descripcion, t.descripcion, '')) LIKE LOWER('%${prod.replace(/'/g, "''").replace(/%/g, '\\%').replace(/_/g, '\\_')}%') OR COALESCE(dp.sku, t.codigo_barras, '') ILIKE '%${prod.replace(/'/g, "''")}%')`
@@ -73,7 +80,9 @@ export async function GET(req: NextRequest) {
       LIMIT 3000
     `)
 
-    const saludFiltered = saludF ? rows.filter((r: any) => r.salud === saludF) : rows
+    const saludFiltered = saludArr.length
+      ? rows.filter((r: any) => saludArr.includes(r.salud))
+      : rows
 
     return NextResponse.json({
       rows: saludFiltered.map((r: any) => ({

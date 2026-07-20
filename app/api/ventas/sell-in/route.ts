@@ -75,17 +75,32 @@ export async function GET(req: NextRequest) {
       params
     )
     // Total libras (solo Quesos — dim_producto.peso_lb es NULL para Leches/Helados).
-    // Usamos CTE para aplicar el mismo where una sola vez sin colisión de nombres con dim_producto.
-    const lbR = await pool.query(
-      `WITH filtered AS (
-         SELECT sku, cantidad_cajas FROM fact_sales_sellin ${where}
-       )
-       SELECT ROUND(SUM(f.cantidad_cajas * dp.peso_lb)::numeric, 1) AS total_lb
-       FROM filtered f
-       JOIN dim_producto dp ON dp.sku = f.sku
-       WHERE dp.peso_lb IS NOT NULL`,
-      params
-    )
+    // Total litros (solo Leches — dim_producto.litros es NULL para Quesos/Helados).
+    // Usamos CTE para aplicar el mismo where una sola vez sin colisión con dim_producto.
+    const [lbR, ltR] = await Promise.all([
+      pool.query(
+        `WITH filtered AS (
+           SELECT sku, cantidad_cajas FROM fact_sales_sellin ${where}
+         )
+         SELECT ROUND(SUM(f.cantidad_cajas * dp.peso_lb)::numeric, 1) AS total_lb
+         FROM filtered f
+         JOIN dim_producto dp ON dp.sku = f.sku
+         WHERE dp.peso_lb IS NOT NULL`,
+        params,
+      ),
+      pool.query(
+        // Litros = cajas × VNPK (unidades por caja) × litros por unidad.
+        // Todas las leches vienen con VNPK=12; usamos COALESCE por seguridad.
+        `WITH filtered AS (
+           SELECT sku, cantidad_cajas FROM fact_sales_sellin ${where}
+         )
+         SELECT ROUND(SUM(f.cantidad_cajas * COALESCE(dp.vnpk_qty, 1) * dp.litros)::numeric, 1) AS total_litros
+         FROM filtered f
+         JOIN dim_producto dp ON dp.sku = f.sku
+         WHERE dp.litros IS NOT NULL`,
+        params,
+      ),
+    ])
     const kpi = {
       total_ingresos: parseFloat(kpiR.rows[0]?.total_ingresos ?? '0'),
       total_unidades: parseFloat(kpiR.rows[0]?.total_unidades ?? '0'),
@@ -93,6 +108,7 @@ export async function GET(req: NextRequest) {
       total_clientes: parseInt(kpiR.rows[0]?.total_clientes   ?? '0'),
       total_skus:     parseInt(kpiR.rows[0]?.total_skus       ?? '0'),
       total_lb:       parseFloat(lbR.rows[0]?.total_lb        ?? '0'),
+      total_litros:   parseFloat(ltR.rows[0]?.total_litros    ?? '0'),
       margen_pct: kpiR.rows[0]?.total_ingresos > 0
         ? (parseFloat(kpiR.rows[0]?.total_margen ?? '0') / parseFloat(kpiR.rows[0]?.total_ingresos)) * 100
         : 0,
@@ -140,6 +156,7 @@ export async function GET(req: NextRequest) {
          ROUND(SUM(cantidad_unidades)::numeric, 0)   AS unidades,
          ROUND(SUM(cantidad_cajas)::numeric,    2)   AS cajas,
          ROUND(SUM(cantidad_cajas * dp.peso_lb)::numeric, 1) AS total_lb,
+         ROUND(SUM(cantidad_cajas * COALESCE(dp.vnpk_qty, 1) * dp.litros)::numeric, 1) AS total_litros,
          ROUND(SUM(venta_neta)::numeric,        2)   AS ingresos,
          ROUND(SUM(margen_valor)::numeric,      2)   AS margen_valor,
          CASE WHEN SUM(venta_neta) > 0
@@ -149,7 +166,7 @@ export async function GET(req: NextRequest) {
               THEN ROUND((SUM(venta_neta)/SUM(cantidad_cajas))::numeric, 4)
               ELSE 0 END                              AS precio_promedio
        FROM fact_sales_sellin
-       LEFT JOIN LATERAL (SELECT peso_lb FROM dim_producto WHERE sku = fact_sales_sellin.sku LIMIT 1) dp ON true
+       LEFT JOIN LATERAL (SELECT peso_lb, litros, vnpk_qty FROM dim_producto WHERE sku = fact_sales_sellin.sku LIMIT 1) dp ON true
        ${where}
        GROUP BY ${groupBy}
        ORDER BY ${granularidad === 'mes' ? 'ano_pedido, mes, ingresos DESC' : 'ingresos DESC'}

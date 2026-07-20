@@ -8,6 +8,7 @@ import {
   ResponsiveContainer, Legend, Cell, ReferenceLine,
 } from 'recharts'
 import InnovacionesSection from './InnovacionesSection'
+import MultiSelect from '@/components/dashboard/MultiSelect'
 import { useTableSort, SortableTh } from '@/components/ui/table-sort'
 import {
   TendenciaMensualChart, TendenciaDiariaChart, MetricaTogglePill,
@@ -415,7 +416,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   // Compat: cadenaFilter legacy = primer item si hay UNA sola cadena seleccionada
   const cadenaFilter = cadenasSel.length === 1 ? cadenasSel[0] : ''
 
-  const [topN,         setTopN]         = useState(15)
+  const [topN,         setTopN]         = useState(50)
   const [loading,      setLoading]      = useState<Record<string, boolean>>({})
 
   // Data
@@ -448,7 +449,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   const [evolDiario,       setEvolDiario]       = useState<any>(null)
   const [invSkuTienda,        setInvSkuTienda]        = useState<any[] | null>(null)
   const [invSkuTiendaLoading, setInvSkuTiendaLoading] = useState(false)
-  const [invSkuTiendaFilters, setInvSkuTiendaFilters] = useState({ cadena: '', salud: '', prod: '' })
+  const [invSkuTiendaFilters, setInvSkuTiendaFilters] = useState<{ cadena: string[]; salud: string[]; prod: string }>({ cadena: [], salud: [], prod: '' })
 
   // Drill-down PDVs desde tabla Cobertura por SKU (buckets < 3, 3-10, > 10, todos)
   const [cobDetalle, setCobDetalle] = useState<{
@@ -557,6 +558,28 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
   // (Persistencia del toggle Filtros ahora la maneja EjecucionLayout con el mismo storageKey)
 
   const currentCat = DIVS.find(d => d.key === div)?.cat ?? ''
+
+  // Auto-carga SKU × Tienda al abrir la pestaña de inventarios.
+  // Al scope del componente porque Inventarios() se llama como función (no
+  // como <Inventarios />), y meter hooks adentro viola la regla de React.
+  const invFechaTiendas = inv?.disponible ? (inv.kpis?.fecha_tiendas ?? null) : null
+  useEffect(() => {
+    if (section !== 'inventarios') return
+    if (!invFechaTiendas) return
+    if (invSkuTienda !== null || invSkuTiendaLoading) return
+
+    const p = new URLSearchParams({ pais })
+    if (invSkuTiendaFilters.cadena.length) p.set('cadenas', invSkuTiendaFilters.cadena.join(','))
+    if (invSkuTiendaFilters.salud.length)  p.set('saludes', invSkuTiendaFilters.salud.join(','))
+    if (invSkuTiendaFilters.prod)          p.set('prod',    invSkuTiendaFilters.prod)
+    if (currentCat) p.set('categoria', currentCat)
+    setInvSkuTiendaLoading(true)
+    fetch('/api/comercial/ejecucion/walmart/inventario/sku-tienda?' + p)
+      .then(r => r.json())
+      .then(d => setInvSkuTienda(d.rows ?? []))
+      .finally(() => setInvSkuTiendaLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section, invFechaTiendas])
 
   const goSection = (key: string) => {
     setSection(key)
@@ -1742,9 +1765,9 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
 
     function loadSkuTienda() {
       const p = new URLSearchParams({ pais })
-      if (invSkuTiendaFilters.cadena) p.set('cadena', invSkuTiendaFilters.cadena)
-      if (invSkuTiendaFilters.salud)  p.set('salud',  invSkuTiendaFilters.salud)
-      if (invSkuTiendaFilters.prod)   p.set('prod',   invSkuTiendaFilters.prod)
+      if (invSkuTiendaFilters.cadena.length) p.set('cadenas', invSkuTiendaFilters.cadena.join(','))
+      if (invSkuTiendaFilters.salud.length)  p.set('saludes', invSkuTiendaFilters.salud.join(','))
+      if (invSkuTiendaFilters.prod)          p.set('prod',    invSkuTiendaFilters.prod)
       if (currentCat) p.set('categoria', currentCat)
       setInvSkuTiendaLoading(true)
       fetch('/api/comercial/ejecucion/walmart/inventario/sku-tienda?' + p)
@@ -1753,10 +1776,16 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         .finally(() => setInvSkuTiendaLoading(false))
     }
 
+    // Filtro client-side por salud (aplica a tabla y CSV)
+    const invSkuTiendaFiltered = invSkuTienda && invSkuTiendaFilters.salud.length
+      ? invSkuTienda.filter((r: any) => invSkuTiendaFilters.salud.includes(r.salud))
+      : invSkuTienda
+
     function downloadCSV() {
-      if (!invSkuTienda?.length) return
+      const data = invSkuTiendaFiltered
+      if (!data?.length) return
       const cols = ['SKU', 'UPC', 'Producto', 'Categoría', 'Cadena', 'Tienda', 'Inv u', 'VPD u/d', 'DOH', 'Salud']
-      const rows = invSkuTienda.map(r => [
+      const rows = data.map(r => [
         r.sku, r.upc, `"${r.descripcion}"`, r.categoria, `"${r.cadena}"`, `"${r.nombre_tienda}"`,
         r.inv_mano, r.venta_dia > 0 ? r.venta_dia.toFixed(2) : '', r.doh ?? '', r.salud,
       ].join(','))
@@ -1924,37 +1953,33 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
               <p className="text-xs text-gray-400">Detalle por tienda con DOH y salud · {k.fecha_tiendas}</p>
             </div>
 
-            {/* Filters */}
-            <div className="px-5 py-3 bg-gray-50/60 border-b border-gray-100 flex items-center gap-x-3 gap-y-2 flex-wrap text-xs">
-              <span className="text-gray-400 font-medium">Cadena:</span>
-              <select value={invSkuTiendaFilters.cadena}
-                onChange={e => setInvSkuTiendaFilters(p => ({ ...p, cadena: e.target.value }))}
-                className="border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400">
-                <option value="">Todas</option>
-                {cadenas.map(c => <option key={c}>{c}</option>)}
-              </select>
-              <span className="text-gray-400 font-medium">Salud:</span>
-              <select value={invSkuTiendaFilters.salud}
-                onChange={e => setInvSkuTiendaFilters(p => ({ ...p, salud: e.target.value }))}
-                className="border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400">
-                <option value="">Todas</option>
-                {['CRÍTICO', 'ATENCIÓN', 'SALUDABLE', 'COBERTURA ALTA', 'SOBRESTOCK', 'SIN VPD'].map(s => <option key={s}>{s}</option>)}
-              </select>
-              <input value={invSkuTiendaFilters.prod}
-                onChange={e => setInvSkuTiendaFilters(p => ({ ...p, prod: e.target.value }))}
-                placeholder="Producto / SKU…"
-                className="border border-gray-200 rounded-lg px-2.5 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400 w-44" />
-              <button onClick={loadSkuTienda}
-                className="px-3 py-1.5 bg-[#1b3b5f] text-white rounded-lg font-medium hover:bg-[#0f2a47] transition-colors">
-                {invSkuTiendaLoading ? 'Cargando…' : invSkuTienda ? 'Actualizar' : 'Cargar datos'}
-              </button>
+            {/* Filters — solo Salud (multi-select, filtro client-side) + CSV */}
+            <div className="px-5 py-3 bg-gray-50/60 border-b border-gray-100 flex items-end gap-x-3 gap-y-2 flex-wrap text-xs">
+              <div className="w-56">
+                <MultiSelect
+                  label="Salud"
+                  options={['CRÍTICO', 'ATENCIÓN', 'SALUDABLE', 'COBERTURA ALTA', 'SOBRESTOCK', 'SIN VPD']
+                    .map(s => ({ value: s, label: s }))}
+                  value={invSkuTiendaFilters.salud}
+                  onChange={v => setInvSkuTiendaFilters(p => ({ ...p, salud: v }))}
+                  placeholder="Todas"
+                />
+              </div>
               {invSkuTienda && (
                 <button onClick={downloadCSV}
-                  className="px-3 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition-colors">
+                  className="px-3 bg-white border border-gray-200 text-gray-600 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  style={{ minHeight: 40 }}>
                   ⬇ CSV
                 </button>
               )}
-              {invSkuTienda && <span className="text-gray-400">{invSkuTienda.length.toLocaleString('en-US')} filas</span>}
+              {invSkuTienda && (
+                <span className="text-gray-400 pb-2">
+                  {(invSkuTiendaFilters.salud.length
+                    ? invSkuTienda.filter((r: any) => invSkuTiendaFilters.salud.includes(r.salud)).length
+                    : invSkuTienda.length
+                  ).toLocaleString('en-US')} filas
+                </span>
+              )}
             </div>
 
             {invSkuTiendaLoading ? (
@@ -1966,10 +1991,14 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 ))}
               </div>
             ) : invSkuTienda === null ? (
-              <div className="px-5 py-10 text-center">
-                <p className="text-xs text-gray-300">Presiona "Cargar datos" para ver el detalle por tienda</p>
+              <div className="divide-y divide-gray-50">
+                {Array(6).fill(0).map((_, i) => (
+                  <div key={i} className="px-4 py-3 flex gap-4 animate-pulse">
+                    <div className="h-3 bg-gray-100 rounded flex-1" /><div className="h-3 bg-gray-100 rounded w-16" /><div className="h-3 bg-gray-100 rounded w-12" />
+                  </div>
+                ))}
               </div>
-            ) : invSkuTienda.length === 0 ? (
+            ) : !invSkuTiendaFiltered || invSkuTiendaFiltered.length === 0 ? (
               <p className="text-center text-gray-300 py-12 text-sm">Sin resultados con los filtros aplicados</p>
             ) : (
               <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
@@ -1987,7 +2016,7 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {invSkuTienda.map((r: any, i: number) => {
+                    {invSkuTiendaFiltered.map((r: any, i: number) => {
                       const cfg = SALUD_CFG[r.salud] ?? { color: '#9ca3af', bg: '#f9fafb', label: r.salud }
                       return (
                         <tr key={i} className="hover:bg-gray-50/60">
@@ -2160,10 +2189,10 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
           <div>
             <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Top N</p>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {[10, 15, 20].map(n => (
+              {[10, 20, 30, 50, 100].map(n => (
                 <button key={n} onClick={() => setTopN(n)}
                   className={`px-3 py-1.5 text-xs font-medium transition-colors ${topN === n ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {n}
+                  {n === 100 ? 'Todos' : n}
                 </button>
               ))}
             </div>
@@ -2180,16 +2209,27 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
         {!L && topSkus.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <h3 className="text-sm font-semibold text-gray-700 mb-1">Pareto SKUs — Sell-Out YTD 2026</h3>
-            <p className="text-xs text-gray-400 mb-4">Valor en dólares · curva acumulada</p>
-            <div className="h-[280px]">
+            <p className="text-xs text-gray-400 mb-4">Valor en dólares · curva acumulada · hover para ver nombre completo</p>
+            <div style={{ height: Math.max(360, 260 + topSkus.length * 4) }}>
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={topSkus}>
+                <ComposedChart data={topSkus} margin={{ top: 8, right: 8, left: 4, bottom: 4 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="descripcion" tick={{ fontSize: 9 }} interval={0} angle={-35} textAnchor="end" height={70} />
+                  <XAxis
+                    dataKey="descripcion"
+                    tick={{ fontSize: 10, fill: '#475569' }}
+                    interval={0}
+                    angle={-55}
+                    textAnchor="end"
+                    height={170}
+                    tickFormatter={(v: string) => v && v.length > 26 ? v.slice(0, 24) + '…' : v}
+                  />
                   <YAxis yAxisId="left"  tickFormatter={fmt$} tick={{ fontSize: 11 }} width={50} />
                   <YAxis yAxisId="right" orientation="right" tickFormatter={v => v + '%'} tick={{ fontSize: 11 }} width={35} domain={[0,100]} />
-                  <Tooltip formatter={(v: any, name: string) => name === 'Acumulado %' ? v + '%' : fmtFull(v)} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Tooltip
+                    formatter={(v: any, name: string) => name === 'Acumulado %' ? v + '%' : fmtFull(v)}
+                    labelFormatter={(l: string) => l}
+                    contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)', maxWidth: 320 }}
+                  />
                   <Bar yAxisId="left" dataKey="valor_2026" name="Valor 2026" radius={[2,2,0,0]}>
                     {topSkus.map((r, i) => (
                       <Cell key={i} fill={r.cum_share <= 80 ? '#c8873a' : r.cum_share <= 95 ? '#94a3b8' : '#e2e8f0'} />
@@ -2199,12 +2239,17 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex flex-wrap gap-4 mt-3">
+            {/* Leyenda unificada: clases A/B/C (barras) + acumulado % (línea) */}
+            <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3">
               {[['#c8873a','Clase A (≤80%)'],['#94a3b8','Clase B (80–95%)'],['#e2e8f0','Clase C (>95%)']].map(([c,l]) => (
                 <div key={l} className="flex items-center gap-1.5 text-[11px] text-gray-500">
                   <div className="w-3 h-3 rounded-sm" style={{ background: c }} />{l}
                 </div>
               ))}
+              <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
+                <div className="w-6 h-0.5 rounded-full" style={{ background: '#1d4ed8' }} />
+                Acumulado %
+              </div>
             </div>
           </div>
         )}
