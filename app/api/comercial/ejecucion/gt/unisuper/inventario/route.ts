@@ -6,15 +6,40 @@ export const revalidate = 1800
 
 /**
  * Inventario Unisuper GT — desde tabla `inventario_unisuper`.
- * Devuelve KPIs y detalle por SKU × tienda del último snapshot.
+ * Resuelve SKU/descripción/categoría/subcategoría vía `dim_producto` por EAN
+ * normalizado (leading zeros + check digit), replicando la lógica del bot
+ * Python `_ean_variants`. Necesario porque `inventario_unisuper` guarda SKUs
+ * y descripciones nativos de Unisuper que no matchean directo con BL Foods.
  *
- * Estructura simplificada respecto de Walmart (no hay separación CEDI/PDV
- * clara — todos los códigos son sucursales). Se marca "CD *" como CEDI.
+ * Nota: el filtro `subcategorias` se aplica POST-resolución para que use la
+ * subcategoría canónica de dim_producto, no la del retailer.
  */
 function csv(sp: URLSearchParams, key: string): string[] {
   const v = sp.get(key)
   return v ? v.split(',').map(s => s.trim()).filter(Boolean) : []
 }
+
+// Overrides retailer-EAN → SKU BL Foods (mismo diccionario que unisuper_ingest.py).
+// Usado cuando el EAN del retailer no matchea via _eanVariants (ambos EANs válidos
+// pero con distinto check digit, típicamente dim_producto guardado con leading
+// zero implícito y trailing 0 en vez de check real).
+const EAN_OVERRIDE: Record<string, string> = {
+  '0053000071884': '130748', // BORDEN QUESO MOZZARELLA RALLADO 32 OZ
+}
+
+function eanVariants(ean: string): string[] {
+  if (!ean) return []
+  const digits = String(ean).replace(/\D/g, '')
+  if (!digits) return []
+  const stripped = digits.replace(/^0+/, '')
+  const out = new Set<string>([digits])
+  if (stripped) out.add(stripped)
+  if (digits.length > 1) out.add(digits.slice(0, -1))
+  if (stripped.length > 1) out.add(stripped.slice(0, -1))
+  return Array.from(out)
+}
+
+type DimRow = { sku: string; codigo_barras: string; descripcion: string; categoria: string | null; subcategoria: string | null }
 
 export async function GET(req: NextRequest) {
   try {
@@ -22,90 +47,117 @@ export async function GET(req: NextRequest) {
     const cadenas = csv(sp, 'cadenas')
     const subcats = csv(sp, 'subcategorias')
 
-    const params: unknown[] = []
-    const conds: string[] = [`pais = 'GT'`]
+    // 1) Cargar dim_producto y armar índice de variantes de EAN
+    const dimR = await pool.query<DimRow>(`
+      SELECT sku, codigo_barras, descripcion, categoria, subcategoria
+      FROM dim_producto WHERE codigo_barras IS NOT NULL
+    `)
+    const dimByEan = new Map<string, DimRow>()
+    for (const r of dimR.rows) {
+      for (const v of eanVariants(r.codigo_barras)) {
+        if (!dimByEan.has(v)) dimByEan.set(v, r)
+      }
+    }
+    const skuToRow = new Map<string, DimRow>(dimR.rows.map(r => [r.sku, r]))
+    for (const [eanRetailer, skuBorden] of Object.entries(EAN_OVERRIDE)) {
+      const row = skuToRow.get(skuBorden)
+      if (!row) continue
+      for (const v of eanVariants(eanRetailer)) dimByEan.set(v, row)
+    }
+    const resolve = (codigoBarra: string | null): DimRow | null => {
+      if (!codigoBarra) return null
+      for (const v of eanVariants(codigoBarra)) {
+        const p = dimByEan.get(v)
+        if (p) return p
+      }
+      return null
+    }
 
+    // 2) Snapshot del último día (aplica filtro cadenas en SQL — el de subcategorías
+    //    se aplica post-resolución para respetar la subcategoría canónica)
+    const params: unknown[] = []
+    let cadenaFilter = ''
     if (cadenas.length) {
       const start = params.length
       cadenas.forEach(v => params.push(v))
-      conds.push(`cadena IN (${cadenas.map((_, i) => `$${start + 1 + i}`).join(',')})`)
-    }
-    if (subcats.length) {
-      const start = params.length
-      subcats.forEach(v => params.push(v))
-      conds.push(`subcategoria IN (${subcats.map((_, i) => `$${start + 1 + i}`).join(',')})`)
-    }
-    const where = conds.join(' AND ')
-
-    const { rows: kpisR } = await pool.query(`
-      WITH ult AS (
-        SELECT MAX(fecha) AS f FROM inventario_unisuper WHERE pais='GT'
-      ),
-      snap AS (
-        SELECT * FROM inventario_unisuper
-        WHERE ${where} AND fecha = (SELECT f FROM ult)
-      )
-      SELECT
-        (SELECT f::date FROM ult)                       AS fecha_snap,
-        COALESCE(SUM(cantidad), 0)                       AS inv_und,
-        COALESCE(SUM(valor_gtq), 0)                      AS inv_valor_gtq,
-        COUNT(DISTINCT nombre_sucursal)                  AS tiendas,
-        COUNT(DISTINCT codigo_sku)                       AS skus,
-        COUNT(DISTINCT CASE WHEN cadena ILIKE '%CD%' THEN nombre_sucursal END) AS cedi_tiendas,
-        COUNT(DISTINCT CASE WHEN cadena NOT ILIKE '%CD%' THEN nombre_sucursal END) AS pdv_tiendas
-      FROM snap
-    `, params)
-
-    const k = kpisR[0] ?? {}
-    const disponible = k.inv_und !== undefined && parseFloat(k.inv_und) > 0
-
-    if (!disponible) {
-      return NextResponse.json({ disponible: false })
+      cadenaFilter = `AND i.cadena IN (${cadenas.map((_, i) => `$${start + 1 + i}`).join(',')})`
     }
 
-    // Detalle por SKU × tienda (top 3000)
-    const { rows: detR } = await pool.query(`
+    const snapR = await pool.query(`
       WITH ult AS (SELECT MAX(fecha) AS f FROM inventario_unisuper WHERE pais='GT')
       SELECT
-        i.codigo_sku          AS sku,
-        i.codigo_barra        AS codigo_barras,
-        i.descripcion_sku     AS descripcion,
-        i.subcategoria,
+        i.codigo_sku       AS sku_ret,
+        i.codigo_barra     AS codigo_barras,
+        i.descripcion_sku  AS desc_ret,
+        i.subcategoria     AS subcat_ret,
+        i.categoria        AS cat_ret,
         i.cadena,
-        i.nombre_sucursal     AS punto_venta,
-        SUM(i.cantidad)::float AS inv_und
+        i.nombre_sucursal  AS punto_venta,
+        i.cantidad::float  AS inv_und,
+        i.valor_gtq::float AS valor_gtq,
+        (SELECT f::date FROM ult) AS fecha_snap
       FROM inventario_unisuper i
       WHERE i.pais='GT' AND i.fecha = (SELECT f FROM ult)
-        ${cadenas.length ? `AND i.cadena IN (${cadenas.map((_, i) => `$${i + 1}`).join(',')})` : ''}
-      GROUP BY i.codigo_sku, i.codigo_barra, i.descripcion_sku, i.subcategoria, i.cadena, i.nombre_sucursal
-      ORDER BY inv_und DESC
-      LIMIT 3000
-    `, cadenas.length ? cadenas : [])
+        ${cadenaFilter}
+    `, params)
+
+    const fechaSnap = snapR.rows[0]?.fecha_snap ?? null
+
+    // 3) Resolver via dim_producto + consolidar por (sku_resuelto, cadena, punto_venta)
+    type Row = { sku: string; codigo_barras: string; descripcion: string; categoria: string | null; subcategoria: string | null; cadena: string; punto_venta: string; inv_mano: number; valor_gtq: number }
+    const consolidated = new Map<string, Row>()
+    const pdvsSet = new Set<string>()
+    const skusSet = new Set<string>()
+    let totalUds = 0
+    let totalValor = 0
+
+    for (const r of snapR.rows) {
+      const p = resolve(r.codigo_barras)
+      const sku          = p?.sku          ?? String(r.sku_ret ?? '')
+      const descripcion  = p?.descripcion  ?? String(r.desc_ret ?? '')
+      const subcategoria = p?.subcategoria ?? (r.subcat_ret ?? null)
+      const categoria    = p?.categoria    ?? (r.cat_ret ?? null)
+      const codigoBarras = p?.codigo_barras ?? String(r.codigo_barras ?? '')
+
+      if (subcats.length && !subcats.includes(String(subcategoria ?? ''))) continue
+
+      const key = `${sku}|${r.cadena}|${r.punto_venta}`
+      let a = consolidated.get(key)
+      if (!a) {
+        a = { sku, codigo_barras: codigoBarras, descripcion, categoria, subcategoria, cadena: r.cadena, punto_venta: r.punto_venta, inv_mano: 0, valor_gtq: 0 }
+        consolidated.set(key, a)
+      }
+      a.inv_mano  += Number(r.inv_und)   || 0
+      a.valor_gtq += Number(r.valor_gtq) || 0
+      totalUds    += Number(r.inv_und)   || 0
+      totalValor  += Number(r.valor_gtq) || 0
+      pdvsSet.add(r.punto_venta)
+      skusSet.add(sku)
+    }
+
+    const disponible = totalUds > 0 || consolidated.size > 0
+    if (!disponible) return NextResponse.json({ disponible: false })
+
+    const rowsFinal = Array.from(consolidated.values())
+      .sort((a, b) => b.inv_mano - a.inv_mano)
+      .slice(0, 3000)
 
     return NextResponse.json({
       disponible: true,
       pais: 'GT',
       kpis: {
-        fecha_tiendas:    k.fecha_snap ?? null,
-        fecha_cedi:       k.fecha_snap ?? null,
-        pdv_inv:          parseFloat(k.inv_und ?? '0'),
-        pdv_valor:        parseFloat(k.inv_valor_gtq ?? '0'),
-        pdv_tiendas_dist: parseInt(k.pdv_tiendas ?? '0'),
+        fecha_tiendas:    fechaSnap,
+        fecha_cedi:       fechaSnap,
+        pdv_inv:          totalUds,
+        pdv_valor:        totalValor,
+        pdv_tiendas_dist: pdvsSet.size,
         cedi_unidades:    0,
         cedi_valor:       0,
-        cedi_skus:        parseInt(k.cedi_tiendas ?? '0'),
-        skus_total:       parseInt(k.skus ?? '0'),
+        cedi_skus:        0,
+        skus_total:       skusSet.size,
       },
-      cedi_rows: [],  // Unisuper no separa CEDI en tabla propia
-      rows: detR.map((r: any) => ({
-        sku:           r.sku,
-        codigo_barras: r.codigo_barras,
-        descripcion:   r.descripcion,
-        subcategoria:  r.subcategoria,
-        cadena:        r.cadena,
-        punto_venta:   r.punto_venta,
-        inv_mano:      parseFloat(r.inv_und ?? '0'),
-      })),
+      cedi_rows: [],
+      rows: rowsFinal,
     })
   } catch (err) {
     return handleApiError(err)
