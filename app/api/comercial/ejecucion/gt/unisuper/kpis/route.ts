@@ -133,16 +133,27 @@ export async function GET(req: NextRequest) {
         GROUP BY subcategoria ORDER BY valor_2026 DESC
       `, w.params),
 
-      // Monthly 2025 + 2026
+      // Monthly 2025 + 2026 — 2025 se corta al mismo día del año anterior
+      // que la última fecha de 2026 (YTD consistente con "por_cadena" y ytd_2025).
       pool.query(`
-        SELECT EXTRACT(YEAR FROM fecha)::int AS ano,
-               EXTRACT(MONTH FROM fecha)::int AS mes,
-               ROUND(SUM(ventas_valor)::numeric, 2)    AS valor,
-               ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
-        FROM fact_ventas_unisuper
-        WHERE ${w.where} AND EXTRACT(YEAR FROM fecha) IN (2025, 2026)
+        WITH ult AS (
+          SELECT MAX(fecha)::date AS ultima_fecha
+          FROM fact_ventas_unisuper
+          WHERE ${w.where} AND EXTRACT(YEAR FROM fecha) = 2026
+        )
+        SELECT EXTRACT(YEAR FROM f.fecha)::int AS ano,
+               EXTRACT(MONTH FROM f.fecha)::int AS mes,
+               ROUND(SUM(f.ventas_valor)::numeric, 2)    AS valor,
+               ROUND(SUM(f.ventas_unidades)::numeric, 0) AS unidades
+        FROM fact_ventas_unisuper f
+        WHERE ${w.where}
+          AND EXTRACT(YEAR FROM f.fecha) IN (2025, 2026)
+          AND (
+            EXTRACT(YEAR FROM f.fecha) = 2026
+            OR f.fecha <= (SELECT (ultima_fecha - INTERVAL '1 year')::date FROM ult)
+          )
         GROUP BY 1, 2 ORDER BY 1, 2
-      `, w.params),
+      `, [...w.params, ...w.params]),
     ])
 
     const row = ytdR.rows[0] ?? {}
