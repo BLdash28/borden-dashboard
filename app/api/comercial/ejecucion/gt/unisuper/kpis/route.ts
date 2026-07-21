@@ -104,16 +104,24 @@ export async function GET(req: NextRequest) {
         FROM cur, prev
       `, w.params),
 
-      // Por cadena — muestra todas, ignora filtro cadenas
+      // Por cadena — YTD comparable: 2026 hasta hoy, 2025 hasta mismo día del año
+      // Ignora filtro cadenas para mostrar todas.
       pool.query(`
-        SELECT cadena,
-          SUM(CASE WHEN EXTRACT(YEAR FROM fecha) = 2026 THEN ventas_valor    ELSE 0 END) AS valor_2026,
-          SUM(CASE WHEN EXTRACT(YEAR FROM fecha) = 2026 THEN ventas_unidades ELSE 0 END) AS uni_2026,
-          SUM(CASE WHEN EXTRACT(YEAR FROM fecha) = 2025 THEN ventas_valor    ELSE 0 END) AS valor_2025
-        FROM fact_ventas_unisuper
-        WHERE ${wSinCad.where} AND EXTRACT(YEAR FROM fecha) IN (2025, 2026)
-        GROUP BY cadena ORDER BY valor_2026 DESC
-      `, wSinCad.params),
+        WITH ult AS (
+          SELECT MAX(fecha)::date AS ultima_fecha
+          FROM fact_ventas_unisuper
+          WHERE ${wSinCad.where} AND EXTRACT(YEAR FROM fecha) = 2026
+        )
+        SELECT f.cadena,
+          SUM(CASE WHEN EXTRACT(YEAR FROM f.fecha) = 2026 THEN f.ventas_valor    ELSE 0 END) AS valor_2026,
+          SUM(CASE WHEN EXTRACT(YEAR FROM f.fecha) = 2026 THEN f.ventas_unidades ELSE 0 END) AS uni_2026,
+          SUM(CASE WHEN EXTRACT(YEAR FROM f.fecha) = 2025
+                    AND f.fecha <= (SELECT (ultima_fecha - INTERVAL '1 year')::date FROM ult)
+                   THEN f.ventas_valor ELSE 0 END) AS valor_2025
+        FROM fact_ventas_unisuper f
+        WHERE ${wSinCad.where} AND EXTRACT(YEAR FROM f.fecha) IN (2025, 2026)
+        GROUP BY f.cadena ORDER BY valor_2026 DESC
+      `, [...wSinCad.params, ...wSinCad.params]),
 
       // Por subcategoría (equivalente a "por categoria" en Walmart)
       pool.query(`
