@@ -198,13 +198,25 @@ export function InnovacionesSection({
                   {/* Los 7 KPIs se muestran en ambos modos. Valor USD lleva `hide-in-mercadeo`
                       para que en modo Mercadeo (regla: no mostrar montos) desaparezca vía CSS
                       y el grid queda con 6 columnas. */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-x-3 gap-y-2 mt-3">
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-x-3 gap-y-2 mt-3">
                     <div className="text-center px-1">
                       <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Primera venta</p>
                       <p className="text-xs font-semibold text-gray-800 mt-0.5">{it.primera_venta ?? '—'}</p>
                       {it.dias_desde_lanz !== null && (
                         <p className="text-[9px] text-gray-400">hace {it.dias_desde_lanz}d</p>
                       )}
+                    </div>
+                    <div className="text-center px-1">
+                      <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Última venta</p>
+                      <p className="text-xs font-semibold text-gray-800 mt-0.5">{it.ultima_venta ?? '—'}</p>
+                      {it.ultima_venta && (() => {
+                        const diff = Math.floor((Date.now() - new Date(it.ultima_venta).getTime()) / 86400000)
+                        return (
+                          <p className={`text-[9px] leading-tight ${diff <= 7 ? 'text-emerald-600' : diff <= 30 ? 'text-gray-400' : 'text-amber-600'}`}>
+                            {diff === 0 ? 'hoy' : diff === 1 ? 'ayer' : `hace ${diff}d`}
+                          </p>
+                        )
+                      })()}
                     </div>
                     <div className="text-center px-1">
                       <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Unidades</p>
