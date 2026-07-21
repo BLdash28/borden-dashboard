@@ -105,14 +105,14 @@ const OFERTAS = [
   { itemNbr: '75464261', precio: 3590,        mecanica: 'Precio',                      vigencia: '22 Jul – 05 Ago' },
 ]
 
-// ── Formato derivado del prefijo de tienda ──────────────────────────────
-const formatoFromPunto = (punto) => {
-  if (punto.startsWith('CR-WM '))   return 'Walmart'
-  if (punto.startsWith('CR-MXM '))  return 'Mas X Menos'
-  if (punto.startsWith('CR-MP '))   return 'Maxi Pali'
-  if (punto.startsWith('CR-PALI'))  return 'Pali'
-  return ''
+// ── Formato por rptcode Walmart CR ──────────────────────────────────────
+const FORMATO_CR = {
+  HM: 'Walmart',
+  ME: 'Mas X Menos',
+  MI: 'Maxi Pali',
+  PI: 'Pali',
 }
+const formatoFromRpt = (rpt) => FORMATO_CR[rpt] || ''
 const RPT_PREFIX = { HM: 'WM', ME: 'MXM', MI: 'MP', PI: 'PALI' }
 const dbPunto = (country, finRpt, storeName) => {
   const pfx = RPT_PREFIX[finRpt] || finRpt
@@ -304,7 +304,7 @@ for (const r of invRes.rows) {
   const cw  = cwLookup(upc)
   if (!cw) { sinCrosswalk++; continue }
   const punto    = dbPunto('CR', r.financial_rpt, r.tienda_nombre)
-  const formato  = formatoFromPunto(punto)
+  const formato  = formatoFromRpt(r.financial_rpt)
   const inv      = Number(r.inv_mano) || 0
   const transito = Number(r.inv_transito) || 0
   const cedi     = cediMap.get(upc) ?? ''
@@ -328,7 +328,7 @@ for (const r of invRes.rows) {
     categoria: cw.categoria,
     descripcion: cw.desc,
     inv, transito, cedi,
-    ult, doh,
+    ult, doh, venta_dia,
     pareto80, innov,
   })
 }
@@ -426,72 +426,41 @@ const wsB = makeSheet(
 wsB['!cols'] = [{ wch: 12 }, { wch: 32 }, { wch: 16 }, { wch: 11 }, { wch: 9 }, { wch: 45 }, { wch: 14 }, { wch: 10 }, { wch: 8 }, { wch: 14 }, { wch: 8 }, { wch: 12 }]
 XLSX.utils.book_append_sheet(wb, wsB, 'INVENTARIO BAJO')
 
-// — Pestaña 4: SIN VENTAS EN 1 SEMANA (a nivel SKU, no PDV × SKU)
-// Pregunta: ¿qué SKUs del crosswalk no han vendido en NINGÚN PDV de CR
-// desde 8 o más días antes de la última carga de data (fechaInv = 2026-06-26)?
-const corteFecha = new Date(fechaInvDate.getTime() - 8 * 86400000)
-const corteIso = corteFecha.toISOString().slice(0, 10)
+// — Pestaña 4: SIN VENTAS (PDV × SKU) — cada fila es una combinación tienda-producto
+// con inventario snapshot + última venta en ese PDV. Filtra combinaciones que
+// llevan ≥7 días sin vender (o nunca han vendido en ese PDV con inventario).
+// Formato tipo Qlik: Formato · Tienda · Item Nbr · Item Type · Artículo · Promedio Diario · DOH · Inventario · Órdenes · Tránsito · Warehouse · Última Venta.
+const UMBRAL_DIAS = 7
+const fmtFecha = (iso) => iso ? iso.replaceAll('-', '/') : ''
+const round1  = (n) => Math.round(n * 10) / 10
 
-// Última venta por SKU (cualquier PDV en CR, solo uds > 0)
-const ultSkuRes = await pool.query(`
-  SELECT codigo_barras, MAX(fecha)::date AS ultima
-  FROM fact_ventas_walmart
-  WHERE pais='CR' AND ventas_unidades > 0
-  GROUP BY codigo_barras
-`)
-const ultPorCb = new Map()
-for (const r of ultSkuRes.rows) {
-  ultPorCb.set(r.codigo_barras, new Date(r.ultima).toISOString().slice(0, 10))
-}
-
-// Aggregar inventario por SKU (UPC del crosswalk): inv total + PDVs con stock
-const aggSku = {}
-for (const f of filas) {
-  if (!aggSku[f.upc]) {
-    aggSku[f.upc] = {
-      upc: f.upc, itemId: f.itemId, categoria: f.categoria, descripcion: f.descripcion,
-      pareto80: f.pareto80, innov: f.innov,
-      invTotal: 0, pdvsConStock: 0, pdvsTotal: 0, cediTotal: 0,
-    }
-  }
-  const a = aggSku[f.upc]
-  a.invTotal     += f.inv
-  a.pdvsTotal    += 1
-  if (f.inv > 0)  a.pdvsConStock += 1
-  if (typeof f.cedi === 'number') a.cediTotal = f.cedi   // CEDI es global por SKU, no por PDV
-}
-
-const colsS = ['Item ID','UPC','Categoría','Descripción','Última venta CR','Días sin vender','Inv total (un)','PDVs con stock','PDVs total','CEDI (cj)','80/20','Innovación']
+const colsS = ['Formato','Tienda','Item Nbr','Item Type','Artículo','Promedio Diario','DOH','Inventario','Órdenes','Tránsito','Warehouse','Última Venta','Días sin vender']
 const sRows = []
-for (const upc of Object.keys(aggSku)) {
-  const a = aggSku[upc]
-  const canon = upcCanon(upc)
-  const ult   = canon ? ultPorCb.get(canon) ?? null : null
-  // Días sin vender (referenciado a la última fecha de carga = fechaInv)
+for (const f of filas) {
   let dias = null
-  if (ult) {
-    const d = new Date(ult + 'T00:00:00Z')
+  if (f.ult) {
+    const d = new Date(f.ult + 'T00:00:00Z')
     dias = Math.floor((fechaInvDate - d) / 86400000)
   }
-  // Filtro: nunca vendió, o última venta ≤ (carga − 8 días) → 8 días o más sin vender
-  const calificaSinVenta = !ult || ult <= corteIso
-  if (!calificaSinVenta) continue
+  // Incluir si nunca ha vendido en ese PDV o si ≥7 días sin venta
+  if (dias !== null && dias < UMBRAL_DIAS) continue
   sRows.push({
-    'Item ID': a.itemId,
-    UPC: upc,
-    Categoría: a.categoria,
-    Descripción: a.descripcion,
-    'Última venta CR': ult ?? 'Sin ventas registradas',
-    'Días sin vender': dias ?? 'N/A',
-    'Inv total (un)': a.invTotal,
-    'PDVs con stock': a.pdvsConStock,
-    'PDVs total': a.pdvsTotal,
-    'CEDI (cj)': a.cediTotal,
-    '80/20': a.pareto80,
-    Innovación: a.innov,
+    Formato: f.formato,
+    Tienda: f.punto,
+    'Item Nbr': f.itemId,
+    'Item Type': 40,
+    Artículo: f.descripcion,
+    'Promedio Diario': round1(f.venta_dia),
+    DOH: f.doh === null ? '' : Math.round(f.doh),
+    Inventario: f.inv,
+    Órdenes: 0,
+    Tránsito: f.transito,
+    Warehouse: f.cedi === '' ? '' : f.cedi,
+    'Última Venta': f.ult ? fmtFecha(f.ult) : 'Sin venta registrada',
+    'Días sin vender': dias === null ? 'N/A' : dias,
   })
 }
-// Orden: SKUs sin venta primero, luego por días sin vender DESC (los más críticos arriba)
+// Orden: sin venta registrada primero, después por días sin vender DESC (más críticos arriba)
 sRows.sort((a, b) => {
   const ax = a['Días sin vender'], bx = b['Días sin vender']
   if (ax === 'N/A' && bx !== 'N/A') return -1
@@ -500,12 +469,12 @@ sRows.sort((a, b) => {
 })
 
 const wsS = makeSheet(
-  `SKUs sin venta ≥8 días (${sRows.length} SKUs de ${Object.keys(aggSku).length})`,
-  `Última carga: ${fechaInv} · Corte: ≤ ${corteIso} (8+ días sin vender)`,
+  `Sin ventas ≥${UMBRAL_DIAS} días — detalle PDV × SKU (${sRows.length} casos)`,
+  `Última carga: ${fechaInv}`,
   colsS, sRows
 )
-wsS['!cols'] = [{ wch: 11 }, { wch: 16 }, { wch: 9 }, { wch: 45 }, { wch: 16 }, { wch: 14 }, { wch: 13 }, { wch: 14 }, { wch: 11 }, { wch: 10 }, { wch: 8 }, { wch: 12 }]
-XLSX.utils.book_append_sheet(wb, wsS, 'SIN VENTAS EN 1 SEMANA')
+wsS['!cols'] = [{ wch: 14 }, { wch: 32 }, { wch: 11 }, { wch: 10 }, { wch: 45 }, { wch: 15 }, { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 14 }, { wch: 15 }]
+XLSX.utils.book_append_sheet(wb, wsS, 'SIN VENTAS')
 
 // — Pestaña 5: Ofertas (ventanas vigentes del array OFERTAS)
 const colsO = ['Item Nbr','UPC','Descripción','Precio','Mecánica','Vigencia']
