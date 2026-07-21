@@ -82,7 +82,8 @@ export async function GET(req: NextRequest) {
         ORDER BY v.uds DESC NULLS LAST
       `, [...w.params, ...w.params]),
 
-      // Por SKU: cuántos PDVs vendieron ese SKU en 90d
+      // Por SKU: cuántos PDVs vendieron ese SKU en 90d + distribución por buckets
+      // Buckets: cuántos PDVs tienen <3, 3-10, >10 registros de venta del SKU
       pool.query(`
         WITH univ AS (
           SELECT COUNT(DISTINCT nombre_sucursal) AS total
@@ -90,6 +91,14 @@ export async function GET(req: NextRequest) {
           WHERE ${w.where}
             AND fecha >= CURRENT_DATE - INTERVAL '90 day'
             AND ventas_unidades > 0
+        ),
+        sku_pdv AS (
+          SELECT sku, nombre_sucursal, COUNT(*) AS pedidos_pdv
+          FROM fact_ventas_unisuper
+          WHERE ${w.where}
+            AND fecha >= CURRENT_DATE - INTERVAL '90 day'
+            AND ventas_unidades > 0
+          GROUP BY sku, nombre_sucursal
         )
         SELECT f.sku,
           MAX(f.descripcion)             AS descripcion,
@@ -98,26 +107,32 @@ export async function GET(req: NextRequest) {
           (SELECT total FROM univ)       AS universo,
           ROUND((COUNT(DISTINCT f.nombre_sucursal)::numeric / NULLIF((SELECT total FROM univ), 0) * 100), 1) AS cobertura_pct,
           SUM(f.ventas_unidades)::int    AS uds_90d,
-          ROUND(SUM(f.ventas_valor)::numeric, 0) AS valor_90d
+          ROUND(SUM(f.ventas_valor)::numeric, 0) AS valor_90d,
+          (SELECT COUNT(*) FROM sku_pdv sp WHERE sp.sku = f.sku AND sp.pedidos_pdv < 3)             AS bucket_menor_3,
+          (SELECT COUNT(*) FROM sku_pdv sp WHERE sp.sku = f.sku AND sp.pedidos_pdv BETWEEN 3 AND 10) AS bucket_3_10,
+          (SELECT COUNT(*) FROM sku_pdv sp WHERE sp.sku = f.sku AND sp.pedidos_pdv > 10)             AS bucket_mayor_10
         FROM fact_ventas_unisuper f
         WHERE ${w.where}
           AND f.fecha >= CURRENT_DATE - INTERVAL '90 day'
           AND f.ventas_unidades > 0
         GROUP BY f.sku
         ORDER BY valor_90d DESC
-      `, [...w.params, ...w.params]),
+      `, [...w.params, ...w.params, ...w.params]),
     ])
 
     const universo = parseInt(univR.rows[0]?.universo ?? '0')
     const porSku   = skuR.rows.map((r: any) => ({
-      sku:            r.sku,
-      descripcion:    r.descripcion,
-      subcategoria:   r.subcategoria,
-      pdvs_con_venta: parseInt(r.pdvs_con_venta ?? '0'),
-      universo:       parseInt(r.universo ?? '0'),
-      cobertura_pct:  parseFloat(r.cobertura_pct ?? '0'),
-      uds_90d:        parseInt(r.uds_90d ?? '0'),
-      valor_90d:      parseFloat(r.valor_90d ?? '0'),
+      sku:             r.sku,
+      descripcion:     r.descripcion,
+      subcategoria:    r.subcategoria,
+      pdvs_con_venta:  parseInt(r.pdvs_con_venta ?? '0'),
+      universo:        parseInt(r.universo ?? '0'),
+      cobertura_pct:   parseFloat(r.cobertura_pct ?? '0'),
+      uds_90d:         parseInt(r.uds_90d ?? '0'),
+      valor_90d:       parseFloat(r.valor_90d ?? '0'),
+      bucket_menor_3:  parseInt(r.bucket_menor_3 ?? '0'),
+      bucket_3_10:     parseInt(r.bucket_3_10 ?? '0'),
+      bucket_mayor_10: parseInt(r.bucket_mayor_10 ?? '0'),
     }))
 
     const cobEfectiva = porSku.length > 0
