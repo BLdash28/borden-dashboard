@@ -253,9 +253,16 @@ export default function UnisuperEjecucion() {
       }).finally(() => setLoading(l => ({ ...l, [section]: false })))
     } else if (section === 'cobertura') {
       setLoading(l => ({ ...l, cobertura: true }))
-      fetch('/api/comercial/ejecucion/gt/unisuper/cobertura?' + filterQS)
-        .then(r => r.json()).then(setCob)
-        .finally(() => setLoading(l => ({ ...l, cobertura: false })))
+      Promise.all([
+        fetch('/api/comercial/ejecucion/gt/unisuper/cobertura?' + filterQS).then(r => r.json()),
+        // También traigo el detalle SKU × tienda para las tablas de Quiebres + Inv Bajo
+        invSku === null
+          ? fetch('/api/comercial/ejecucion/gt/unisuper/inventario/sku-tienda?' + filterQS).then(r => r.json())
+          : Promise.resolve({ rows: invSku }),
+      ]).then(([c, sk]) => {
+        setCob(c)
+        if (sk?.rows) setInvSku(sk.rows)
+      }).finally(() => setLoading(l => ({ ...l, cobertura: false })))
     } else if (section === 'inventarios') {
       setLoading(l => ({ ...l, inventarios: true }))
       Promise.all([
@@ -525,34 +532,51 @@ export default function UnisuperEjecucion() {
           </div>
         )}
 
-        {monthly.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">📈 Evolución mensual · 2025 vs 2026</h3>
-            <div className="h-[300px]">
-              <ResponsiveContainer>
-                <BarChart data={monthly} margin={{ top: 12, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="uni-y25" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.9} />
-                      <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.5} />
-                    </linearGradient>
-                    <linearGradient id="uni-y26" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#c8873a" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="#c8873a" stopOpacity={0.55} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <YAxis tickFormatter={fmtK} tick={{ fontSize: 10 }} width={55} axisLine={false} tickLine={false} />
-                  <Tooltip formatter={(v: any) => fmt$(Number(v))}
-                           contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                  <Bar dataKey="y2025" name="2025" fill="url(#uni-y25)" radius={[8, 8, 0, 0]} />
-                  <Bar dataKey="y2026" name="2026" fill="url(#uni-y26)" radius={[8, 8, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+        {/* Acumulado YTD 2025 vs 2026 (patrón Éxito) */}
+        {monthlyRaw.length > 0 && (() => {
+          let ac25 = 0, ac26 = 0
+          const acumulado = monthlyRaw.map(m => {
+            ac25 += m.y2025 ?? 0
+            if (m.y2026 !== null) ac26 += m.y2026
+            return {
+              mes_nombre: m.mes_nombre,
+              acum2025: ac25 > 0 ? ac25 : null,
+              acum2026: m.y2026 !== null ? ac26 : null,
+            }
+          })
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div>
+                <h3 className="text-sm font-bold text-gray-800">Acumulado YTD · 2025 vs 2026</h3>
+                <p className="text-[11px] text-gray-400">Ventas acumuladas mes a mes · USD</p>
+              </div>
+              <div className="h-[280px] mt-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={acumulado} margin={{ top: 10, right: 20, left: 8, bottom: 4 }}>
+                    <defs>
+                      <linearGradient id="gradUniAcum25" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.55}/>
+                        <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.05}/>
+                      </linearGradient>
+                      <linearGradient id="gradUniAcum26" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#c8873a" stopOpacity={0.65}/>
+                        <stop offset="100%" stopColor="#c8873a" stopOpacity={0.05}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+                    <Tooltip formatter={(v: any) => fmtFull(Number(v))}
+                             contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Area type="monotone" dataKey="acum2025" name="Acumulado 2025" stroke="#60a5fa" strokeWidth={2} fill="url(#gradUniAcum25)" connectNulls />
+                    <Area type="monotone" dataKey="acum2026" name="Acumulado 2026" stroke="#c8873a" strokeWidth={2.5} fill="url(#gradUniAcum26)" connectNulls />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {porCategoria.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
@@ -1071,6 +1095,91 @@ export default function UnisuperEjecucion() {
             </div>
           </div>
         )}
+
+        {/* Tablas Quiebres + Inv Bajo — patrón Éxito */}
+        {invSku && invSku.length > 0 && (() => {
+          const quiebres = invSku.filter(r => r.inv_mano === 0)
+          const bajos    = invSku.filter(r => r.inv_mano > 0 && r.inv_mano <= 3)
+          return (
+            <>
+              {quiebres.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700">🚨 Quiebres de Stock</h3>
+                      <p className="text-xs text-gray-400">Combinaciones PDV × SKU con inv = 0 en último snapshot</p>
+                    </div>
+                    <span className="text-xs font-bold text-red-600 bg-red-50 px-3 py-1 rounded-full">{quiebres.length} casos</span>
+                  </div>
+                  <div className="overflow-x-auto max-h-[400px]">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Cadena</th>
+                          <th className="px-3 py-2 text-left">Tienda</th>
+                          <th className="px-3 py-2 text-left">SKU</th>
+                          <th className="px-3 py-2 text-left">Descripción</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {quiebres.slice(0, 500).map((d, i) => (
+                          <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                            <td className="px-3 py-2">
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                                    style={{ background: CADENA_COLORS[d.cadena] ?? '#6b7280' }}>{d.cadena}</span>
+                            </td>
+                            <td className="px-3 py-2 text-gray-800 max-w-[220px] truncate">{d.punto_venta}</td>
+                            <td className="px-3 py-2 font-mono text-[11px] text-gray-500">{d.sku}</td>
+                            <td className="px-3 py-2 text-gray-700 max-w-[280px] truncate">{d.descripcion}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {bajos.length > 0 && (
+                <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700">⚠️ Inventario Bajo</h3>
+                      <p className="text-xs text-gray-400">Combinaciones con 1 a 3 unidades disponibles</p>
+                    </div>
+                    <span className="text-xs font-bold text-amber-600 bg-amber-50 px-3 py-1 rounded-full">{bajos.length} casos</span>
+                  </div>
+                  <div className="overflow-x-auto max-h-[400px]">
+                    <table className="w-full text-xs">
+                      <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0">
+                        <tr>
+                          <th className="px-3 py-2 text-left">Cadena</th>
+                          <th className="px-3 py-2 text-left">Tienda</th>
+                          <th className="px-3 py-2 text-left">SKU</th>
+                          <th className="px-3 py-2 text-left">Descripción</th>
+                          <th className="px-3 py-2 text-right">Unidades</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bajos.slice(0, 500).map((d, i) => (
+                          <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                            <td className="px-3 py-2">
+                              <span className="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                                    style={{ background: CADENA_COLORS[d.cadena] ?? '#6b7280' }}>{d.cadena}</span>
+                            </td>
+                            <td className="px-3 py-2 text-gray-800 max-w-[220px] truncate">{d.punto_venta}</td>
+                            <td className="px-3 py-2 font-mono text-[11px] text-gray-500">{d.sku}</td>
+                            <td className="px-3 py-2 text-gray-700 max-w-[240px] truncate">{d.descripcion}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-orange-700 font-bold">{d.inv_mano}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </>
+          )
+        })()}
       </div>
     )
   }
