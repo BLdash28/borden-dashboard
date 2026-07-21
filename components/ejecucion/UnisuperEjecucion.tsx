@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { TrendingUp, TrendingDown, Minus, X } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, X, RefreshCw } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
   PieChart, Pie, LabelList,
@@ -17,6 +17,10 @@ import {
 
 const InnovacionesSection = dynamic(
   () => import('@/components/ejecucion/InnovacionesSection'),
+  { loading: () => <ChartSkeleton />, ssr: false },
+)
+const OfertasSection = dynamic(
+  () => import('@/components/ejecucion/OfertasSection').then(m => m.OfertasSection),
   { loading: () => <ChartSkeleton />, ssr: false },
 )
 
@@ -49,17 +53,16 @@ const SALUD_CFG: Record<string, { color: string; bg: string; label: string }> = 
 }
 
 const SECTIONS = [
-  { key: 'resumen',         label: 'Resumen'      },
-  { key: 'evolucion',       label: 'Evolución'    },
-  { key: 'cobertura',       label: 'Cobertura'    },
-  { key: 'inventarios',     label: 'Inventarios'  },
-  { key: 'calidad',         label: 'Calidad Inv'  },
-  { key: 'pareto',          label: 'Pareto SKUs'  },
-  { key: 'innovaciones',    label: 'Innovaciones' },
-  { key: 'ofertas',         label: 'Ofertas'      },
-  { key: 'precios',         label: 'Precios'      },
-  { key: 'pedidos',         label: 'Pedidos'      },
-  { key: 'recomendaciones', label: 'Recomend.'    },
+  { key: 'resumen',         label: 'Resumen'            },
+  { key: 'evolucion',       label: 'Evolución Ventas'   },
+  { key: 'pareto',          label: 'Pareto'             },
+  { key: 'cobertura',       label: 'Cobertura'          },
+  { key: 'inventarios',     label: 'Inventarios'        },
+  { key: 'calidad',         label: 'Calidad Inventario' },
+  { key: 'innovaciones',    label: 'Innovaciones'       },
+  { key: 'ofertas',         label: 'Ofertas'            },
+  { key: 'precios',         label: 'Lista de Precios'   },
+  { key: 'pedidos',         label: 'Pedidos'            },
 ] as const
 type SectionKey = typeof SECTIONS[number]['key']
 
@@ -174,10 +177,39 @@ interface CobDetalle {
   loading: boolean
   pdvs: { punto_venta: string; store_nbr: string | null; cadena: string; categoria: string | null; sku: string; descripcion: string; pedidos: number; unidades: number; valor: number; ultima_venta: string | null }[]
 }
+interface PedidoLinea {
+  linea: number; sku: string; descripcion: string; categoria: string | null; subcategoria: string | null
+  cajas: number; unidades: number; kg: number; precio: number
+  venta_neta: number; venta_bruta: number; descuento: number; margen: number; margen_pct: number | null
+}
+interface Pedido {
+  numero_factura: string; fecha: string; moneda: string
+  total_cajas: number; total_unidades: number; total_kg: number
+  total_venta_neta: number; total_venta_bruta: number; total_descuento: number; total_margen: number
+  num_lineas: number
+  lineas: PedidoLinea[]
+}
+interface PedidosData { pais: string; cliente: string; total_pedidos: number; pedidos: Pedido[] }
 
 // ── Componente principal ───────────────────────────────────────────────────
+const SECTION_KEYS = SECTIONS.map(s => s.key) as readonly SectionKey[]
+const isSectionKey = (v: string): v is SectionKey =>
+  (SECTION_KEYS as readonly string[]).includes(v)
+
 export default function UnisuperEjecucion() {
-  const [section, setSection] = useState<SectionKey>('resumen')
+  // El tab activo se persiste en el hash de la URL (#cobertura, #inventarios, …)
+  // para sobrevivir recargas y hacer el link compartible.
+  const [section, setSection] = useState<SectionKey>(() => {
+    if (typeof window === 'undefined') return 'resumen'
+    const h = window.location.hash.slice(1)
+    return isSectionKey(h) ? h : 'resumen'
+  })
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (window.location.hash.slice(1) !== section) {
+      history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${section}`)
+    }
+  }, [section])
 
   // Filtros
   const [cadenasSel,  setCadenasSel]  = useState<string[]>([])
@@ -212,11 +244,13 @@ export default function UnisuperEjecucion() {
   const [calidad, setCalidad] = useState<CalidadData | null>(null)
   const [top, setTop]     = useState<TopSku[]>([])
   const [topN, setTopN]   = useState(50)
+  const [pedidos, setPedidos] = useState<PedidosData | null>(null)
+  const [pedidoExpanded, setPedidoExpanded] = useState<string | null>(null)
 
   const [loading, setLoading] = useState<Record<SectionKey, boolean>>({
     resumen: false, evolucion: false, cobertura: false, inventarios: false,
     calidad: false, pareto: false, innovaciones: false, ofertas: false,
-    precios: false, pedidos: false, recomendaciones: false,
+    precios: false, pedidos: false,
   })
 
   const filterQS = useMemo(() => {
@@ -274,14 +308,21 @@ export default function UnisuperEjecucion() {
       }).finally(() => setLoading(l => ({ ...l, inventarios: false })))
     } else if (section === 'calidad') {
       setLoading(l => ({ ...l, calidad: true }))
-      fetch('/api/comercial/ejecucion/gt/unisuper/calidad-inventario?' + filterQS)
-        .then(r => r.json()).then(setCalidad)
+      // Calidad usa el mismo snapshot de inventario y clasifica en frontend
+      // por buckets de unidades (<3 / 3-10 / >10) para replicar el formato Éxito.
+      fetch('/api/comercial/ejecucion/gt/unisuper/inventario?' + filterQS)
+        .then(r => r.json()).then(setInv)
         .finally(() => setLoading(l => ({ ...l, calidad: false })))
     } else if (section === 'pareto') {
       setLoading(l => ({ ...l, pareto: true }))
       fetch('/api/comercial/ejecucion/gt/unisuper/top-skus?top=' + topN + '&' + filterQS)
         .then(r => r.json()).then(d => setTop(d.rows ?? []))
         .finally(() => setLoading(l => ({ ...l, pareto: false })))
+    } else if (section === 'pedidos') {
+      setLoading(l => ({ ...l, pedidos: true }))
+      fetch('/api/comercial/ejecucion/gt/unisuper/pedidos?' + filterQS)
+        .then(r => r.json()).then(setPedidos)
+        .finally(() => setLoading(l => ({ ...l, pedidos: false })))
     }
   }, [section, filterQS, topN])
 
@@ -1194,13 +1235,139 @@ export default function UnisuperEjecucion() {
       </div>
     )
     const k = inv.kpis!
+    const rows = inv.rows ?? []
+    const fmtQ = (v: number) => 'Q ' + Math.round(v).toLocaleString('en-US')
+
+    // Agregación por cadena
+    const byCadenaMap = new Map<string, { cadena: string; pdvs: Set<string>; skus: Set<string>; combos: number; con_stock: number; uds: number }>()
+    for (const r of rows) {
+      const key = r.cadena ?? '—'
+      let a = byCadenaMap.get(key)
+      if (!a) { a = { cadena: key, pdvs: new Set(), skus: new Set(), combos: 0, con_stock: 0, uds: 0 }; byCadenaMap.set(key, a) }
+      a.pdvs.add(r.punto_venta)
+      a.skus.add(r.sku)
+      a.combos += 1
+      if (r.inv_mano > 0) a.con_stock += 1
+      a.uds += r.inv_mano
+    }
+    const porCadena = Array.from(byCadenaMap.values())
+      .map(a => ({ cadena: a.cadena, pdvs: a.pdvs.size, skus: a.skus.size, combos: a.combos, con_stock: a.con_stock, uds: a.uds }))
+      .sort((a, b) => b.uds - a.uds)
+    const totalUds = porCadena.reduce((s, x) => s + x.uds, 0)
+
+    // Top SKUs por inventario
+    const bySkuMap = new Map<string, { sku: string; descripcion: string; subcategoria: string; pdvs: Set<string>; uds: number }>()
+    for (const r of rows) {
+      let a = bySkuMap.get(r.sku)
+      if (!a) { a = { sku: r.sku, descripcion: r.descripcion, subcategoria: r.subcategoria, pdvs: new Set(), uds: 0 }; bySkuMap.set(r.sku, a) }
+      a.pdvs.add(r.punto_venta)
+      a.uds += r.inv_mano
+    }
+    const topSkus = Array.from(bySkuMap.values())
+      .map(a => ({ ...a, pdvs: a.pdvs.size }))
+      .sort((a, b) => b.uds - a.uds)
+      .slice(0, 30)
+
+    const combosTotal   = rows.length
+    const skusConStock  = bySkuMap.size
+
     return (
       <div className="space-y-5">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Kpi label="Unidades en tienda" value={fmtNum(k.pdv_inv)} sub={k.fecha_tiendas ?? ''} color="#3a6fa8" />
-          <Kpi label="Valor inventario" value={'Q' + Math.round(k.pdv_valor).toLocaleString('en-US')} sub="GTQ" color="#c8873a" />
-          <Kpi label="Tiendas con stock" value={fmtNum(k.pdv_tiendas_dist)} color="#2a7a58" />
-          <Kpi label="SKUs en snapshot" value={String(k.skus_total)} color="#a04d3a" />
+        {/* Header estilo Éxito */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Inventario · Unisuper GT
+              </p>
+              <h2 className="text-base font-bold text-gray-800 mt-0.5">
+                Snapshot al <strong>{k.fecha_tiendas ?? '—'}</strong>
+              </h2>
+              <p className="text-xs text-gray-500 mt-1">Valores en GTQ (quetzales).</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <Kpi label="Total unidades"  value={fmtNum(k.pdv_inv)}  sub={`${k.pdv_tiendas_dist} PDVs`}                    color="#3a6fa8" />
+            <Kpi label="Valor inventario" value={fmtQ(k.pdv_valor)} sub="GTQ"                                             color="#c8873a" />
+            <Kpi label="SKUs con stock"   value={String(skusConStock)} sub={`de ${combosTotal.toLocaleString('en-US')} combos`} color="#2a7a58" />
+            <Kpi label="Tiendas activas"  value={String(k.pdv_tiendas_dist)} sub={`${porCadena.length} cadenas`}          color="#a04d3a" />
+          </div>
+        </div>
+
+        {/* Por Cadena */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">Por Cadena</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Distribución de inventario por cadena.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-2 text-left">Cadena</th>
+                  <th className="px-4 py-2 text-right">PDVs</th>
+                  <th className="px-4 py-2 text-right">SKUs</th>
+                  <th className="px-4 py-2 text-right">Combos</th>
+                  <th className="px-4 py-2 text-right">Unidades</th>
+                  <th className="px-4 py-2 text-right">% Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {porCadena.map(c => {
+                  const pct = totalUds > 0 ? (c.uds / totalUds) * 100 : 0
+                  const color = CADENA_COLORS[c.cadena] ?? '#6b7280'
+                  return (
+                    <tr key={c.cadena} className="border-b border-gray-50">
+                      <td className="px-4 py-2.5">
+                        <span className="inline-flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full" style={{ background: color }} />
+                          <span className="font-semibold text-gray-800">{c.cadena}</span>
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-gray-700 tabular-nums">{c.pdvs}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">{c.skus}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-600 tabular-nums">{c.combos.toLocaleString('en-US')}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-gray-800 tabular-nums">{fmtNum(c.uds)}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-500">{pct.toFixed(1)}%</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Top SKUs por inventario */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-semibold text-gray-700">Top SKUs por Inventario</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Los 30 productos con mayor stock consolidado.</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-2 text-left">SKU</th>
+                  <th className="px-4 py-2 text-left">Producto</th>
+                  <th className="px-4 py-2 text-left">Subcategoría</th>
+                  <th className="px-4 py-2 text-right">PDVs</th>
+                  <th className="px-4 py-2 text-right">Unidades</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topSkus.map(s => (
+                  <tr key={s.sku} className="border-b border-gray-50 hover:bg-gray-50/60">
+                    <td className="px-4 py-2.5 font-mono text-[11px] text-gray-500">{s.sku}</td>
+                    <td className="px-4 py-2.5 font-medium text-gray-800 max-w-[280px] truncate">{s.descripcion}</td>
+                    <td className="px-4 py-2.5 text-gray-500">{s.subcategoria ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-right text-gray-700 tabular-nums">{s.pdvs}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-gray-800 tabular-nums">{fmtNum(s.uds)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {invSku && invSku.length > 0 && (
@@ -1273,97 +1440,260 @@ export default function UnisuperEjecucion() {
 
   const Calidad = () => {
     if (loading.calidad) return <ChartSkeleton />
-    if (!calidad) return null
-    const k = calidad.kpis
-    const total = k.total_registros || 1
+    if (!inv || !inv.disponible) return (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
+        <p className="text-3xl mb-2">📊</p>
+        <p className="text-sm font-semibold text-gray-600">Sin snapshot de inventario disponible</p>
+        <p className="text-xs text-gray-400 mt-1">Cargá un archivo de inventario_unisuper para activar esta sección</p>
+      </div>
+    )
+    const rowsInv = inv.rows ?? []
+    if (rowsInv.length === 0) return (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
+        <p className="text-3xl mb-2">📊</p>
+        <p className="text-sm font-semibold text-gray-600">Sin datos de calidad</p>
+      </div>
+    )
+
+    // Agregación por SKU con buckets por unidades (patrón Éxito)
+    // Menos de 3 · Entre 3 y 10 · Mayor a 10 — solo PDVs con inv > 0
+    const bySku = new Map<string, { sku: string; descripcion: string; menos_de_3: number; entre_3_y_10: number; mayor_a_10: number; total_pdvs: number }>()
+    const allPdvs = new Set<string>()
+    for (const r of rowsInv) {
+      allPdvs.add(r.punto_venta)
+      if (r.inv_mano <= 0) continue
+      let a = bySku.get(r.sku)
+      if (!a) { a = { sku: r.sku, descripcion: r.descripcion, menos_de_3: 0, entre_3_y_10: 0, mayor_a_10: 0, total_pdvs: 0 }; bySku.set(r.sku, a) }
+      if (r.inv_mano < 3)       a.menos_de_3   += 1
+      else if (r.inv_mano <= 10) a.entre_3_y_10 += 1
+      else                      a.mayor_a_10   += 1
+      a.total_pdvs += 1
+    }
+    const universo = allPdvs.size
+    const pdvsConStock = new Set(rowsInv.filter(r => r.inv_mano > 0).map(r => r.punto_venta)).size
+
+    const rows = Array.from(bySku.values())
+      .filter(r => r.total_pdvs > 0)
+      .map(r => ({
+        ...r,
+        pct_menos_de_3:   r.total_pdvs > 0 ? (r.menos_de_3   / r.total_pdvs) * 100 : 0,
+        pct_entre_3_y_10: r.total_pdvs > 0 ? (r.entre_3_y_10 / r.total_pdvs) * 100 : 0,
+        pct_mayor_a_10:   r.total_pdvs > 0 ? (r.mayor_a_10   / r.total_pdvs) * 100 : 0,
+        cobertura_pct:    universo > 0 ? (r.total_pdvs / universo) * 100 : 0,
+      }))
+      .sort((a, b) => b.total_pdvs - a.total_pdvs)
+
+    const t = rows.reduce((acc, r) => ({
+      menos_de_3:   acc.menos_de_3   + r.menos_de_3,
+      entre_3_y_10: acc.entre_3_y_10 + r.entre_3_y_10,
+      mayor_a_10:   acc.mayor_a_10   + r.mayor_a_10,
+      total_pdvs:   acc.total_pdvs   + r.total_pdvs,
+    }), { menos_de_3: 0, entre_3_y_10: 0, mayor_a_10: 0, total_pdvs: 0 })
+    const coberturaEfectiva = universo > 0 ? (pdvsConStock / universo) * 100 : 0
+    const pctCritico   = t.total_pdvs > 0 ? (t.menos_de_3 / t.total_pdvs) * 100 : 0
+    const pctSaludable = t.total_pdvs > 0 ? (t.mayor_a_10 / t.total_pdvs) * 100 : 0
+
+    const chartData = rows.slice(0, 15).map(r => ({
+      producto: (r.descripcion ?? r.sku).split(' ').slice(0, 4).join(' '),
+      sku: r.sku,
+      'Menos de 3':   r.menos_de_3,
+      'Entre 3 y 10': r.entre_3_y_10,
+      'Mayor a 10':   r.mayor_a_10,
+    }))
+
     return (
       <div className="space-y-5">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Kpi label="Registros SKU × Tienda" value={fmtNum(k.total_registros)} sub={calidad.fecha_snap ?? ''} color="#3a6fa8" />
-          <Kpi label="SKUs con inventario" value={String(k.skus_total)} color="#c8873a" />
-          <Kpi label="Tiendas con inventario" value={String(k.tiendas_total)} color="#2a7a58" />
-          <Kpi label="Sin velocidad" value={fmtNum(k.sin_vpd)} sub={`${((k.sin_vpd / total) * 100).toFixed(0)}% del total`} color="#9ca3af" />
-        </div>
-
-        {/* Distribución de salud */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">📊 Distribución de Salud del Inventario</h3>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            {[
-              ['CRÍTICO',        k.critico,        '#dc2626', 'Stock < 7 días'],
-              ['ATENCIÓN',       k.atencion,       '#f59e0b', 'Stock 7-14 días'],
-              ['SALUDABLE',      k.saludable,      '#10b981', 'Stock 14-60 días'],
-              ['COBERTURA ALTA', k.cobertura_alta, '#06b6d4', 'Stock 60-120 días'],
-              ['SOBRESTOCK',     k.sobrestock,     '#f97316', 'Stock > 120 días'],
-            ].map(([label, count, color, desc]) => {
-              const pct = ((count as number) / total) * 100
-              return (
-                <div key={label as string} className="border rounded-xl p-3" style={{ borderColor: color as string }}>
-                  <p className="text-[10px] uppercase tracking-widest font-bold" style={{ color: color as string }}>{label}</p>
-                  <p className="text-xl font-bold text-gray-800 mt-1">{fmtNum(count as number)}</p>
-                  <p className="text-[10px] text-gray-500 mt-0.5">{pct.toFixed(1)}% · {desc}</p>
-                </div>
-              )
-            })}
+        {/* Header + KPIs */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                Calidad de Inventario · Unisuper GT
+              </p>
+              <h2 className="text-base font-bold text-gray-800 mt-0.5">Nivel de inventario por SKU</h2>
+              <p className="text-xs text-gray-500 mt-1">
+                Snapshot al <strong>{inv.kpis?.fecha_tiendas ?? '—'}</strong> · Universo: <strong>{universo}</strong> PDVs con presencia Borden.
+              </p>
+            </div>
           </div>
 
-          {/* Barra apilada */}
-          <div className="mt-4">
-            <div className="flex rounded-full overflow-hidden h-3 shadow-inner">
-              {[
-                ['#dc2626', k.critico],
-                ['#f59e0b', k.atencion],
-                ['#10b981', k.saludable],
-                ['#06b6d4', k.cobertura_alta],
-                ['#f97316', k.sobrestock],
-                ['#9ca3af', k.sin_vpd],
-              ].map(([c, n], i) => (
-                <div key={i} style={{ width: `${((n as number) / total) * 100}%`, background: c as string }} />
-              ))}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <div className="rounded-xl border border-red-100 bg-red-50/60 p-4">
+              <p className="text-[10px] font-semibold text-red-500 uppercase tracking-widest mb-1">🚨 Stock crítico (&lt;3)</p>
+              <p className="text-2xl font-bold text-red-700">{t.menos_de_3}</p>
+              <p className="text-[10px] text-red-600 mt-0.5">{pctCritico.toFixed(1)}% de los PDVs con stock</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-4">
+              <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-widest mb-1">⚠️ Stock medio (3–10)</p>
+              <p className="text-2xl font-bold text-amber-700">{t.entre_3_y_10}</p>
+              <p className="text-[10px] text-amber-600 mt-0.5">{t.total_pdvs > 0 ? ((t.entre_3_y_10 / t.total_pdvs) * 100).toFixed(1) : '0'}% de los PDVs con stock</p>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+              <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-widest mb-1">✓ Stock saludable (&gt;10)</p>
+              <p className="text-2xl font-bold text-emerald-700">{t.mayor_a_10}</p>
+              <p className="text-[10px] text-emerald-600 mt-0.5">{pctSaludable.toFixed(1)}% de los PDVs con stock</p>
+            </div>
+            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+              <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-widest mb-1">Cobertura efectiva</p>
+              <p className="text-2xl font-bold text-blue-700">{coberturaEfectiva.toFixed(1)}%</p>
+              <p className="text-[10px] text-blue-600 mt-0.5">{pdvsConStock} / {universo} PDVs con al menos 1 SKU</p>
             </div>
           </div>
         </div>
 
-        {/* Detalle por SKU */}
-        {calidad.por_sku.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-50">
-              <h3 className="text-sm font-semibold text-gray-700">📋 Salud por SKU (top 50 por inventario)</h3>
+        {/* Chart apilado */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">Distribución de PDVs por Nivel de Stock</h3>
+              <p className="text-[11px] text-gray-400">Cantidad de PDVs con inventario por producto (top 15)</p>
             </div>
-            <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0">
-                  <tr>
-                    <th className="px-3 py-2.5 text-left">SKU</th>
-                    <th className="px-3 py-2.5 text-left">Producto</th>
-                    <th className="px-3 py-2.5 text-right">PDVs</th>
-                    <th className="px-3 py-2.5 text-right bg-red-50 text-red-700">Crítico</th>
-                    <th className="px-3 py-2.5 text-right bg-amber-50 text-amber-700">Atención</th>
-                    <th className="px-3 py-2.5 text-right bg-emerald-50 text-emerald-700">Saludable</th>
-                    <th className="px-3 py-2.5 text-right bg-cyan-50 text-cyan-700">Cob Alta</th>
-                    <th className="px-3 py-2.5 text-right bg-orange-50 text-orange-700">Sobrestock</th>
-                    <th className="px-3 py-2.5 text-right">Inv total</th>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500"/> Menos de 3</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Entre 3 y 10</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> Mayor a 10</span>
+            </div>
+          </div>
+          <div className="h-[380px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 80 }}>
+                <defs>
+                  <linearGradient id="gradCriticoUni" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f87171" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradMedioUni" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradSaludableUni" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="producto" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
+                  angle={-30} textAnchor="end" interval={0} height={80} />
+                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                <Tooltip cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
+                <Bar dataKey="Menos de 3"   stackId="a" fill="url(#gradCriticoUni)"   radius={[0,0,0,0]} maxBarSize={40} />
+                <Bar dataKey="Entre 3 y 10" stackId="a" fill="url(#gradMedioUni)"     radius={[0,0,0,0]} maxBarSize={40} />
+                <Bar dataKey="Mayor a 10"   stackId="a" fill="url(#gradSaludableUni)" radius={[8,8,0,0]} maxBarSize={40} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Tabla nivel inventario — detalle por producto */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-bold text-gray-800">Nivel Inventario — Detalle por Producto</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5"># de PDVs por nivel de stock · cobertura vs universo total</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-semibold">Producto</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-red-600">Menos de 3</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-amber-600">Entre 3 y 10</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-emerald-600">Mayor a 10</th>
+                  <th className="px-3 py-2.5 text-right font-semibold bg-gray-100">Total PDVs</th>
+                  <th className="px-3 py-2.5 text-right font-semibold bg-blue-50 text-blue-700">Cobertura %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={r.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                    <td className="px-4 py-2.5 font-medium text-gray-800">
+                      {r.descripcion ?? r.sku}
+                      <span className="ml-2 text-[10px] text-gray-400 font-mono">{r.sku}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {r.menos_de_3 > 0
+                        ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-red-100 text-red-700">{r.menos_de_3}</span>
+                        : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {r.entre_3_y_10 > 0
+                        ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-amber-100 text-amber-700">{r.entre_3_y_10}</span>
+                        : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums">
+                      {r.mayor_a_10 > 0
+                        ? <span className="inline-block min-w-[38px] px-2 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-700">{r.mayor_a_10}</span>
+                        : <span className="inline-block min-w-[38px] px-2 py-0.5 text-gray-300">0</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums bg-gray-50/60 font-bold text-gray-800">{r.total_pdvs}</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums bg-blue-50/40">
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
+                          <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${Math.min(100, r.cobertura_pct)}%` }} />
+                        </div>
+                        <span className="font-bold text-blue-700 min-w-[42px]">{r.cobertura_pct.toFixed(1)}%</span>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {calidad.por_sku.map(r => (
-                    <tr key={r.sku} className="hover:bg-gray-50/60">
-                      <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{r.sku}</td>
-                      <td className="px-3 py-2 font-medium text-gray-700 max-w-[240px] truncate">{r.descripcion}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{r.total_pdvs}</td>
-                      <td className="px-3 py-2 text-right tabular-nums bg-red-50/30 font-semibold text-red-700">{r.critico || '—'}</td>
-                      <td className="px-3 py-2 text-right tabular-nums bg-amber-50/30 font-semibold text-amber-700">{r.atencion || '—'}</td>
-                      <td className="px-3 py-2 text-right tabular-nums bg-emerald-50/30 font-semibold text-emerald-700">{r.saludable || '—'}</td>
-                      <td className="px-3 py-2 text-right tabular-nums bg-cyan-50/30 font-semibold text-cyan-700">{r.cobertura_alta || '—'}</td>
-                      <td className="px-3 py-2 text-right tabular-nums bg-orange-50/30 font-semibold text-orange-700">{r.sobrestock || '—'}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-bold">{fmtNum(r.inv_total)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+                <tr className="bg-gray-900 text-white font-bold">
+                  <td className="px-4 py-2.5">TOTAL <span className="text-[9px] font-normal text-gray-400 ml-1">(suma por SKU)</span></td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{t.menos_de_3}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{t.entre_3_y_10}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{t.mayor_a_10}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{t.total_pdvs}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-blue-300"
+                      title="Cobertura efectiva: PDVs distintos con al menos 1 SKU con stock / universo total">
+                    {coberturaEfectiva.toFixed(1)}% <span className="text-[9px] font-normal text-gray-400">efectiva</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
+
+        {/* Composición % */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-50">
+            <h3 className="text-sm font-bold text-gray-800">Composición % del Stock por Producto</h3>
+            <p className="text-[11px] text-gray-400 mt-0.5">Distribución porcentual de los PDVs con stock</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-semibold">Producto</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-red-600">% &lt; 3</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-amber-600">% 3–10</th>
+                  <th className="px-3 py-2.5 text-right font-semibold text-emerald-600">% &gt; 10</th>
+                  <th className="px-3 py-2.5 text-left font-semibold">Barra composición</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={r.sku} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/40'}>
+                    <td className="px-4 py-2.5 font-medium text-gray-800 max-w-[240px] truncate" title={r.descripcion ?? ''}>
+                      {r.descripcion ?? r.sku}
+                    </td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-red-600 font-semibold">{r.pct_menos_de_3.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-amber-600 font-semibold">{r.pct_entre_3_y_10.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 font-semibold">{r.pct_mayor_a_10.toFixed(1)}%</td>
+                    <td className="px-3 py-2.5 w-[280px]">
+                      <div className="flex w-full h-3 rounded-full overflow-hidden bg-gray-100">
+                        <div className="bg-red-500 h-full"     style={{ width: `${r.pct_menos_de_3}%`   }} title={`Menos de 3: ${r.pct_menos_de_3.toFixed(1)}%`} />
+                        <div className="bg-amber-500 h-full"   style={{ width: `${r.pct_entre_3_y_10}%` }} title={`Entre 3 y 10: ${r.pct_entre_3_y_10.toFixed(1)}%`} />
+                        <div className="bg-emerald-500 h-full" style={{ width: `${r.pct_mayor_a_10}%`   }} title={`Mayor a 10: ${r.pct_mayor_a_10.toFixed(1)}%`} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[10px] text-gray-400 px-6 py-2 border-t border-gray-100 bg-gray-50">
+            Réplica del reporte "CALIDAD INVENTARIO BORDEN". Los porcentajes suman 100% (composición del total de PDVs con stock del producto).
+          </p>
+        </div>
       </div>
     )
   }
@@ -1466,6 +1796,92 @@ export default function UnisuperEjecucion() {
     )
   }
 
+  const PedidosList = () => {
+    if (loading.pedidos && !pedidos) return <ChartSkeleton />
+    if (!pedidos || pedidos.pedidos.length === 0) {
+      return (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center">
+          <p className="text-3xl mb-2">📄</p>
+          <p className="text-sm font-semibold text-gray-600">Sin pedidos registrados</p>
+          <p className="text-xs text-gray-400 mt-1">No hay facturas de Sell-In cargadas para Unisuper Guatemala.</p>
+        </div>
+      )
+    }
+    const fmtDate = (iso: string) => {
+      const [y, m, d] = iso.split('-')
+      return `${d}/${m}/${y.slice(2)}`
+    }
+    return (
+      <div className="space-y-3">
+        <div className="flex items-baseline gap-3">
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">Pedidos Sell-In</p>
+          <p className="text-xs text-gray-500">{pedidos.total_pedidos} facturas · Unisuper Guatemala</p>
+        </div>
+        {pedidos.pedidos.map(p => {
+          const isOpen = pedidoExpanded === p.numero_factura
+          return (
+            <div key={p.numero_factura} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <button
+                onClick={() => setPedidoExpanded(isOpen ? null : p.numero_factura)}
+                className="w-full px-5 py-3 flex items-center justify-between hover:bg-gray-50 text-left">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <span className="text-xs text-gray-400">{fmtDate(p.fecha)}</span>
+                  <span className="font-mono text-sm font-semibold text-gray-800">{p.numero_factura}</span>
+                  <span className="text-[10px] font-bold uppercase text-gray-400 tracking-widest">
+                    {p.num_lineas} línea{p.num_lineas === 1 ? '' : 's'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-5 flex-wrap">
+                  <div className="text-right">
+                    <p className="text-[9px] uppercase text-gray-400 tracking-widest">Cajas</p>
+                    <p className="text-sm font-semibold text-gray-800 tabular-nums">{fmtNum(p.total_cajas)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[9px] uppercase text-gray-400 tracking-widest">Venta {p.moneda}</p>
+                    <p className="text-sm font-semibold text-gray-800 tabular-nums">{fmt$(p.total_venta_neta)}</p>
+                  </div>
+                  <span className={`text-xs text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
+                </div>
+              </button>
+              {isOpen && (
+                <div className="border-t border-gray-100 overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-500">
+                      <tr>
+                        <th className="px-3 py-2 text-left w-10">#</th>
+                        <th className="px-3 py-2 text-left w-20">SKU</th>
+                        <th className="px-3 py-2 text-left">Descripción</th>
+                        <th className="px-3 py-2 text-left w-24">Subcategoría</th>
+                        <th className="px-3 py-2 text-right w-16">Cajas</th>
+                        <th className="px-3 py-2 text-right w-20">Precio</th>
+                        <th className="px-3 py-2 text-right w-24">Venta neta</th>
+                        <th className="px-3 py-2 text-right w-16">Margen %</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {p.lineas.map(l => (
+                        <tr key={l.linea} className="border-t border-gray-100 hover:bg-gray-50">
+                          <td className="px-3 py-1.5 text-gray-400 tabular-nums">{l.linea}</td>
+                          <td className="px-3 py-1.5 font-mono text-gray-600">{l.sku}</td>
+                          <td className="px-3 py-1.5 text-gray-800">{l.descripcion}</td>
+                          <td className="px-3 py-1.5 text-gray-500">{l.subcategoria ?? '—'}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(l.cajas)}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums text-gray-600">{l.precio.toFixed(2)}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{fmt$(l.venta_neta)}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums text-gray-600">{l.margen_pct !== null ? l.margen_pct.toFixed(1) + '%' : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   const renderSection = () => {
     switch (section) {
       case 'resumen':         return <Resumen />
@@ -1482,40 +1898,46 @@ export default function UnisuperEjecucion() {
           monedaLabel="USD"
         />
       )
-      case 'ofertas':         return <ProximamentePlaceholder section="Ofertas" />
-      case 'precios':         return <ProximamentePlaceholder section="Precios" />
-      case 'pedidos':         return <ProximamentePlaceholder section="Pedidos" />
-      case 'recomendaciones': return <ProximamentePlaceholder section="Recomendaciones" />
+      case 'ofertas':         return <OfertasSection pais="GT" cadena="UNISUPER" />
+      case 'precios':         return <ProximamentePlaceholder section="Lista de Precios" />
+      case 'pedidos':         return <PedidosList />
       default: return <Resumen />
     }
   }
 
   return (
     <div className="space-y-5">
-      {/* Header con filtros */}
+      {/* Header estilo Éxito: eyebrow + título grande + subtítulo + Actualizar */}
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <p className="text-xs text-gray-400 uppercase tracking-widest">Ejecución Unisuper</p>
+          <h1 className="text-2xl font-bold text-gray-800">🇬🇹 Unisuper · Borden</h1>
+          <p className="text-sm text-gray-400 mt-0.5">Guatemala · Sell-Out diario</p>
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 shadow-sm">
+          <RefreshCw size={13} className={Object.values(loading).some(Boolean) ? 'animate-spin' : ''} /> Actualizar
+        </button>
+      </div>
+
+      {/* Barra de filtros — card separada */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-        <div className="px-5 py-4 flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400">Ejecución</p>
-            <h1 className="text-lg font-bold text-gray-800">🇬🇹 Unisuper · Guatemala</h1>
-          </div>
+        <div className="px-5 py-3 flex items-center justify-between flex-wrap gap-3">
           <button onClick={() => setShowFiltros(v => !v)}
-            className="text-xs px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50">
-            {showFiltros ? '▲ Ocultar filtros' : '▼ Mostrar filtros'}
-            {hayFiltros && <span className="ml-2 text-amber-600 font-bold">·</span>}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg">
+            ≡ Filtros {showFiltros ? '▲' : '▼'}
+            {hayFiltros && <span className="ml-1 text-amber-600 font-bold">·</span>}
           </button>
+          {hayFiltros && (
+            <button onClick={limpiarFiltros} className="text-xs text-gray-400 hover:text-gray-600 underline">
+              ↺ Limpiar todo
+            </button>
+          )}
         </div>
 
         {showFiltros && opts && (
           <div className="px-5 pb-5 border-t border-gray-100 pt-4">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] uppercase tracking-widest text-gray-400">Filtros</p>
-              {hayFiltros && (
-                <button onClick={limpiarFiltros} className="text-xs text-gray-400 hover:text-gray-600 underline">
-                  ↺ Limpiar todo
-                </button>
-              )}
-            </div>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <MultiSelect
                 label="Cadena"
