@@ -4,9 +4,11 @@ import { handleApiError } from '@/lib/api/errors'
 
 export const revalidate = 1800
 
+const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+
 /**
- * Tendencia diaria Unisuper GT — últimos 90 días.
- * Devuelve serie por fecha con valor + unidades, para chart de líneas.
+ * Serie diaria Unisuper GT compatible con TendDailyRow: { dia_str, valor_usd, valor_cop, unidades }.
+ * Unisuper no separa COP: valor_cop = valor_usd para satisfacer el shape del chart.
  */
 function csv(sp: URLSearchParams, key: string): string[] {
   const v = sp.get(key)
@@ -35,37 +37,58 @@ function buildWhere(sp: URLSearchParams) {
     pdvs.forEach(v => params.push(v))
     conds.push(`nombre_sucursal IN (${pdvs.map((_, i) => `$${start + 1 + i}`).join(',')})`)
   }
+  const skus = csv(sp, 'skus')
+  if (skus.length) {
+    const start = params.length
+    skus.forEach(v => params.push(v))
+    conds.push(`sku IN (${skus.map((_, i) => `$${start + 1 + i}`).join(',')})`)
+  }
   return { where: conds.join(' AND '), params }
 }
 
 export async function GET(req: NextRequest) {
   try {
-    const sp   = req.nextUrl.searchParams
-    const dias = Math.min(parseInt(sp.get('dias') ?? '90'), 365)
-    const w    = buildWhere(sp)
+    const sp    = req.nextUrl.searchParams
+    const desde = sp.get('desde') || '2026-01-01'
+    const hasta = sp.get('hasta') || '2026-12-31'
+    const w     = buildWhere(sp)
 
-    const { rows } = await pool.query(`
-      SELECT fecha::date AS fecha,
-             ROUND(SUM(ventas_valor)::numeric, 2)    AS valor,
-             ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades,
-             COUNT(DISTINCT nombre_sucursal)         AS tiendas
-      FROM fact_ventas_unisuper
-      WHERE ${w.where}
-        AND fecha >= CURRENT_DATE - INTERVAL '${dias} day'
-        AND ventas_unidades > 0
-      GROUP BY fecha
-      ORDER BY fecha
-    `, w.params)
+    // fecha va como parámetro después de los del where
+    const params = [...w.params, desde, hasta]
+    const desdeIdx = w.params.length + 1
+    const hastaIdx = w.params.length + 2
 
-    return NextResponse.json({
-      dias,
-      rows: rows.map(r => ({
-        fecha:    r.fecha,
-        valor:    parseFloat(r.valor ?? '0'),
-        unidades: parseInt(r.unidades ?? '0'),
-        tiendas:  parseInt(r.tiendas ?? '0'),
-      })),
+    const r = await pool.query(
+      `SELECT fecha::date AS fecha,
+              ROUND(SUM(ventas_valor)::numeric,    2) AS valor_usd,
+              ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
+         FROM fact_ventas_unisuper
+        WHERE ${w.where}
+          AND fecha BETWEEN $${desdeIdx} AND $${hastaIdx}
+          AND ventas_unidades > 0
+        GROUP BY fecha::date
+        ORDER BY fecha::date`,
+      params,
+    )
+
+    const rows = r.rows.map(row => {
+      const iso = row.fecha instanceof Date
+        ? row.fecha.toISOString().slice(0, 10)
+        : String(row.fecha)
+      const [, mStr, dStr] = iso.split('-')
+      const mes = parseInt(mStr)
+      const dia = parseInt(dStr)
+      const valor_usd = parseFloat(row.valor_usd)
+      return {
+        fecha: iso,
+        dia_str: `${dia} ${MN[mes]}`,
+        valor_usd,
+        valor_cop: valor_usd,
+        unidades: parseFloat(row.unidades),
+      }
     })
+
+    return NextResponse.json({ rows })
   } catch (err) {
     return handleApiError(err)
   }

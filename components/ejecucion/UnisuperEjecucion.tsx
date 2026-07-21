@@ -4,11 +4,16 @@ import dynamic from 'next/dynamic'
 import { TrendingUp, TrendingDown, Minus, X } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
+  PieChart, Pie, LabelList,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, Legend,
 } from 'recharts'
 import MultiSelect from '@/components/dashboard/MultiSelect'
 import ChartSkeleton from '@/components/ui/ChartSkeleton'
+import {
+  TendenciaMensualChart, TendenciaDiariaChart, MetricaTogglePill,
+  type TendMetrica, type TendData, type TendDailyRow,
+} from '@/components/ui/tendencia-chart'
 
 const InnovacionesSection = dynamic(
   () => import('@/components/ejecucion/InnovacionesSection'),
@@ -186,6 +191,18 @@ export default function UnisuperEjecucion() {
   const [kpis, setKpis]     = useState<KpisData | null>(null)
   const [daily, setDaily]   = useState<DailyRow[]>([])
   const [top5, setTop5]     = useState<EvoTop5Series[]>([])
+  const [tendencia, setTendencia] = useState<TendData | null>(null)
+  const [tendDaily, setTendDaily] = useState<TendDailyRow[]>([])
+  const [tendDailyLoading, setTendDailyLoading] = useState(false)
+  const [tendVista, setTendVista] = useState<'mensual' | 'diaria'>('mensual')
+  const [tendMetricas, setTendMetricas] = useState<TendMetrica[]>(['valor', 'unidades', 'precio'])
+  const toggleTendMetrica = (m: TendMetrica) => {
+    setTendMetricas(prev => {
+      const has = prev.includes(m)
+      if (has && prev.length === 1) return prev
+      return has ? prev.filter(x => x !== m) : [...prev, m]
+    })
+  }
   const [evolVista, setEvolVista] = useState<'mensual' | 'diaria'>('mensual')
   const [cob,  setCob]      = useState<CobData  | null>(null)
   const [cobDetalle, setCobDetalle] = useState<CobDetalle | null>(null)
@@ -225,14 +242,14 @@ export default function UnisuperEjecucion() {
       ]
       if (section === 'evolucion') {
         fetches.push(
-          fetch('/api/comercial/ejecucion/gt/unisuper/tendencia-diaria?' + filterQS).then(r => r.json()),
+          fetch('/api/comercial/ejecucion/gt/unisuper/tendencia-mensual?' + filterQS).then(r => r.json()),
           fetch('/api/comercial/ejecucion/gt/unisuper/evo-top5?' + filterQS).then(r => r.json()),
         )
       }
-      Promise.all(fetches).then(([k, d, t]) => {
+      Promise.all(fetches).then(([k, t, e]) => {
         setKpis(k)
-        if (d) setDaily(d.rows ?? [])
-        if (t) setTop5(t.series ?? [])
+        if (t) setTendencia(t)
+        if (e) setTop5(e.series ?? [])
       }).finally(() => setLoading(l => ({ ...l, [section]: false })))
     } else if (section === 'cobertura') {
       setLoading(l => ({ ...l, cobertura: true }))
@@ -260,6 +277,21 @@ export default function UnisuperEjecucion() {
         .finally(() => setLoading(l => ({ ...l, pareto: false })))
     }
   }, [section, filterQS, topN])
+
+  // Cargar tendencia diaria solo cuando se cambia a vista diaria
+  useEffect(() => {
+    if (section !== 'evolucion' || tendVista !== 'diaria') return
+    if (tendDaily.length > 0 || tendDailyLoading) return
+    setTendDailyLoading(true)
+    fetch('/api/comercial/ejecucion/gt/unisuper/tendencia-diaria?' + filterQS)
+      .then(r => r.json())
+      .then(d => setTendDaily(d.rows ?? []))
+      .catch(() => setTendDaily([]))
+      .finally(() => setTendDailyLoading(false))
+  }, [section, tendVista, filterQS, tendDaily.length, tendDailyLoading])
+
+  // Reset tendencia diaria al cambiar filtros
+  useEffect(() => { setTendDaily([]) }, [filterQS])
 
   // Drill-down cobertura
   const openCobDetalle = (sku: string, descripcion: string | null,
@@ -400,98 +432,378 @@ export default function UnisuperEjecucion() {
   }
 
   const Evolucion = () => {
-    if (loading.evolucion) return <ChartSkeleton />
+    if (loading.evolucion) return <div className="space-y-4"><ChartSkeleton /><ChartSkeleton /></div>
     if (!kpis) return null
+
+    const monthlyRaw = kpis.monthly
+    const cadenasSell = kpis.por_cadena
+
+    // ── Estadísticas del período ──
+    const meses2026 = monthlyRaw.filter(m => m.y2026 !== null && m.y2026 > 0)
+    const totVal2026 = meses2026.reduce((s, m) => s + (m.y2026 ?? 0), 0)
+    const totUds2026 = meses2026.reduce((s, m) => s + (m.u2026 ?? 0), 0)
+    const promMensualVal = meses2026.length > 0 ? totVal2026 / meses2026.length : 0
+    const promMensualUds = meses2026.length > 0 ? totUds2026 / meses2026.length : 0
+    const DIAS_MES: Record<number, number> = { 1:31,2:28,3:31,4:30,5:31,6:30,7:31,8:31,9:30,10:31,11:30,12:31 }
+    const diasAcumulados = meses2026.reduce((s, m) => s + (DIAS_MES[m.mes] ?? 30), 0)
+    const promDiarioVal = diasAcumulados > 0 ? totVal2026 / diasAcumulados : 0
+    const promDiarioUds = diasAcumulados > 0 ? totUds2026 / diasAcumulados : 0
+
+    const sortedByVal = [...meses2026].sort((a, b) => (b.y2026 ?? 0) - (a.y2026 ?? 0))
+    const mejorMes = sortedByVal[0]
+    const peorMes  = sortedByVal[sortedByVal.length - 1]
+    const ticketMedio = totUds2026 > 0 ? totVal2026 / totUds2026 : 0
+
+    const growthMoM: { mes_nombre: string; growth: number | null }[] = monthlyRaw.map((m, i) => {
+      const prev = i > 0 ? monthlyRaw[i - 1] : null
+      const g = prev && prev.y2026 && m.y2026 !== null && prev.y2026 > 0
+        ? ((m.y2026 - prev.y2026) / prev.y2026) * 100
+        : null
+      return { mes_nombre: m.mes_nombre, growth: g }
+    })
+    const growthValidos = growthMoM.filter(x => x.growth !== null).map(x => x.growth as number)
+    const growthPromedio = growthValidos.length > 0
+      ? growthValidos.reduce((s, v) => s + v, 0) / growthValidos.length : 0
+
+    const cadenasActivas = cadenasSell.filter(c => (c.valor_2026 ?? 0) > 0).length
+
+    // KPIs primarios
+    const soTotal = kpis.ytd_2026
+    const soPrev  = kpis.ytd_2025
+    const soDelta = kpis.delta_ytd
+    const soLast  = kpis.ultimo_mes_nombre
+    const mAct = monthlyRaw.find(m => m.mes === kpis.ultimo_mes)
+    const dVal = mAct && mAct.y2025 > 0 && mAct.y2026 !== null
+      ? ((mAct.y2026 - mAct.y2025) / mAct.y2025) * 100 : null
+    const dUds = mAct && mAct.u2025 > 0 && mAct.u2026 !== null
+      ? ((mAct.u2026 - mAct.u2025) / mAct.u2025) * 100 : null
+
+    if (soTotal === 0) {
+      return (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="py-16 text-center">
+            <p className="text-3xl mb-2">📭</p>
+            <p className="text-sm font-semibold text-gray-600">Sin datos de sell-out para Unisuper GT</p>
+          </div>
+        </div>
+      )
+    }
+
+    const pieData = cadenasSell
+      .filter(c => (c.valor_2026 ?? 0) > 0)
+      .map(c => ({ cadena: c.cadena, valor: Number(c.valor_2026 ?? 0) }))
+    const totPie = pieData.reduce((s, x) => s + x.valor, 0)
+
     return (
       <div className="space-y-5">
-        {/* Toggle vista */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-center gap-4">
-          <span className="text-[10px] uppercase tracking-widest text-gray-400">Vista</span>
-          <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-            {(['mensual', 'diaria'] as const).map(v => (
-              <button key={v} onClick={() => setEvolVista(v)}
-                className={`px-4 py-1.5 text-xs font-medium transition-colors ${evolVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                {v === 'mensual' ? '📅 Mensual' : '📆 Diaria (90d)'}
-              </button>
-            ))}
+
+        {/* Header con 4 KPIs primarios */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <h3 className="text-sm font-semibold text-gray-800">📈 Evolución de Ventas</h3>
+            <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">SELLOUT</span>
+            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">USD</span>
+          </div>
+          <p className="text-xs text-gray-400 mb-3">
+            Unisuper Guatemala
+            {cadenasSel.length > 0 && ` · ${cadenasSel.length === 1 ? cadenasSel[0] : `${cadenasSel.length} cadenas`}`}
+            {subcatsSel.length > 0 && ` · ${subcatsSel.length === 1 ? subcatsSel[0] : `${subcatsSel.length} subcategorías`}`}
+            {pdvsSel.length > 0 && ` · ${pdvsSel.length === 1 ? pdvsSel[0] : `${pdvsSel.length} PDVs`}`}
+            {skusSel.length > 0 && ` · ${skusSel.length === 1 ? `SKU ${skusSel[0]}` : `${skusSel.length} SKUs`}`}
+          </p>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className={`rounded-lg px-4 py-2.5 border ${(soDelta ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(soDelta ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>YTD 2026 vs 2025</p>
+              <p className={`text-lg font-bold ${(soDelta ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {soPrev === 0 ? '—' : `${(soDelta ?? 0) > 0 ? '+' : ''}${(soDelta ?? 0).toFixed(1)}%`}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{soLast ? `Ene–${soLast}` : ''}</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-amber-50 border border-amber-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-0.5">YTD 2026 (USD)</p>
+              <p className="text-lg font-bold text-amber-700">{fmt$(soTotal)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(kpis.uni_2026 ?? 0)} und</p>
+            </div>
+            <div className={`rounded-lg px-4 py-2.5 border ${(dVal ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dVal ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{soLast} vs 2025</p>
+              <p className={`text-lg font-bold ${(dVal ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {dVal === null ? '—' : `${dVal > 0 ? '+' : ''}${dVal.toFixed(1)}%`}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmt$(mAct?.y2026 ?? 0)}</p>
+            </div>
+            <div className={`rounded-lg px-4 py-2.5 border ${(dUds ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{soLast} und vs 2025</p>
+              <p className={`text-lg font-bold ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {dUds === null ? '—' : `${dUds > 0 ? '+' : ''}${dUds.toFixed(1)}%`}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(mAct?.u2026 ?? 0)} und</p>
+            </div>
           </div>
         </div>
 
-        {/* Chart principal */}
+        {/* Seguimiento mensual */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">
-            📈 Evolución {evolVista === 'mensual' ? 'mensual · 2025 vs 2026' : 'diaria · últimos 90 días'}
-          </h3>
-          <div className="h-[400px]">
-            <ResponsiveContainer>
-              {evolVista === 'mensual' ? (
-                <ComposedChart data={kpis.monthly} margin={{ top: 12, right: 30, left: 10, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id="uni-ev-25" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.9} />
-                      <stop offset="100%" stopColor="#60a5fa" stopOpacity={0.5} />
-                    </linearGradient>
-                    <linearGradient id="uni-ev-26" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#c8873a" stopOpacity={0.95} />
-                      <stop offset="100%" stopColor="#c8873a" stopOpacity={0.55} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11 }} />
-                  <YAxis yAxisId="left" tickFormatter={fmtK} tick={{ fontSize: 11 }} width={55} />
-                  <YAxis yAxisId="right" orientation="right" tickFormatter={fmtNum} tick={{ fontSize: 11 }} width={55} />
-                  <Tooltip formatter={(v: any, n: string) => n.startsWith('u') ? fmtNum(Number(v)) + ' und' : fmt$(Number(v))}
-                           contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                  <Bar yAxisId="left" dataKey="y2025" name="Valor 2025" fill="url(#uni-ev-25)" radius={[8, 8, 0, 0]} />
-                  <Bar yAxisId="left" dataKey="y2026" name="Valor 2026" fill="url(#uni-ev-26)" radius={[8, 8, 0, 0]} />
-                  <Line yAxisId="right" type="monotone" dataKey="u2026" name="Unidades 2026" stroke="#1d4ed8" strokeWidth={2} dot={{ r: 3 }} />
-                </ComposedChart>
-              ) : (
-                <AreaChart data={daily} margin={{ top: 12, right: 30, left: 10, bottom: 5 }}>
-                  <defs>
-                    <linearGradient id="uni-daily" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#c8873a" stopOpacity={0.6} />
-                      <stop offset="100%" stopColor="#c8873a" stopOpacity={0.05} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="fecha" tick={{ fontSize: 10 }} tickFormatter={(v: string) => v.slice(5)} interval="preserveStartEnd" minTickGap={30} />
-                  <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} width={55} />
-                  <Tooltip formatter={(v: any) => fmt$(Number(v))} labelFormatter={(l: string) => `Fecha: ${l}`}
-                           contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                  <Area type="monotone" dataKey="valor" name="Valor" stroke="#c8873a" strokeWidth={2} fill="url(#uni-daily)" />
-                </AreaChart>
-              )}
+          <div className="flex items-center gap-2 mb-3">
+            <h4 className="text-sm font-semibold text-gray-800">📅 Seguimiento Mensual</h4>
+            <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">
+              {soLast} 2026
+            </span>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Kpi label="Total YTD 2026 (USD)" value={fmt$(soTotal)} sub={`${kpis.ultimo_mes ?? 0} meses acumulados`} color="#c8873a" />
+            <Kpi label="Total YTD 2026 (und)" value={fmtNum(kpis.uni_2026 ?? 0)} sub={`${kpis.ultimo_mes ?? 0} meses acumulados`} color="#3a6fa8" />
+            <Kpi label="Promedio mensual (und)" value={fmtNum(promMensualUds)} sub={`${fmtNum(promMensualUds)} und/mes`} color="#2a7a58" />
+            <Kpi label={`Prom. diario (${diasAcumulados}d)`} value={fmtNum(promDiarioUds)} sub={`${fmtNum(promDiarioUds)} und/día`} color="#a04d3a" />
+          </div>
+        </div>
+
+        {/* Estadísticas del período */}
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <h4 className="text-sm font-semibold text-gray-800 mb-3">📊 Estadísticas del período</h4>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio mensual</p>
+              <p className="text-lg font-bold text-gray-800">{fmt$(promMensualVal)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promMensualUds)} und/mes</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio diario</p>
+              <p className="text-lg font-bold text-gray-800">{fmt$(promDiarioVal)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promDiarioUds)} und/día</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-emerald-50 border border-emerald-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-0.5">Mejor mes 2026</p>
+              <p className="text-lg font-bold text-emerald-700">{mejorMes ? mejorMes.mes_nombre : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{mejorMes ? fmt$(mejorMes.y2026 ?? 0) : '—'}</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-red-50 border border-red-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-red-700 mb-0.5">Peor mes 2026</p>
+              <p className="text-lg font-bold text-red-700">{peorMes ? peorMes.mes_nombre : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{peorMes ? fmt$(peorMes.y2026 ?? 0) : '—'}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+            <div className="rounded-lg px-4 py-2.5 bg-blue-50 border border-blue-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-blue-700 mb-0.5">Ticket medio</p>
+              <p className="text-lg font-bold text-blue-700">{fmt$(ticketMedio)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">por unidad</p>
+            </div>
+            <div className={`rounded-lg px-4 py-2.5 border ${growthPromedio >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+              <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${growthPromedio >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>Crecimiento MoM prom.</p>
+              <p className={`text-lg font-bold ${growthPromedio >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                {growthPromedio > 0 ? '+' : ''}{growthPromedio.toFixed(1)}%
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">vs mes anterior</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Meses activos</p>
+              <p className="text-lg font-bold text-gray-800">{meses2026.length} <span className="text-xs font-normal text-gray-500">de 12</span></p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{diasAcumulados} días acumulados</p>
+            </div>
+            <div className="rounded-lg px-4 py-2.5 bg-purple-50 border border-purple-100">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-purple-700 mb-0.5">Cadenas activas</p>
+              <p className="text-lg font-bold text-purple-700">{cadenasActivas}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">con ventas 2026</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Chart 1: Ventas mensuales / diarias con TendenciaChart real */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">
+                {tendVista === 'mensual' ? 'Ventas mensuales' : 'Ventas diarias · 2026'}
+              </h4>
+              {(() => {
+                let precioUlt = 0
+                let refLabel  = ''
+                if (tendVista === 'diaria' && tendDaily.length > 0) {
+                  const last = tendDaily[tendDaily.length - 1]
+                  precioUlt = last.unidades > 0 ? last.valor_usd / last.unidades : 0
+                  refLabel = last.dia_str
+                } else if (tendVista === 'mensual' && tendencia?.total) {
+                  const withData = tendencia.total.filter(p => (p.unidades ?? 0) > 0)
+                  const last = withData[withData.length - 1]
+                  if (last) { precioUlt = last.precio_usd; refLabel = last.mes_str }
+                }
+                const precioFmt = '$' + precioUlt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                return (
+                  <p className="text-[11px] text-gray-400">
+                    {tendVista === 'mensual' ? 'Comparativo continuo · USD' : 'Tendencia diaria · USD'}
+                    {precioUlt > 0 && (
+                      <>
+                        <span className="mx-1.5 text-gray-300">·</span>
+                        <span className="font-semibold text-emerald-600">Último precio prom / Und ({refLabel}): {precioFmt}</span>
+                      </>
+                    )}
+                  </p>
+                )
+              })()}
+            </div>
+            <div className="flex items-center gap-3 text-[11px] flex-wrap">
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {(['mensual','diaria'] as const).map(v => (
+                  <button key={v} onClick={() => setTendVista(v)}
+                    className={`px-3 py-1 font-semibold transition-colors ${tendVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {v === 'mensual' ? 'Mensual' : 'Diaria'}
+                  </button>
+                ))}
+              </div>
+              <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} activeClass="bg-amber-500 text-white" />
+            </div>
+          </div>
+          {tendVista === 'mensual' ? (
+            <TendenciaMensualChart
+              tendencia={tendencia}
+              metricas={tendMetricas}
+              moneda="usd"
+              skuFilter={skusSel}
+            />
+          ) : (
+            <TendenciaDiariaChart
+              rows={tendDaily}
+              metricas={tendMetricas}
+              moneda="usd"
+              loading={tendDailyLoading}
+            />
+          )}
+        </div>
+
+        {/* Chart 2: Growth MoM % */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">Crecimiento MoM %</h4>
+              <p className="text-[11px] text-gray-400">Variación mes vs mes anterior · 2026</p>
+            </div>
+            <div className="flex items-center gap-3 text-[11px]">
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> Positivo</span>
+              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500"/> Negativo</span>
+            </div>
+          </div>
+          <div className="h-[260px] mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={growthMoM} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="20%">
+                <defs>
+                  <linearGradient id="gradUniGrowthPos" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                  </linearGradient>
+                  <linearGradient id="gradUniGrowthNeg" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={1}/>
+                    <stop offset="100%" stopColor="#f87171" stopOpacity={0.85}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v: number) => v + '%'} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
+                <Tooltip
+                  formatter={(v: unknown) => v === null ? ['—', 'Growth'] : [(v as number).toFixed(1) + '%', 'Growth']}
+                  cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                  contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                />
+                <Bar dataKey="growth" radius={[8,8,0,0]} maxBarSize={40}>
+                  {growthMoM.map((r, i) => (
+                    <Cell key={i} fill={r.growth === null ? '#e2e8f0' : r.growth >= 0 ? 'url(#gradUniGrowthPos)' : 'url(#gradUniGrowthNeg)'} />
+                  ))}
+                  <LabelList dataKey="growth" position="top"
+                    formatter={(v: any) => v === null || v === undefined ? '' : Number(v).toFixed(1) + '%'}
+                    style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Top-5 evolución */}
-        {top5.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">🏆 Top 5 SKUs · Evolución mensual 2026</h3>
-            <div className="h-[320px]">
-              <ResponsiveContainer>
-                <LineChart data={Array.from({ length: 12 }, (_, i) => {
-                  const row: any = { mes: MES[i + 1] }
-                  top5.forEach((s, idx) => {
-                    row[`sku${idx}`] = s.monthly[i]?.y2026 ?? 0
-                  })
-                  return row
-                })} margin={{ top: 12, right: 30, left: 10, bottom: 5 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                  <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
-                  <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} width={55} />
-                  <Tooltip formatter={(v: any) => fmt$(Number(v))}
-                           contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                  <Legend wrapperStyle={{ fontSize: 10 }} />
-                  {top5.map((s, idx) => (
-                    <Line key={s.sku} type="monotone" dataKey={`sku${idx}`}
-                          name={(s.descripcion || s.sku).slice(0, 30)}
-                          stroke={SKU_LINE_COLORS[idx % 5]} strokeWidth={2} dot={{ r: 3 }} />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
+        {/* Chart 3: Distribución por cadena · Pie */}
+        {pieData.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">Distribución por cadena 2026</h4>
+              <p className="text-[11px] text-gray-400">Participación de ventas por cadena · USD</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 items-center">
+              <div className="md:col-span-2 h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={pieData} dataKey="valor" nameKey="cadena"
+                         cx="50%" cy="50%" innerRadius={60} outerRadius={100}
+                         paddingAngle={2} stroke="#fff" strokeWidth={2}
+                         label={(entry: any) => {
+                           const pct = totPie > 0 ? (entry.valor / totPie) * 100 : 0
+                           return pct >= 3 ? `${pct.toFixed(1)}%` : ''
+                         }}
+                         labelLine={false}>
+                      {pieData.map((c, i) => (
+                        <Cell key={i} fill={CADENA_COLORS[c.cadena] ?? '#c8873a'} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: unknown) => [fmt$(Number(v)), '']}
+                             contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="space-y-2">
+                {pieData.slice().sort((a, b) => b.valor - a.valor).map(c => {
+                  const pct = totPie > 0 ? (c.valor / totPie) * 100 : 0
+                  return (
+                    <div key={c.cadena} className="flex items-start gap-2 text-xs">
+                      <div className="w-2.5 h-2.5 rounded-sm mt-1 flex-shrink-0"
+                           style={{ background: CADENA_COLORS[c.cadena] ?? '#c8873a' }} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-700 truncate">{c.cadena}</p>
+                        <p className="text-[11px] text-gray-400 tabular-nums">
+                          {fmt$(c.valor)} <span className="text-gray-300">· {pct.toFixed(1)}%</span>
+                        </p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tabla Detalle por Cadena */}
+        {cadenasSell.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-50">
+              <h3 className="text-sm font-semibold text-gray-700">📋 Detalle por Cadena</h3>
+              <p className="text-[11px] text-gray-400">Sell-Out YTD 2026 · Unisuper Guatemala</p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                  <tr>
+                    <th className="px-3 py-2.5 text-left font-semibold">Cadena</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Valor 2026 (USD)</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Unidades 2026</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">Valor 2025 (USD)</th>
+                    <th className="px-3 py-2.5 text-right font-semibold">vs 2025</th>
+                    <th className="px-3 py-2.5 text-right font-semibold bg-amber-50 text-amber-700">Share %</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cadenasSell.map((c, i) => {
+                    const pct = kpis.ytd_2026 > 0 ? (c.valor_2026 / kpis.ytd_2026) * 100 : 0
+                    return (
+                      <tr key={c.cadena} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                        <td className="px-3 py-2.5">
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
+                                style={{ background: CADENA_COLORS[c.cadena] ?? '#6b7280' }}>{c.cadena}</span>
+                        </td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800">{fmt$(c.valor_2026)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmtNum(c.uni_2026)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{c.valor_2025 > 0 ? fmt$(c.valor_2025) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-2.5 text-right"><Delta d={c.delta} /></td>
+                        <td className="px-3 py-2.5 text-right tabular-nums bg-amber-50/40 font-bold text-amber-700">{pct.toFixed(1)}%</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
