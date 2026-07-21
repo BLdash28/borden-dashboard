@@ -239,10 +239,10 @@ export default function UnisuperEjecucion() {
       setLoading(l => ({ ...l, [section]: true }))
       const fetches: Promise<any>[] = [
         fetch('/api/comercial/ejecucion/gt/unisuper/kpis?' + filterQS).then(r => r.json()),
+        fetch('/api/comercial/ejecucion/gt/unisuper/tendencia-mensual?' + filterQS).then(r => r.json()),
       ]
       if (section === 'evolucion') {
         fetches.push(
-          fetch('/api/comercial/ejecucion/gt/unisuper/tendencia-mensual?' + filterQS).then(r => r.json()),
           fetch('/api/comercial/ejecucion/gt/unisuper/evo-top5?' + filterQS).then(r => r.json()),
         )
       }
@@ -314,18 +314,177 @@ export default function UnisuperEjecucion() {
 
   // ── Secciones ────────────────────────────────────────────────────────────
   const Resumen = () => {
-    if (loading.resumen) return <ChartSkeleton />
+    if (loading.resumen) return <div className="space-y-4"><ChartSkeleton /><ChartSkeleton /></div>
     if (!kpis) return null
+    const soTotal   = kpis.ytd_2026 ?? 0
+    const soUnits   = kpis.uni_2026 ?? 0
+    const soUnits25 = kpis.uni_2025 ?? 0
+    const soDelta   = kpis.delta_ytd
+    const soDeltaUds = soUnits25 > 0 ? ((soUnits - soUnits25) / soUnits25) * 100 : null
+    const soLast    = kpis.ultimo_mes_nombre ?? '—'
+    const soAvg     = (kpis.ultimo_mes ?? 0) > 0 ? soTotal / (kpis.ultimo_mes ?? 1) : 0
+    const cadenas   = kpis.por_cadena ?? []
+    const porCategoria = kpis.por_categoria ?? []
+    const monthlyRaw = kpis.monthly ?? []
+    const monthly   = monthlyRaw.map(m => ({
+      ...m,
+      y2025: (m.y2025 ?? 0) > 0 ? m.y2025 : null,
+    }))
+
     return (
       <div className="space-y-5">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <Kpi label="Venta 2026 YTD" value={fmt$(kpis.ytd_2026)} sub={`vs ${fmt$(kpis.ytd_2025)}`} delta={kpis.delta_ytd} color="#c8873a" />
-          <Kpi label="Unidades 2026" value={fmtNum(kpis.uni_2026)} sub="acumulado" color="#3a6fa8" />
-          <Kpi label="Cadenas activas" value={String(kpis.por_cadena.filter(c => c.valor_2026 > 0).length)} sub={`de ${kpis.por_cadena.length}`} color="#2a7a58" />
-          <Kpi label="Último dato" value={kpis.ultima_fecha ? String(kpis.ultima_fecha).slice(0, 10) : '—'} sub={kpis.ultimo_mes_nombre + ' 2026'} color="#a04d3a" />
+
+        {/* Sell-Out KPI row (4 cards) */}
+        <div>
+          <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Sell-Out</p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { label: 'Sell-Out YTD 2026', value: fmtFull(soTotal), sub: `hasta ${soLast}`, icon: '🛒' },
+              { label: 'vs YTD 2025',
+                value: soDelta !== null ? <Delta d={soDelta} /> : <span className="text-sm text-gray-400">Sin hist.</span>,
+                sub: (kpis.ytd_2025 ?? 0) > 0 ? `2025: ${fmtFull(kpis.ytd_2025 ?? 0)}` : 'Sin dato 2025',
+                icon: '📊' },
+              { label: 'Unidades YTD', value: soUnits.toLocaleString('en-US'), sub: 'cajas vendidas', icon: '📦' },
+              { label: 'Promedio Mensual', value: fmt$(soAvg), sub: `${kpis.ultimo_mes ?? 0} meses`, icon: '📅' },
+            ].map(c => (
+              <div key={c.label} className="rounded-xl border border-gray-100 shadow-sm p-5 bg-white">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
+                  <span className="text-lg">{c.icon}</span>
+                </div>
+                <p className="text-2xl font-bold mb-1 text-gray-800">{c.value}</p>
+                <p className="text-xs text-gray-400">{c.sub}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        {kpis.por_cadena.length > 0 && (
+        {/* Por cadena cards (con barra de progreso) */}
+        {cadenas.length > 0 && (
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Por Cadena · Sell-Out YTD 2026</p>
+            <div className={`grid grid-cols-1 md:grid-cols-${Math.min(cadenas.length, 3)} gap-3`}>
+              {cadenas.map(c => {
+                const pctVal = soTotal > 0 ? ((c.valor_2026 ?? 0) / soTotal * 100) : 0
+                const color = CADENA_COLORS[c.cadena] ?? '#6b7280'
+                return (
+                  <div key={c.cadena} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                      <p className="text-xs font-semibold text-gray-600 truncate">{c.cadena}</p>
+                    </div>
+                    <p className="text-xl font-bold text-gray-800">{fmtFull(c.valor_2026 ?? 0)}</p>
+                    <div className="flex items-center justify-between mt-1">
+                      <p className="text-xs text-gray-400">{pctVal.toFixed(1)}% del total</p>
+                      {c.delta !== null ? <Delta d={c.delta} /> : <span className="text-[11px] text-gray-300">Sin 2025</span>}
+                    </div>
+                    <div className="mt-2 bg-gray-100 rounded-full h-1.5">
+                      <div className="h-1.5 rounded-full" style={{ width: `${pctVal}%`, background: color }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Evolución Sell-Out · TendenciaMensualChart con MetricaTogglePill */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">Evolución Sell-Out · Unisuper Guatemala</h3>
+              {(() => {
+                let precioUlt = 0
+                let refLabel = ''
+                if (tendencia?.total) {
+                  const withData = tendencia.total.filter(p => (p.unidades ?? 0) > 0)
+                  const last = withData[withData.length - 1]
+                  if (last) { precioUlt = last.precio_usd; refLabel = last.mes_str }
+                }
+                const precioFmt = '$' + precioUlt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                return (
+                  <p className="text-[11px] text-gray-400">
+                    Timeline mensual continuo
+                    {precioUlt > 0 && (
+                      <>
+                        <span className="mx-1.5 text-gray-300">·</span>
+                        <span className="font-semibold text-emerald-600">Último precio prom / Und ({refLabel}): {precioFmt}</span>
+                      </>
+                    )}
+                  </p>
+                )
+              })()}
+            </div>
+            <MetricaTogglePill metricas={tendMetricas} onToggle={toggleTendMetrica} activeClass="bg-amber-500 text-white" />
+          </div>
+          <TendenciaMensualChart
+            tendencia={tendencia}
+            metricas={tendMetricas}
+            moneda="usd"
+            skuFilter={skusSel}
+          />
+        </div>
+
+        {/* Venta Valor vs Unidades — ComposedChart (barras ámbar + line azul) */}
+        {monthly.length > 0 && (() => {
+          const MN12 = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+          const byMes = new Map(monthly.map((m: any) => [m.mes, m]))
+          const data: { mes_str: string; valor: number; unidades: number }[] = []
+          for (const ano of [2025, 2026] as const) {
+            for (let m = 1; m <= 12; m++) {
+              const row: any = byMes.get(m)
+              if (!row) continue
+              const valor    = ano === 2025 ? Number(row.y2025 ?? 0) : Number(row.y2026 ?? 0)
+              const unidades = ano === 2025 ? Number(row.u2025 ?? 0) : Number(row.u2026 ?? 0)
+              if (valor <= 0 && unidades <= 0) continue
+              data.push({ mes_str: `${MN12[m]}-${String(ano).slice(2)}`, valor, unidades })
+            }
+          }
+          if (data.length === 0) return null
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-800">Venta Valor vs Unidades</h3>
+                  <p className="text-[11px] text-gray-400">Timeline continuo · valor USD (barras) + unidades (línea)</p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Valor USD</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-blue-500 border border-blue-700"/> Unidades</span>
+                </div>
+              </div>
+              <div className="h-[280px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={data} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="18%">
+                    <defs>
+                      <linearGradient id="gradUniVv" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.75}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9"/>
+                    <XAxis dataKey="mes_str" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false}/>
+                    <YAxis yAxisId="v" tickFormatter={fmt$} tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false}/>
+                    <YAxis yAxisId="u" orientation="right" tickFormatter={(v: any) => Number(v) >= 1000 ? (Number(v)/1000).toFixed(0)+'K' : String(Math.round(Number(v)))}
+                      tick={{ fontSize: 10, fill: '#2563eb' }} width={55} axisLine={false} tickLine={false}/>
+                    <Tooltip
+                      formatter={(v: any, name: string) => name === 'Unidades'
+                        ? [Math.round(Number(v)).toLocaleString('en-US'), name]
+                        : [fmtFull(Number(v)), name]}
+                      cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
+                    <Bar yAxisId="v" dataKey="valor" name="Valor USD" fill="url(#gradUniVv)" radius={[6,6,0,0]} maxBarSize={26}/>
+                    <Line yAxisId="u" type="monotone" dataKey="unidades" name="Unidades" stroke="#2563eb" strokeWidth={2.5}
+                      dot={{ r: 3, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }}
+                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#2563eb' }} connectNulls/>
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )
+        })()}
+
+        {cadenas.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-50">
               <h3 className="text-sm font-semibold text-gray-700">📋 Detalle por Cadena</h3>
@@ -344,8 +503,8 @@ export default function UnisuperEjecucion() {
                   </tr>
                 </thead>
                 <tbody>
-                  {kpis.por_cadena.map((c, i) => {
-                    const pct = kpis.ytd_2026 > 0 ? (c.valor_2026 / kpis.ytd_2026) * 100 : 0
+                  {cadenas.map((c, i) => {
+                    const pct = (kpis.ytd_2026 ?? 0) > 0 ? ((c.valor_2026 ?? 0) / (kpis.ytd_2026 ?? 1)) * 100 : 0
                     return (
                       <tr key={c.cadena} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                         <td className="px-3 py-2.5">
@@ -366,12 +525,12 @@ export default function UnisuperEjecucion() {
           </div>
         )}
 
-        {kpis.monthly.length > 0 && (
+        {monthly.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">📈 Evolución mensual · 2025 vs 2026</h3>
             <div className="h-[300px]">
               <ResponsiveContainer>
-                <BarChart data={kpis.monthly} margin={{ top: 12, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={monthly} margin={{ top: 12, right: 10, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="uni-y25" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#60a5fa" stopOpacity={0.9} />
@@ -395,7 +554,7 @@ export default function UnisuperEjecucion() {
           </div>
         )}
 
-        {kpis.por_categoria.length > 0 && (
+        {porCategoria.length > 0 && (
           <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-50">
               <h3 className="text-sm font-semibold text-gray-700">🏷️ Ventas por Subcategoría</h3>
@@ -411,8 +570,8 @@ export default function UnisuperEjecucion() {
                   </tr>
                 </thead>
                 <tbody>
-                  {kpis.por_categoria.map((c, i) => {
-                    const pct = kpis.ytd_2026 > 0 ? (c.valor_2026 / kpis.ytd_2026) * 100 : 0
+                  {porCategoria.map((c, i) => {
+                    const pct = (kpis.ytd_2026 ?? 0) > 0 ? ((c.valor_2026 ?? 0) / (kpis.ytd_2026 ?? 1)) * 100 : 0
                     return (
                       <tr key={c.categoria} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                         <td className="px-3 py-2.5 font-medium text-gray-700">{c.categoria}</td>
@@ -435,8 +594,8 @@ export default function UnisuperEjecucion() {
     if (loading.evolucion) return <div className="space-y-4"><ChartSkeleton /><ChartSkeleton /></div>
     if (!kpis) return null
 
-    const monthlyRaw = kpis.monthly
-    const cadenasSell = kpis.por_cadena
+    const monthlyRaw = kpis.monthly ?? []
+    const cadenasSell = kpis.por_cadena ?? []
 
     // ── Estadísticas del período ──
     const meses2026 = monthlyRaw.filter(m => m.y2026 !== null && m.y2026 > 0)
