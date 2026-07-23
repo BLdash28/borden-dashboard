@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, Download } from 'lucide-react'
 import InnovacionesSection from '@/components/ejecucion/InnovacionesSection'
+import SellInVsSellOutChart from '@/components/ejecucion/SellInVsSellOutChart'
 import {
   BarChart, Bar, LineChart, Line, AreaChart, Area, ComposedChart, PieChart, Pie,
   XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
@@ -205,6 +206,37 @@ export default function EjecucionSelectos() {
   const [cobSubcatOpts, setCobSubcatOpts] = useState<string[]>([])
   const cobInitRef = useRef(false)
 
+  // Detalle Seguimiento Mensual — replica el formato Éxito (fila×mes con RR + Proy.)
+  type SegRow = {
+    key: string
+    label: string
+    sku?: string
+    subcategoria?: string | null
+    meses:    Record<number, number>
+    mesesUnd: Record<number, number>
+    ytdVal:   number
+    ytdUnd:   number
+    rrVal:    number
+    rrUnd:    number
+    valActual:number
+    undActual:number
+    proyVal:  number
+    proyUnd:  number
+  }
+  type SegData = {
+    ano: number
+    ultimo_mes: number
+    ultimo_mes_label: string | null
+    ultimo_dia: number
+    dias_mes: number
+    ultima_fecha: string | null
+    por_producto: SegRow[]
+    por_sucursal: SegRow[]
+  }
+  const [segData, setSegData] = useState<SegData | null>(null)
+  const [segTab,  setSegTab]  = useState<'producto' | 'sucursal'>('producto')
+  const [segMode, setSegMode] = useState<'valor' | 'und'>('valor')
+
   // Tendencia reusable (chart Sell-Out Mensual/Diaria en Pedidos)
   const [selTend, setSelTend] = useState<TendData | null>(null)
   const [selTendMetricas, setSelTendMetricas] = useState<TendMetrica[]>(['valor', 'unidades', 'precio'])
@@ -310,6 +342,20 @@ export default function EjecucionSelectos() {
       .then((d: TendData) => setSelTend(d))
       .catch(() => setSelTend({ desde: null, hasta: null, labels: [], total: [], por_sku: [] }))
   }, [section, categoriaSel])
+
+  // Detalle Seguimiento Mensual (Evolución tab) — data para tabla estilo Éxito
+  useEffect(() => {
+    if (section !== 'evolucion') return
+    setSegData(null)
+    const p = new URLSearchParams()
+    if (categoriaSel.length) p.set('categoria',    categoriaSel.join(','))
+    if (subcatSel.length)    p.set('subcategoria', subcatSel.join(','))
+    if (productoSel.length)  p.set('skus',         productoSel.join(','))
+    fetch(`/api/comercial/ejecucion/sv/selectos/detalle-mensual-producto?${p}`)
+      .then(r => r.json())
+      .then((d: SegData) => setSegData(d))
+      .catch(() => setSegData(null))
+  }, [section, categoriaSel, subcatSel, productoSel])
 
   // Tendencia diaria Selectos (dedicado)
   useEffect(() => {
@@ -702,6 +748,14 @@ export default function EjecucionSelectos() {
           )
         })()}
 
+        {/* Sell-In vs Sell-Out 2026 — comparativa mensual */}
+        <SellInVsSellOutChart
+          sellinUrl={`/api/comercial/sell-in/evolucion?ano=2026&pais=SV&cliente=CALLEJA${categoriaSel.length ? `&categoria=${categoriaSel.join(',')}` : ''}`}
+          selloutUrl={`/api/comercial/ejecucion/sv/selectos/tendencia-mensual?${categoriaSel.length ? `categoria=${categoriaSel.join(',')}` : ''}`}
+          ano={2026}
+          subtitulo={`Selectos SV${categoriaSel.length ? ` · ${categoriaSel.join(' + ')}` : ' · Total'}`}
+        />
+
         {/* Evolución Sell-Out — chart mensual con gradient (patrón Éxito) */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
           <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
@@ -1046,8 +1100,49 @@ export default function EjecucionSelectos() {
     const deltaYTD = kEvol?.delta_ytd ?? null
     const cadenasActivas = 1 // Selectos = 1 cadena única
 
+    // Sell-In KPIs (mismo shape que en Resumen)
+    const sIn        = sellin?.ingresos ?? {}
+    const sInUtil    = sellin?.utilidad?.valor ?? 0
+    const sInMargen  = sellin?.margen_pct ?? sellin?.utilidad?.margen_pct ?? null
+    const sInMargen25= sellin?.utilidad?.margen_pct_25 ?? null
+    const sInUds26   = sIn.uds ?? sellin?.unidades?.valor ?? 0
+    const sInUds25   = sIn.uds_25 ?? sellin?.unidades?.valor_25 ?? 0
+    const sInCatBreak = (() => {
+      const qV = sellinQ?.ingresos?.valor ?? 0
+      const lV = sellinL?.ingresos?.valor ?? 0
+      const parts = [
+        qV > 0 ? `Queso ${fmtFull(qV)}` : null,
+        lV > 0 ? `Leche ${fmtFull(lV)}` : null,
+      ].filter(Boolean)
+      return parts.join(' + ') || 'YTD 2026'
+    })()
+
     return (
       <div className="space-y-6">
+
+        {/* Sell-In KPIs — patrón Éxito */}
+        {sellin && (
+          <div>
+            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Sell-In</p>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              {[
+                { label: 'Sell-In YTD 2026 (USD)', value: fmtFull(sIn.valor ?? 0), sub: sInCatBreak, icon: '🧾' },
+                { label: 'Unidades Sell-In',       value: sInUds26.toLocaleString('en-US'), sub: sInUds25 > 0 ? `${sInUds25.toLocaleString('en-US')} en 2025` : '—', icon: '📦' },
+                { label: 'Utilidad Bruta (USD)',   value: fmtFull(sInUtil), sub: sInMargen !== null ? `Margen ${sInMargen.toFixed(1)}%` : '—', icon: '💰' },
+                { label: 'Margen Bruto %',         value: sInMargen !== null ? `${sInMargen.toFixed(1)}%` : '—', sub: sInMargen25 !== null ? `2025: ${sInMargen25.toFixed(1)}%` : 'Sin dato 2025', icon: '📈' },
+              ].map(c => (
+                <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                  <div className="flex items-center justify-between mb-1">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
+                    <span className="text-lg">{c.icon}</span>
+                  </div>
+                  <p className="text-2xl font-bold mb-1 text-gray-800">{c.value}</p>
+                  <p className="text-xs text-gray-400">{c.sub}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Header con 4 KPIs primarios (patrón Éxito) */}
         {kEvol && (
@@ -1286,55 +1381,194 @@ export default function EjecucionSelectos() {
           )
         })()}
 
-        {/* Detalle Seguimiento Mensual — tabla con serie mensual 2025 vs 2026 */}
-        {(ts?.series?.length ?? 0) > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <h4 className="text-sm font-semibold text-gray-800">📋 Detalle Seguimiento Mensual</h4>
-                <p className="text-[11px] text-gray-400">Sell-Out · Selectos SV · USD</p>
+        {/* Detalle Seguimiento Mensual — replica formato Éxito */}
+        {(() => {
+          if (!segData) {
+            return (
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                <div className="h-4 bg-gray-100 rounded w-1/3 mb-3 animate-pulse" />
+                <div className="h-[200px] bg-gray-50 rounded animate-pulse" />
               </div>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold">Mes</th>
-                    <th className="px-3 py-2 text-right font-semibold">2025 (USD)</th>
-                    <th className="px-3 py-2 text-right font-semibold">2025 (und)</th>
-                    <th className="px-3 py-2 text-right font-semibold bg-amber-50 text-amber-700">2026 (USD)</th>
-                    <th className="px-3 py-2 text-right font-semibold bg-amber-50 text-amber-700">2026 (und)</th>
-                    <th className="px-3 py-2 text-right font-semibold">Delta Valor %</th>
-                    <th className="px-3 py-2 text-right font-semibold">Delta Und %</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {(ts?.series ?? []).map((m: any) => {
-                    const v25 = m.y2025 ?? 0, v26 = m.y2026 ?? 0
-                    const u25 = m.u2025 ?? 0, u26 = m.u2026 ?? 0
-                    const dV = v25 > 0 && v26 !== null ? ((v26 - v25) / v25) * 100 : null
-                    const dU = u25 > 0 && u26 !== null ? ((u26 - u25) / u25) * 100 : null
+            )
+          }
+          const dataRows: SegRow[] = segTab === 'producto' ? segData.por_producto : segData.por_sucursal
+          const ultimoMes = segData.ultimo_mes
+          if (!ultimoMes || dataRows.length === 0) return null
+
+          const mesActualLbl = `${MN_SHORT[ultimoMes]}-${String(segData.ano).slice(2)}`
+          const cobertura    = `${segData.ultimo_dia}/${segData.dias_mes} días`
+          const es = segMode === 'valor'
+
+          const fmtCell = (v: number) => es ? fmtFull(v) : Math.round(v).toLocaleString('en-US')
+          const fmtRR   = (v: number) => es ? fmtFull(v) : (Math.round(v * 10) / 10).toLocaleString('en-US')
+          const pickMes = (r: SegRow, m: number) => es ? (r.meses[m] ?? 0) : (r.mesesUnd[m] ?? 0)
+          const pickYtd = (r: SegRow) => es ? r.ytdVal : r.ytdUnd
+          const pickRR  = (r: SegRow) => es ? r.rrVal : r.rrUnd
+          const pickAct = (r: SegRow) => es ? r.valActual : r.undActual
+          const pickProy= (r: SegRow) => es ? r.proyVal : r.proyUnd
+
+          // Total general
+          const total: SegRow = {
+            key: '__total', label: 'TOTAL GENERAL',
+            meses: {}, mesesUnd: {},
+            ytdVal: 0, ytdUnd: 0, rrVal: 0, rrUnd: 0,
+            valActual: 0, undActual: 0, proyVal: 0, proyUnd: 0,
+          }
+          for (const r of dataRows) {
+            for (let m = 1; m <= ultimoMes; m++) {
+              total.meses[m]    = (total.meses[m]    ?? 0) + (r.meses[m]    ?? 0)
+              total.mesesUnd[m] = (total.mesesUnd[m] ?? 0) + (r.mesesUnd[m] ?? 0)
+            }
+            total.ytdVal    += r.ytdVal
+            total.ytdUnd    += r.ytdUnd
+            total.rrVal     += r.rrVal
+            total.rrUnd     += r.rrUnd
+            total.valActual += r.valActual
+            total.undActual += r.undActual
+            total.proyVal   += r.proyVal
+            total.proyUnd   += r.proyUnd
+          }
+          total.rrVal = Math.round(total.rrVal * 100) / 100
+          total.rrUnd = Math.round(total.rrUnd * 10) / 10
+
+          const exportCsv = () => {
+            const firstCol = segTab === 'producto' ? 'Producto' : 'Sucursal'
+            const headers: string[] = [firstCol]
+            for (let m = 1; m <= ultimoMes; m++) headers.push(`${MN_SHORT[m]}-${String(segData.ano).slice(2)} (USD)`, `${MN_SHORT[m]}-${String(segData.ano).slice(2)} (und)`)
+            headers.push(`YTD USD`, `YTD Und`, `RR USD/día`, `RR Und/día`,
+                         `${mesActualLbl} USD`, `${mesActualLbl} Und`,
+                         `Proy. USD`, `Proy. Und`)
+            const lines: string[] = [headers.join(',')]
+            for (const r of [...dataRows, total]) {
+              const cells: (string | number)[] = [`"${r.label}"`]
+              for (let m = 1; m <= ultimoMes; m++) cells.push(Math.round((r.meses[m] ?? 0) * 100) / 100, Math.round(r.mesesUnd[m] ?? 0))
+              cells.push(Math.round(r.ytdVal * 100) / 100, Math.round(r.ytdUnd),
+                         Math.round(r.rrVal * 100) / 100, r.rrUnd,
+                         Math.round(r.valActual * 100) / 100, Math.round(r.undActual),
+                         Math.round(r.proyVal * 100) / 100, Math.round(r.proyUnd))
+              lines.push(cells.join(','))
+            }
+            const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+            const url  = URL.createObjectURL(blob)
+            const a    = document.createElement('a')
+            a.href = url
+            a.download = `Selectos_${segTab}_${segData.ultima_fecha ?? ''}.csv`
+            a.click()
+            URL.revokeObjectURL(url)
+          }
+
+          return (
+            <div className="space-y-5">
+              {/* Header + Exportar CSV */}
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800">📋 Detalle Seguimiento Mensual</h4>
+                  <p className="text-[11px] text-gray-400">Sell-Out · Selectos SV · USD</p>
+                </div>
+                <button onClick={exportCsv}
+                  className="flex items-center gap-1.5 text-xs text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg">
+                  <Download size={12}/> Exportar CSV
+                </button>
+              </div>
+
+              {/* Tabs + toggle Valor/Unidades */}
+              <div className="flex items-center justify-between flex-wrap gap-2 border-b border-gray-200">
+                <div className="flex items-center gap-1">
+                  {([
+                    { key: 'producto', label: 'Por Producto' },
+                    { key: 'sucursal', label: 'Por Sucursal' },
+                  ] as const).map(t => (
+                    <button key={t.key}
+                      onClick={() => setSegTab(t.key)}
+                      className={`px-4 py-2 text-xs font-semibold transition-colors border-b-2 -mb-px
+                        ${segTab === t.key
+                          ? 'text-amber-700 border-amber-500'
+                          : 'text-gray-500 border-transparent hover:text-gray-800'}`}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-1 py-1">
+                  {([
+                    { k: 'valor', lbl: 'Valor (USD)' },
+                    { k: 'und',   lbl: 'Unidades'    },
+                  ] as const).map(t => {
+                    const isActive = segMode === t.k
                     return (
-                      <tr key={m.mes} className="hover:bg-gray-50/60">
-                        <td className="px-3 py-2 font-semibold text-gray-700">{MN_SHORT[m.mes] ?? '—'}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-gray-600">{v25 > 0 ? fmtFull(v25) : '—'}</td>
-                        <td className="px-3 py-2 text-right tabular-nums text-gray-500">{u25 > 0 ? u25.toLocaleString('en-US') : '—'}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-800 bg-amber-50/30">{v26 > 0 ? fmtFull(v26) : '—'}</td>
-                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-800 bg-amber-50/30">{u26 > 0 ? u26.toLocaleString('en-US') : '—'}</td>
-                        <td className={`px-3 py-2 text-right tabular-nums font-semibold ${dV === null ? 'text-gray-300' : dV >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                          {dV === null ? '—' : (dV > 0 ? '+' : '') + dV.toFixed(1) + '%'}
-                        </td>
-                        <td className={`px-3 py-2 text-right tabular-nums font-semibold ${dU === null ? 'text-gray-300' : dU >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                          {dU === null ? '—' : (dU > 0 ? '+' : '') + dU.toFixed(1) + '%'}
-                        </td>
-                      </tr>
+                      <button key={t.k}
+                        onClick={() => setSegMode(t.k)}
+                        className={`px-3 py-1 text-[11px] font-semibold rounded-md transition-colors
+                          ${isActive
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            : 'text-gray-500 hover:text-gray-800 border border-transparent'}`}>
+                        {t.lbl}
+                      </button>
                     )
                   })}
-                </tbody>
-              </table>
+                </div>
+              </div>
+
+              {/* Tabla */}
+              <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                      <tr>
+                        <th className="px-3 py-2 text-left font-semibold sticky left-0 bg-gray-50 z-10">
+                          {segTab === 'producto' ? 'Producto' : 'Sucursal'}
+                        </th>
+                        {Array.from({ length: ultimoMes }, (_, i) => i + 1).map(m => (
+                          <th key={m} className="px-3 py-2 text-right font-semibold whitespace-nowrap">
+                            {MN_SHORT[m]}-{String(segData.ano).slice(2)}
+                          </th>
+                        ))}
+                        <th className="px-3 py-2 text-right font-semibold bg-gray-100 whitespace-nowrap">YTD {es ? 'USD' : 'Und'}</th>
+                        <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">RR {es ? 'USD' : 'Und'}/día</th>
+                        <th className="px-3 py-2 text-right font-semibold whitespace-nowrap">{mesActualLbl} {es ? 'USD' : 'Und'}</th>
+                        <th className="px-3 py-2 text-right font-semibold bg-amber-50 text-amber-700 whitespace-nowrap">Proy. {es ? 'USD' : 'Und'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dataRows.map((r, i) => (
+                        <tr key={r.key} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                          <td className="px-3 py-2 text-gray-800 sticky left-0 bg-inherit">{r.label}</td>
+                          {Array.from({ length: ultimoMes }, (_, i) => i + 1).map(m => (
+                            <td key={m} className="px-3 py-2 text-right tabular-nums text-gray-700">
+                              {pickMes(r, m) ? fmtCell(pickMes(r, m)) : <span className="text-gray-300">—</span>}
+                            </td>
+                          ))}
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-800 bg-gray-50">{fmtCell(pickYtd(r))}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-700">{fmtRR(pickRR(r))}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-700">{fmtCell(pickAct(r))}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-semibold text-amber-700 bg-amber-50/50">{fmtCell(pickProy(r))}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-gray-900 text-white font-semibold">
+                        <td className="px-3 py-2 sticky left-0 bg-gray-900">TOTAL GENERAL</td>
+                        {Array.from({ length: ultimoMes }, (_, i) => i + 1).map(m => (
+                          <td key={m} className="px-3 py-2 text-right tabular-nums">
+                            {pickMes(total, m) ? fmtCell(pickMes(total, m)) : '—'}
+                          </td>
+                        ))}
+                        <td className="px-3 py-2 text-right tabular-nums">{fmtCell(pickYtd(total))}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{fmtRR(pickRR(total))}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{fmtCell(pickAct(total))}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-amber-300">{fmtCell(pickProy(total))}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[10px] text-gray-400 px-4 py-2 border-t border-gray-100 bg-gray-50">
+                  Valores en <strong>{es ? 'USD' : 'Unidades'}</strong>. {es && 'Bruto de venta al público, sin margen. '}
+                  <strong>RR</strong> = Run Rate (ventas del mes ÷ días transcurridos, {cobertura}).
+                  <strong> Proyección</strong> = RR × días totales del mes ({segData.dias_mes}d).
+                  {segTab === 'producto' && ' Cruce contra dim_producto BL Foods.'}
+                  {segTab === 'sucursal' && ` ${segData.por_sucursal.length} sucursales activas.`}
+                </p>
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
       </div>
     )

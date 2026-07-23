@@ -117,7 +117,10 @@ export async function GET(req: NextRequest) {
           SUM(CASE WHEN EXTRACT(YEAR FROM f.fecha) = 2026 THEN f.ventas_unidades ELSE 0 END) AS uni_2026,
           SUM(CASE WHEN EXTRACT(YEAR FROM f.fecha) = 2025
                     AND f.fecha <= (SELECT (ultima_fecha - INTERVAL '1 year')::date FROM ult)
-                   THEN f.ventas_valor ELSE 0 END) AS valor_2025
+                   THEN f.ventas_valor ELSE 0 END) AS valor_2025,
+          SUM(CASE WHEN EXTRACT(YEAR FROM f.fecha) = 2025
+                    AND f.fecha <= (SELECT (ultima_fecha - INTERVAL '1 year')::date FROM ult)
+                   THEN f.ventas_unidades ELSE 0 END) AS uni_2025
         FROM fact_ventas_unisuper f
         WHERE ${wSinCad.where} AND EXTRACT(YEAR FROM f.fecha) IN (2025, 2026)
         GROUP BY f.cadena ORDER BY valor_2026 DESC
@@ -186,6 +189,7 @@ export async function GET(req: NextRequest) {
         valor_2026: parseFloat(r.valor_2026 ?? '0'),
         uni_2026:   parseInt(r.uni_2026 ?? '0'),
         valor_2025: parseFloat(r.valor_2025 ?? '0'),
+        uni_2025:   parseInt(r.uni_2025 ?? '0'),
         delta: parseFloat(r.valor_2025 ?? '0') > 0
           ? ((parseFloat(r.valor_2026 ?? '0') - parseFloat(r.valor_2025 ?? '0')) / parseFloat(r.valor_2025)) * 100
           : null,

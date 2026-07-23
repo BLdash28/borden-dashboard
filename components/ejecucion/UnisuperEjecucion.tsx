@@ -10,6 +10,7 @@ import {
 } from 'recharts'
 import MultiSelect from '@/components/dashboard/MultiSelect'
 import ChartSkeleton from '@/components/ui/ChartSkeleton'
+import SellInVsSellOutChart from '@/components/ejecucion/SellInVsSellOutChart'
 import {
   TendenciaMensualChart, TendenciaDiariaChart, MetricaTogglePill,
   type TendMetrica, type TendData, type TendDailyRow,
@@ -134,7 +135,7 @@ interface KpisData {
   delta_ytd: number | null
   ultimo_mes: number; ultimo_mes_nombre: string
   ultima_fecha: string | null
-  por_cadena: { cadena: string; valor_2026: number; uni_2026: number; valor_2025: number; delta: number | null }[]
+  por_cadena: { cadena: string; valor_2026: number; uni_2026: number; valor_2025: number; uni_2025: number; delta: number | null }[]
   por_categoria: { categoria: string; valor_2026: number; uni_2026: number }[]
   monthly: { mes: number; mes_nombre: string; y2025: number; y2026: number | null; u2025: number; u2026: number | null }[]
 }
@@ -466,19 +467,31 @@ export default function UnisuperEjecucion() {
           </div>
         </div>
 
-        {/* Por cadena cards (con barra de progreso) */}
+        {/* Por cadena cards (valor + unidades esquina superior derecha + barra progreso) */}
         {cadenas.length > 0 && (
           <div>
             <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-3">Por Cadena · Sell-Out YTD 2026</p>
             <div className={`grid grid-cols-1 md:grid-cols-${Math.min(cadenas.length, 3)} gap-3`}>
               {cadenas.map(c => {
-                const pctVal = soTotal > 0 ? ((c.valor_2026 ?? 0) / soTotal * 100) : 0
-                const color = CADENA_COLORS[c.cadena] ?? '#6b7280'
+                const pctVal   = soTotal > 0 ? ((c.valor_2026 ?? 0) / soTotal * 100) : 0
+                const uds25    = c.uni_2025 ?? 0
+                const deltaUds = uds25 > 0 ? (((c.uni_2026 ?? 0) - uds25) / uds25) * 100 : null
+                const color    = CADENA_COLORS[c.cadena] ?? '#6b7280'
                 return (
                   <div key={c.cadena} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
-                      <p className="text-xs font-semibold text-gray-600 truncate">{c.cadena}</p>
+                    {/* Header: cadena a la izquierda, unidades a la derecha */}
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
+                        <p className="text-xs font-semibold text-gray-600 truncate">{c.cadena}</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[9px] font-semibold text-gray-400 uppercase tracking-wider leading-none">Unidades</p>
+                        <p className="text-sm font-bold text-gray-700 tabular-nums leading-tight mt-0.5">{fmtNum(c.uni_2026 ?? 0)}</p>
+                        {deltaUds !== null
+                          ? <div className="mt-0.5"><Delta d={deltaUds} /></div>
+                          : <p className="text-[10px] text-gray-300 leading-none mt-0.5">Sin 2025</p>}
+                      </div>
                     </div>
                     <p className="text-xl font-bold text-gray-800">{fmtValFull(c.valor_2026 ?? 0)}</p>
                     <div className="flex items-center justify-between mt-1">
@@ -494,6 +507,23 @@ export default function UnisuperEjecucion() {
             </div>
           </div>
         )}
+
+        {/* Sell-In vs Sell-Out 2026 — comparativa mensual */}
+        {(() => {
+          const soP = new URLSearchParams()
+          if (cadenasSel.length) soP.set('cadenas', cadenasSel.join(','))
+          if (subcatsSel.length) soP.set('subcategorias', subcatsSel.join(','))
+          const siP = new URLSearchParams({ ano: '2026', pais: 'GT', cliente: 'UNISUPER' })
+          if (subcatsSel.length) siP.set('subcategoria', subcatsSel.join(','))
+          return (
+            <SellInVsSellOutChart
+              sellinUrl={`/api/comercial/sell-in/evolucion?${siP}`}
+              selloutUrl={`/api/comercial/ejecucion/gt/unisuper/tendencia-mensual?${soP}`}
+              ano={2026}
+              subtitulo={`Unisuper GT${cadenasSel.length ? ` · ${cadenasSel.join(' + ')}` : ' · Total'}`}
+            />
+          )
+        })()}
 
         {/* Evolución Sell-Out · TendenciaMensualChart con MetricaTogglePill */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
@@ -590,47 +620,6 @@ export default function UnisuperEjecucion() {
             </div>
           )
         })()}
-
-        {cadenas.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-50">
-              <h3 className="text-sm font-semibold text-gray-700">📋 Detalle por Cadena</h3>
-              <p className="text-[11px] text-gray-400">Sell-Out YTD 2026 · Unisuper Guatemala</p>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
-                  <tr>
-                    <th className="px-3 py-2.5 text-left font-semibold">Cadena</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">Valor 2026</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">Unidades 2026</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">Valor 2025</th>
-                    <th className="px-3 py-2.5 text-right font-semibold">vs 2025</th>
-                    <th className="px-3 py-2.5 text-right font-semibold bg-amber-50 text-amber-700">Share %</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cadenas.map((c, i) => {
-                    const pct = (kpis.ytd_2026 ?? 0) > 0 ? ((c.valor_2026 ?? 0) / (kpis.ytd_2026 ?? 1)) * 100 : 0
-                    return (
-                      <tr key={c.cadena} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
-                        <td className="px-3 py-2.5">
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
-                                style={{ background: CADENA_COLORS[c.cadena] ?? '#6b7280' }}>{c.cadena}</span>
-                        </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800">{fmtVal(c.valor_2026)}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmtNum(c.uni_2026)}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{c.valor_2025 > 0 ? fmtVal(c.valor_2025) : <span className="text-gray-300">—</span>}</td>
-                        <td className="px-3 py-2.5 text-right"><Delta d={c.delta} /></td>
-                        <td className="px-3 py-2.5 text-right tabular-nums bg-amber-50/40 font-bold text-amber-700">{pct.toFixed(1)}%</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
 
         {/* Acumulado YTD 2025 vs 2026 (patrón Éxito) */}
         {monthlyRaw.length > 0 && (() => {

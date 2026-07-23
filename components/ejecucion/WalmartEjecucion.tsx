@@ -8,6 +8,7 @@ import {
   ResponsiveContainer, Legend, Cell, ReferenceLine,
 } from 'recharts'
 import InnovacionesSection from './InnovacionesSection'
+import SellInVsSellOutChart from './SellInVsSellOutChart'
 import MultiSelect from '@/components/dashboard/MultiSelect'
 import { useTableSort, SortableTh } from '@/components/ui/table-sort'
 import {
@@ -866,6 +867,26 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
             </div>
           </div>
         )}
+
+        {/* Sell-In vs Sell-Out 2026 — comparativa mensual */}
+        {(() => {
+          const soP = new URLSearchParams({ pais })
+          if (cadenasSel.length)   soP.set('cadenas',       cadenasSel.join(','))
+          if (categoriaSel.length) soP.set('categoria',     categoriaSel.join(','))
+          if (subcatSel.length)    soP.set('subcategoria',  subcatSel.join(','))
+          const siP = new URLSearchParams({ ano: '2026', pais, cliente: clienteSellin })
+          if (categoriaSel.length) siP.set('categoria',    categoriaSel.join(','))
+          if (subcatSel.length)    siP.set('subcategoria', subcatSel.join(','))
+          const subCat = categoriaSel.length ? categoriaSel.join(' + ') : 'Total'
+          return (
+            <SellInVsSellOutChart
+              sellinUrl={`/api/comercial/sell-in/evolucion?${siP}`}
+              selloutUrl={`/api/comercial/ejecucion/walmart/tendencia-mensual?${soP}`}
+              ano={2026}
+              subtitulo={`Walmart ${paisNombre} · ${subCat}`}
+            />
+          )
+        })()}
 
         {/* Evolución Sell-Out — resumen mensual continuo (sin toggle diaria, con toggle métricas) */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
