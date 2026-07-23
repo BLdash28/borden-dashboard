@@ -1219,6 +1219,7 @@ export default function UnisuperEjecucion() {
                           <th className="px-3 py-2 text-left">Tienda</th>
                           <th className="px-3 py-2 text-left">SKU</th>
                           <th className="px-3 py-2 text-left">Descripción</th>
+                          <th className="px-3 py-2 text-right">Inv</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1231,6 +1232,7 @@ export default function UnisuperEjecucion() {
                             <td className="px-3 py-2 text-gray-800 max-w-[220px] truncate">{d.punto_venta}</td>
                             <td className="px-3 py-2 font-mono text-[11px] text-gray-500">{d.sku}</td>
                             <td className="px-3 py-2 text-gray-700 max-w-[280px] truncate">{d.descripcion}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-bold text-red-600">0</td>
                           </tr>
                         ))}
                       </tbody>
