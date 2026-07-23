@@ -624,14 +624,89 @@ export default function EjecucionSelectos() {
     return (
       <div className="space-y-4">
 
-        {/* Cards removidos por pedido del usuario (2026-07-23):
-            Top 4 chips, Sell-In dark, Sell-Out dark, Inventory KPI grid.
-            Se mantienen Hallazgos Críticos y Punto de Reorden abajo. */}
+        {/* Sell-In KPIs — patrón Éxito */}
+        {sellin && (() => {
+          const s = sellin.ingresos ?? {}
+          const utilVal  = sellin.utilidad?.valor ?? 0
+          const margen   = sellin.margen_pct ?? sellin.utilidad?.margen_pct ?? null
+          const margen25 = sellin.utilidad?.margen_pct_25 ?? null
+          const uds26    = s.uds ?? sellin.unidades?.valor ?? 0
+          const uds25    = s.uds_25 ?? sellin.unidades?.valor_25 ?? 0
+          return (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Sell-In</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { label: 'Sell-In YTD 2026 (USD)', value: fmtFull(s.valor ?? 0), sub: catBreak, icon: '🧾' },
+                  { label: 'Unidades Sell-In', value: uds26.toLocaleString('en-US'), sub: uds25 > 0 ? `${uds25.toLocaleString('en-US')} en 2025` : '—', icon: '📦' },
+                  { label: 'Utilidad Bruta (USD)', value: fmtFull(utilVal), sub: margen !== null ? `Margen ${margen.toFixed(1)}%` : '—', icon: '💰' },
+                  { label: 'Margen Bruto %', value: margen !== null ? `${margen.toFixed(1)}%` : '—', sub: margen25 !== null ? `2025: ${margen25.toFixed(1)}%` : 'Sin dato 2025', icon: '📈' },
+                ].map(c => (
+                  <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
+                      <span className="text-lg">{c.icon}</span>
+                    </div>
+                    <p className="text-2xl font-bold mb-1 text-gray-800">{c.value}</p>
+                    <p className="text-xs text-gray-400">{c.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
 
+        {/* Sell-Out KPIs — patrón Éxito */}
+        {selloutKpi && (() => {
+          const MN = ['','Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic']
+          const soTotal = selloutKpi.ytd_2026?.total ?? 0
+          const soPrev  = selloutKpi.ytd_2025?.total ?? 0
+          const soDelta = selloutKpi.delta_ytd ?? null
+          const soUnits = selloutKpi.ytd_2026?.unidades ?? 0
+          const soLast  = selloutKpi.ultimo_mes ?? 0
+          const soAvg   = soLast > 0 ? soTotal / soLast : 0
+          const soLastName = MN[soLast] || '—'
+          return (
+            <div>
+              <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Sell-Out</p>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { label: 'Sell-Out YTD 2026 (USD)', value: fmtFull(soTotal), sub: `hasta ${soLastName}`, icon: '🛒' },
+                  { label: 'vs YTD 2025', value: (soDelta !== null && soPrev > 0) ? <Delta d={soDelta} /> : <span className="text-sm text-gray-400">Sin hist.</span>, sub: soPrev > 0 ? `2025: ${fmtFull(soPrev)}` : 'Sin dato 2025', icon: '📊' },
+                  { label: 'Unidades YTD', value: soUnits.toLocaleString('en-US'), sub: `hasta ${soLastName}`, icon: '📦' },
+                  { label: 'Promedio Mensual', value: fmtFull(soAvg), sub: `${soLast} mes${soLast !== 1 ? 'es' : ''}`, icon: '📅' },
+                ].map(c => (
+                  <div key={c.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest leading-tight">{c.label}</p>
+                      <span className="text-lg">{c.icon}</span>
+                    </div>
+                    <p className="text-2xl font-bold mb-1 text-gray-800">{c.value}</p>
+                    <p className="text-xs text-gray-400">{c.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
 
-        {/* Hallazgos Críticos + Insights NSE removidos por pedido del user (2026-07-23).
-            La función HallazgosCriticos() queda definida en el archivo por si se
-            restaura después. */}
+        {/* Evolución Sell-Out — chart mensual con gradient (patrón Éxito) */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">Evolución Sell-Out</h3>
+              <p className="text-[11px] text-gray-400">Timeline continuo · USD</p>
+            </div>
+            <MetricaTogglePill metricas={selTendMetricas} onToggle={toggleSelTendMetrica} activeClass="bg-amber-500 text-white" />
+          </div>
+          <TendenciaMensualChart
+            tendencia={selTend}
+            metricas={selTendMetricas}
+            moneda="usd"
+            skuFilter={[]}
+            height={260}
+          />
+        </div>
 
         {/* Punto de reorden */}
         {!L && reorden?.rows.length > 0 && (
