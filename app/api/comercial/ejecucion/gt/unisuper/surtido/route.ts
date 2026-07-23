@@ -64,9 +64,9 @@ export async function GET(req: NextRequest) {
       SELECT
         (SELECT f::text FROM snap) AS snapshot_fecha,
         COUNT(*) AS asignados,
-        COUNT(DISTINCT sku_borden) AS skus_asignados,
-        COUNT(DISTINCT nombre_sucursal) AS pdvs_asignados,
-        COUNT(*) FILTER (WHERE estado_sku ILIKE '%LIQUIDACION%') AS en_liquidacion,
+        COUNT(DISTINCT b.sku_borden) AS skus_asignados,
+        COUNT(DISTINCT b.nombre_sucursal) AS pdvs_asignados,
+        COUNT(*) FILTER (WHERE b.estado_sku ILIKE '%LIQUIDACION%') AS en_liquidacion,
         SUM(CASE WHEN v.sku IS NOT NULL THEN 1 ELSE 0 END) AS con_venta_90d,
         SUM(CASE WHEN v.sku IS NULL THEN 1 ELSE 0 END) AS sin_venta_90d
       FROM base b
