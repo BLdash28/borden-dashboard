@@ -721,8 +721,8 @@ export default function EjecucionSelectos() {
         </div>
 
         {/* Chart Venta Valor vs Unidades — patrón Éxito adaptado a Selectos */}
-        {selTend?.total?.length > 0 && (() => {
-          const valUdsData = selTend.total
+        {selTend && (selTend.total?.length ?? 0) > 0 && (() => {
+          const valUdsData = (selTend.total ?? [])
             .map((m: any) => ({
               mes_nombre: m.mes_str ?? m.mes_nombre ?? '',
               valor: m.valor_usd ?? 0,
@@ -1013,8 +1013,146 @@ export default function EjecucionSelectos() {
       </div>
     ))}</div>
 
+    // ── KPI stats para el header estilo Éxito ─────────────────────────
+    const kEvol = selloutKpi
+    const meses26 = (ts?.series ?? []).filter((m: any) => (m.y2026 ?? 0) > 0)
+    const totVal26 = meses26.reduce((s: number, m: any) => s + (m.y2026 ?? 0), 0)
+    const totUds26 = meses26.reduce((s: number, m: any) => s + (m.u2026 ?? 0), 0)
+    const promMensualVal = meses26.length > 0 ? totVal26 / meses26.length : 0
+    const promMensualUds = meses26.length > 0 ? totUds26 / meses26.length : 0
+    const DIAS_MES: Record<number, number> = { 1:31,2:28,3:31,4:30,5:31,6:30,7:31,8:31,9:30,10:31,11:30,12:31 }
+    const diasAcum = meses26.reduce((s: number, m: any) => s + (DIAS_MES[m.mes] ?? 30), 0)
+    const promDiarioVal = diasAcum > 0 ? totVal26 / diasAcum : 0
+    const promDiarioUds = diasAcum > 0 ? totUds26 / diasAcum : 0
+    const sortedByVal26 = [...meses26].sort((a: any, b: any) => (b.y2026 ?? 0) - (a.y2026 ?? 0))
+    const mejorMes = sortedByVal26[0]
+    const peorMes  = sortedByVal26[sortedByVal26.length - 1]
+    const ticketMedio = totUds26 > 0 ? totVal26 / totUds26 : 0
+    const growthMoM26: number[] = []
+    for (let i = 1; i < meses26.length; i++) {
+      const prev = meses26[i-1]?.y2026 ?? 0
+      const curr = meses26[i]?.y2026 ?? 0
+      if (prev > 0) growthMoM26.push(((curr - prev) / prev) * 100)
+    }
+    const growthPromedio = growthMoM26.length > 0
+      ? growthMoM26.reduce((s, v) => s + v, 0) / growthMoM26.length
+      : 0
+    const ultMesData: any = kEvol ? meses26.find((m: any) => m.mes === kEvol.ultimo_mes) : null
+    const ultMesNombre = kEvol?.ultimo_mes ? MN_SHORT[kEvol.ultimo_mes] : '—'
+    const dVal = ultMesData && (ultMesData.y2025 ?? 0) > 0 && (ultMesData.y2026 ?? 0) !== null
+      ? ((ultMesData.y2026 - ultMesData.y2025) / ultMesData.y2025) * 100 : null
+    const dUds = ultMesData && (ultMesData.u2025 ?? 0) > 0 && (ultMesData.u2026 ?? 0) !== null
+      ? ((ultMesData.u2026 - ultMesData.u2025) / ultMesData.u2025) * 100 : null
+    const deltaYTD = kEvol?.delta_ytd ?? null
+    const cadenasActivas = 1 // Selectos = 1 cadena única
+
     return (
       <div className="space-y-6">
+
+        {/* Header con 4 KPIs primarios (patrón Éxito) */}
+        {kEvol && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-sm font-semibold text-gray-800">📈 Evolución de Ventas</h3>
+              <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">SELLOUT</span>
+              <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full border border-blue-200">USD</span>
+            </div>
+            <p className="text-xs text-gray-400 mb-3">
+              Selectos El Salvador
+              {categoriaSel.length > 0 && ` · ${categoriaSel.length === 1 ? categoriaSel[0] : `${categoriaSel.length} categorías`}`}
+              {subcatSel.length > 0 && ` · ${subcatSel.length === 1 ? subcatSel[0] : `${subcatSel.length} subcategorías`}`}
+              {productoSel.length > 0 && ` · ${productoSel.length === 1 ? `SKU ${productoSel[0]}` : `${productoSel.length} SKUs`}`}
+            </p>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className={`rounded-lg px-4 py-2.5 border ${(deltaYTD ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(deltaYTD ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  YTD 2026 vs 2025
+                </p>
+                <p className={`text-lg font-bold ${(deltaYTD ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {(kEvol.ytd_2025?.total ?? 0) === 0 ? '—' : `${(deltaYTD ?? 0) > 0 ? '+' : ''}${(deltaYTD ?? 0).toFixed(1)}%`}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-0.5">Ene–{ultMesNombre}</p>
+              </div>
+              <div className="rounded-lg px-4 py-2.5 bg-amber-50 border border-amber-100">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-0.5">YTD 2026 (USD)</p>
+                <p className="text-lg font-bold text-amber-700">{fmtFull(kEvol.ytd_2026?.total ?? 0)}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{(kEvol.ytd_2026?.unidades ?? 0).toLocaleString('en-US')} und</p>
+              </div>
+              <div className={`rounded-lg px-4 py-2.5 border ${(dVal ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dVal ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {ultMesNombre} vs 2025
+                </p>
+                <p className={`text-lg font-bold ${(dVal ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {dVal === null ? '—' : `${dVal > 0 ? '+' : ''}${dVal.toFixed(1)}%`}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{fmtFull(ultMesData?.y2026 ?? 0)}</p>
+              </div>
+              <div className={`rounded-lg px-4 py-2.5 border ${(dUds ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {ultMesNombre} unidades vs 2025
+                </p>
+                <p className={`text-lg font-bold ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {dUds === null ? '—' : `${dUds > 0 ? '+' : ''}${dUds.toFixed(1)}%`}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{(ultMesData?.u2026 ?? 0).toLocaleString('en-US')} und</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Fila de estadísticas detalladas (patrón Éxito) */}
+        {kEvol && meses26.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+            <h4 className="text-sm font-semibold text-gray-800 mb-3">📊 Estadísticas del período</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio mensual</p>
+                <p className="text-lg font-bold text-gray-800">{fmtFull(promMensualVal)}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{Math.round(promMensualUds).toLocaleString('en-US')} und/mes</p>
+              </div>
+              <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio diario</p>
+                <p className="text-lg font-bold text-gray-800">{fmtFull(promDiarioVal)}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{Math.round(promDiarioUds).toLocaleString('en-US')} und/día</p>
+              </div>
+              <div className="rounded-lg px-4 py-2.5 bg-emerald-50 border border-emerald-100">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-0.5">Mejor mes 2026</p>
+                <p className="text-lg font-bold text-emerald-700">{mejorMes ? (MN_SHORT[mejorMes.mes] ?? '—') : '—'}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{mejorMes ? fmtFull(mejorMes.y2026 ?? 0) : '—'}</p>
+              </div>
+              <div className="rounded-lg px-4 py-2.5 bg-red-50 border border-red-100">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-red-700 mb-0.5">Peor mes 2026</p>
+                <p className="text-lg font-bold text-red-700">{peorMes ? (MN_SHORT[peorMes.mes] ?? '—') : '—'}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{peorMes ? fmtFull(peorMes.y2026 ?? 0) : '—'}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+              <div className="rounded-lg px-4 py-2.5 bg-blue-50 border border-blue-100">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-blue-700 mb-0.5">Ticket medio</p>
+                <p className="text-lg font-bold text-blue-700">{fmtFull(ticketMedio)}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">por unidad</p>
+              </div>
+              <div className={`rounded-lg px-4 py-2.5 border ${growthPromedio >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${growthPromedio >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>Crecimiento MoM prom.</p>
+                <p className={`text-lg font-bold ${growthPromedio >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {growthPromedio > 0 ? '+' : ''}{growthPromedio.toFixed(1)}%
+                </p>
+                <p className="text-[10px] text-gray-500 mt-0.5">vs mes anterior</p>
+              </div>
+              <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Meses activos</p>
+                <p className="text-lg font-bold text-gray-800">{meses26.length} <span className="text-xs font-normal text-gray-500">de 12</span></p>
+                <p className="text-[10px] text-gray-500 mt-0.5">{diasAcum} días acumulados</p>
+              </div>
+              <div className="rounded-lg px-4 py-2.5 bg-purple-50 border border-purple-100">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-purple-700 mb-0.5">Cadenas activas</p>
+                <p className="text-lg font-bold text-purple-700">{cadenasActivas}</p>
+                <p className="text-[10px] text-gray-500 mt-0.5">SELECTOS</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ── Sección 1: Evolución mensual por año ── */}
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
