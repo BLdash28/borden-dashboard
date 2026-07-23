@@ -23,6 +23,10 @@ const OfertasSection = dynamic(
   () => import('@/components/ejecucion/OfertasSection').then(m => m.OfertasSection),
   { loading: () => <ChartSkeleton />, ssr: false },
 )
+const TipoCambioSection = dynamic(
+  () => import('@/components/tipo-cambio/TipoCambioSection'),
+  { loading: () => <ChartSkeleton />, ssr: false },
+)
 
 // ── Formatters ─────────────────────────────────────────────────────────────
 const fmt$    = (v: number) => '$' + Math.round(v).toLocaleString('en-US')
@@ -63,6 +67,7 @@ const SECTIONS = [
   { key: 'ofertas',         label: 'Ofertas'            },
   { key: 'precios',         label: 'Lista de Precios'   },
   { key: 'pedidos',         label: 'Pedidos'            },
+  { key: 'tipo_cambio',     label: 'Tasa de Cambio'     },
 ] as const
 type SectionKey = typeof SECTIONS[number]['key']
 
@@ -284,7 +289,7 @@ export default function UnisuperEjecucion() {
   const [loading, setLoading] = useState<Record<SectionKey, boolean>>({
     resumen: false, evolucion: false, cobertura: false, inventarios: false,
     calidad: false, pareto: false, innovaciones: false, ofertas: false,
-    precios: false, pedidos: false,
+    precios: false, pedidos: false, tipo_cambio: false,
   })
 
   const filterQS = useMemo(() => {
@@ -1938,6 +1943,7 @@ export default function UnisuperEjecucion() {
       case 'ofertas':         return <OfertasSection pais="GT" cadena="UNISUPER" />
       case 'precios':         return <ProximamentePlaceholder section="Lista de Precios" />
       case 'pedidos':         return <PedidosList />
+      case 'tipo_cambio':     return <TipoCambioSection moneda="GTQ" paisNombre="Guatemala" simbolo="Q " />
       default: return <Resumen />
     }
   }
