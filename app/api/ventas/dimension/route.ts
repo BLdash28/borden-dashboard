@@ -154,7 +154,10 @@ export async function GET(req: NextRequest) {
             `SELECT ${selectExpr}, ` +
             'ROUND(SUM(ventas_valor)::numeric,4)    AS ventas_valor, ' +
             'ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades, ' +
-            'COUNT(DISTINCT sku)                    AS num_skus ' +
+            // Conteo por codigo_barras (producto único por EAN) en vez de por sku,
+            // porque el mismo producto tiene SKUs distintos en cada cliente (SKU
+            // interno retailer vs SKU BL Foods). El EAN es el identificador global.
+            'COUNT(DISTINCT codigo_barras)          AS num_skus ' +
             `FROM ${source} ` + where + ' ' +
             `GROUP BY ${groupByExpr} ORDER BY ventas_valor DESC LIMIT 300`,
             params
