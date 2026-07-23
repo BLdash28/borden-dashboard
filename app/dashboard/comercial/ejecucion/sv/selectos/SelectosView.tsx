@@ -1154,556 +1154,187 @@ export default function EjecucionSelectos() {
           </div>
         )}
 
-        {/* ── Sección 1: Evolución mensual por año ── */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          {/* Header */}
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm font-semibold text-gray-800">📈 Evolución de Ventas — Portafolio Activo</h3>
-            <span className="text-[10px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full border border-amber-200">SELLOUT</span>
-          </div>
-          <p className="text-xs text-gray-400 mb-3">Portafolio Activo · Selectos El Salvador</p>
-          {/* Controls bar */}
-          <div className="flex items-center gap-x-3 gap-y-2 flex-wrap text-xs mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
-            <span className="text-gray-400 font-medium">Vista:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {(['mensual', 'diaria'] as const).map(v => (
-                <button key={v} onClick={() => setEvolVista(v)}
-                  className={`px-3 py-1.5 font-medium transition-colors capitalize ${evolVista === v ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {v.charAt(0).toUpperCase() + v.slice(1)}
-                </button>
-              ))}
-            </div>
-            <span className="text-gray-400 font-medium">Categoría:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {[{ key: '', label: 'Todas' }, { key: 'Quesos', label: 'Queso' }, { key: 'Leches', label: 'Leche' }].map(c => (
-                <button key={c.key} onClick={() => setEvolCat(c.key)}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolCat === c.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {c.label}
-                </button>
-              ))}
-            </div>
-            {evolSubcatOpts.length > 0 && (<>
-              <span className="text-gray-400 font-medium">Subcategoría:</span>
-              <div className="flex flex-wrap gap-1">
-                {evolSubcatOpts.map(s => (
-                  <button key={s} onClick={() => setEvolSubcat(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s])}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${evolSubcat.includes(s) ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-amber-50'}`}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </>)}
-            <span className="text-gray-400 font-medium">Medida:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {([['valor', 'Valor $'], ['unidades', 'Unidades']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setEvolMedida(k)}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolMedida === k ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {l}
-                </button>
-              ))}
-            </div>
-            <span className="text-gray-400 font-medium">Desde:</span>
-            <input type="month" value={evolDesde} min="2024-01" max="2026-12"
-              onChange={e => setEvolDesde(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400"
-            />
-            <span className="text-gray-400 font-medium">Hasta:</span>
-            <input type="month" value={evolHasta} min="2024-01" max="2026-12"
-              onChange={e => setEvolHasta(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-amber-400"
-            />
-            <button
-              onClick={() => { setEvolVista('mensual'); setEvolCat(''); setEvolSubcat([]); setEvolDesde(''); setEvolHasta('') }}
-              className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
-              ↺ Reset
-            </button>
-          </div>
 
-          {evolVista === 'diaria' ? (
-            /* ── Vista diaria ── */
-            evolDiario?.series?.length > 0 ? (
-              <>
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-xs text-gray-500 font-medium">
-                    {evolDiario.series.length} días · Total: {fmtFull(evolDiario.series.reduce((s: number, r: any) => s + (evolMedida === 'valor' ? r.valor : r.unidades), 0))}
-                  </span>
+        {/* Chart: Ventas mensuales (patrón Éxito) */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div>
+              <h4 className="text-sm font-bold text-gray-800">Ventas mensuales</h4>
+              <p className="text-[11px] text-gray-400">Comparativo 2024 · 2025 · 2026 · USD</p>
+            </div>
+            <MetricaTogglePill metricas={selTendMetricas} onToggle={toggleSelTendMetrica} activeClass="bg-amber-500 text-white" />
+          </div>
+          <TendenciaMensualChart
+            tendencia={selTend}
+            metricas={selTendMetricas}
+            moneda="usd"
+            skuFilter={[]}
+            height={260}
+          />
+        </div>
+
+        {/* Chart: Crecimiento MoM % */}
+        {meses26.length > 1 && (() => {
+          const growthData = meses26.map((m: any, i: number) => {
+            const prev = meses26[i-1]?.y2026 ?? 0
+            const g = i > 0 && prev > 0 ? ((m.y2026 - prev) / prev) * 100 : null
+            return { mes_nombre: MN_SHORT[m.mes] ?? '', growth: g }
+          })
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <h4 className="text-sm font-bold text-gray-800">Crecimiento MoM %</h4>
+                  <p className="text-[11px] text-gray-400">Variación mes vs mes anterior · 2026</p>
                 </div>
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={evolDiario.series} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> Positivo</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-500"/> Negativo</span>
+                </div>
+              </div>
+              <div className="h-[260px] mt-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={growthData} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="20%">
                     <defs>
-                      <linearGradient id="gradSelEvolDia" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.35}/>
-                        <stop offset="60%"  stopColor="#c8873a" stopOpacity={0.08}/>
-                        <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
+                      <linearGradient id="gradSelGrowthPos" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                      </linearGradient>
+                      <linearGradient id="gradSelGrowthNeg" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#ef4444" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#f87171" stopOpacity={0.85}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis dataKey="label" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
-                      interval={Math.max(0, Math.floor(evolDiario.series.length / 20) - 1)} />
-                    <YAxis
-                      tickFormatter={v => evolMedida === 'valor'
-                        ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
-                        : (v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v))
-                      }
-                      tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}
-                    />
+                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={(v: number) => v + '%'} tick={{ fontSize: 11, fill: '#94a3b8' }} width={50} axisLine={false} tickLine={false} />
                     <Tooltip
-                      labelFormatter={(l: string) => l}
-                      formatter={(v: number) => [
-                        evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'),
-                        evolMedida === 'valor' ? 'Venta ($)' : 'Unidades',
-                      ]}
-                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                    />
-                    <Area type="monotone" dataKey={evolMedida === 'valor' ? 'valor' : 'unidades'}
-                      stroke="#c8873a" strokeWidth={2.5} fill="url(#gradSelEvolDia)" dot={false}
-                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </>
-            ) : (
-              <div className="h-[280px] bg-gray-50 rounded-lg animate-pulse flex items-center justify-center">
-                <span className="text-xs text-gray-300">Cargando datos diarios...</span>
-              </div>
-            )
-          ) : (
-            /* ── Vista mensual (2024 / 2025 / 2026) ── */
-            <>
-              {/* YTD + OOS banners */}
-              {ts && (
-                <div className="flex gap-3 mb-4 flex-wrap">
-                  <div className={`flex-1 min-w-[180px] rounded-lg px-4 py-2.5 border ${ts.delta_ytd >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
-                    <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${ts.delta_ytd >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                      Crecimiento YTD Sell-Out vs 2025
-                    </p>
-                    <p className={`text-lg font-bold ${ts.delta_ytd >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
-                      {ts.delta_ytd >= 100 || ts.ytd_2025 === 0 ? 'Sin datos 2025' : `${ts.delta_ytd > 0 ? '+' : ''}${ts.delta_ytd.toFixed(1)}%`}
-                    </p>
-                    <p className="text-[10px] text-gray-500 mt-0.5">
-                      {fmtFull(ts.ytd_2026)} · 2026 YTD {ts.ultimo_mes_nombre ? `Ene–${ts.ultimo_mes_nombre}` : ''}
-                    </p>
-                  </div>
-                  {ts.oos_meses.length > 0 ? (
-                    <div className="flex-1 min-w-[180px] rounded-lg px-4 py-2.5 bg-orange-50 border border-orange-100">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-orange-700 mb-0.5">⚠️ Alerta OOS Detectada</p>
-                      <p className="text-sm font-bold text-orange-700">{ts.oos_meses.length} mes{ts.oos_meses.length !== 1 ? 'es' : ''} con quiebre</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">{ts.oos_meses.join(' + ')} bajo el 30% del baseline</p>
-                    </div>
-                  ) : (
-                    <div className="flex-1 min-w-[180px] rounded-lg px-4 py-2.5 bg-emerald-50 border border-emerald-100">
-                      <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-0.5">✅ Sin Quiebres de Stock</p>
-                      <p className="text-sm font-bold text-emerald-700">Abastecimiento continuo</p>
-                      <p className="text-[10px] text-gray-500 mt-0.5">Todos los meses sobre el 30% del baseline</p>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {ts ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={continuoSeries} margin={{ top: 10, right: 16, left: 8, bottom: 4 }} barCategoryGap="18%">
-                    <defs>
-                      <linearGradient id="gradSelEvoCont" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#c8873a" stopOpacity={1}/>
-                        <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.85}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                    <XAxis dataKey="mes_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
-                      interval={continuoSeries.length > 24 ? 1 : 0} />
-                    <YAxis
-                      tickFormatter={v => evolMedida === 'valor'
-                        ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
-                        : (v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v))
-                      }
-                      tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}
-                    />
-                    <Tooltip
-                      formatter={(v: number, name: string) => [
-                        evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'),
-                        name,
-                      ]}
+                      formatter={(v: any) => v === null ? ['—', 'Growth'] : [Number(v).toFixed(1) + '%', 'Growth']}
                       cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                     />
-                    {ts.baseline_val > 0 && evolMedida === 'valor' && (
-                      <ReferenceLine y={ts.baseline_val} stroke="#f59e0b" strokeDasharray="4 4"
-                        label={{ value: 'Baseline', fontSize: 9, fill: '#f59e0b', position: 'insideTopRight' }} />
-                    )}
-                    <Bar dataKey="valor" name={evolMedida === 'valor' ? 'Venta' : 'Unidades'}
-                      fill="url(#gradSelEvoCont)" radius={[6, 6, 0, 0]} maxBarSize={24}>
-                      <LabelList dataKey="valor" position="top"
-                        formatter={(v: any) => {
-                          const n = Number(v); if (!isFinite(n) || n === 0) return ''
-                          if (evolMedida === 'valor') {
-                            if (Math.abs(n) >= 1e6) return '$' + (n/1e6).toFixed(1) + 'M'
-                            if (Math.abs(n) >= 1e3) return '$' + (n/1e3).toFixed(0) + 'K'
-                            return '$' + Math.round(n)
-                          }
-                          if (Math.abs(n) >= 1e6) return (n/1e6).toFixed(1) + 'M'
-                          if (Math.abs(n) >= 1e3) return (n/1e3).toFixed(0) + 'K'
-                          return String(Math.round(n))
-                        }}
-                        style={{ fontSize: 8, fill: '#92400e', fontWeight: 700 }} />
+                    <Bar dataKey="growth" radius={[8,8,0,0]} maxBarSize={40}>
+                      {growthData.map((r: any, i: number) => (
+                        <Cell key={i} fill={r.growth === null ? '#e2e8f0' : r.growth >= 0 ? 'url(#gradSelGrowthPos)' : 'url(#gradSelGrowthNeg)'} />
+                      ))}
+                      <LabelList dataKey="growth" position="top"
+                        formatter={(v: any) => v === null || v === undefined ? '' : Number(v).toFixed(1) + '%'}
+                        style={{ fontSize: 9, fill: '#4b5563', fontWeight: 700 }} />
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              ) : <div className="h-[280px] bg-gray-50 rounded-lg animate-pulse" />}
-
-              <div className="flex items-center gap-4 mt-3 text-[10px] text-gray-400 flex-wrap">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-500 inline-block" />Timeline continuo 2024 → 2026</span>
-                {ts?.baseline_val > 0 && evolMedida === 'valor' && (
-                  <span className="flex items-center gap-1.5"><span className="w-4 h-0.5 border-t-2 border-dashed border-amber-400 inline-block" />Baseline {fmtFull(ts.baseline_val)}/mes</span>
-                )}
               </div>
-            </>
-          )}
-        </div>
-
-        {/* ── Sección 2: Top N SKUs ── */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center gap-2 mb-1">
-            <h3 className="text-sm font-semibold text-gray-800">🏆 {evolTopN === 5 ? 'Top 5 SKUs' : t5?.skus?.length ? `${t5.skus.length} SKUs` : 'Todos los SKUs'} — Evolución Mensual 2026</h3>
-          </div>
-          <p className="text-xs text-gray-400 mb-3">Por venta acumulada · Selectos</p>
-          {/* Controls bar */}
-          <div className="flex items-center gap-x-3 gap-y-2 flex-wrap text-xs mb-4 p-3 bg-gray-50 rounded-lg border border-gray-100">
-            <span className="text-gray-400 font-medium">Medida:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {([['valor', 'Valor ($)'], ['unidades', 'Unidades']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setEvolMedida(k)}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolMedida === k ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {l}
-                </button>
-              ))}
             </div>
-            <span className="text-gray-400 font-medium">Categoría:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {[{ key: '', label: 'Todas' }, { key: 'Quesos', label: 'Queso' }, { key: 'Leches', label: 'Leche' }].map(c => (
-                <button key={c.key} onClick={() => setEvolTop5Cat(c.key)}
-                  className={`px-3 py-1.5 font-medium transition-colors ${evolTop5Cat === c.key ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {c.label}
-                </button>
-              ))}
-            </div>
-            {evolSubcatOpts.length > 0 && (<>
-              <span className="text-gray-400 font-medium">Subcategoría:</span>
-              <div className="flex flex-wrap gap-1">
-                {evolSubcatOpts.map(s => (
-                  <button key={s} onClick={() => setEvolSubcat(p => p.includes(s) ? p.filter(x => x !== s) : [...p, s])}
-                    className={`px-2.5 py-1 rounded-md text-[11px] font-medium border transition-colors ${evolSubcat.includes(s) ? 'bg-amber-500 text-white border-amber-500' : 'bg-white text-gray-600 border-gray-200 hover:bg-amber-50'}`}>
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </>)}
-            <span className="text-gray-400 font-medium">Mostrar:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              <button onClick={() => setEvolTopN(5)}
-                className={`px-3 py-1.5 font-medium transition-colors ${evolTopN === 5 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                Top 5
-              </button>
-              <button onClick={() => setEvolTopN(200)}
-                className={`px-3 py-1.5 font-medium transition-colors ${evolTopN !== 5 ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                {evolTopN !== 5 && t5?.skus?.length ? `Todas (${t5.skus.length})` : 'Todas'}
-              </button>
-            </div>
-            <span className="text-gray-400 font-medium">Escala:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              {([['lineal', 'Lineal'], ['log', 'Log']] as const).map(([k, l]) => (
-                <button key={k} onClick={() => setEvolLogScale(k === 'log')}
-                  className={`px-3 py-1.5 font-medium transition-colors ${(k === 'log') === evolLogScale ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          </div>
+          )
+        })()}
 
-          {t5?.skus?.length > 0 ? (() => {
-            const corte = ts?.ultimo_mes ?? 12
-            const chartData = Array.from({ length: corte }, (_, i) => i + 1).map(m => {
-              const row: Record<string, any> = { mes: m, mes_nombre: MN_SHORT[m] }
-              for (const sku of (t5.skus as any[])) {
-                const pt = sku.series.find((s: any) => s.mes === m)
-                if (pt) {
-                  const v = evolMedida === 'valor' ? pt.valor : pt.unidades
-                  row[sku.sku] = evolLogScale && v <= 0 ? null : v
-                }
-              }
-              return row
-            })
-            return (
-              <ResponsiveContainer width="100%" height={380}>
-                <LineChart data={chartData} margin={{ top: 4, right: 12, left: 0, bottom: 4 }}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                  <YAxis
-                    scale={evolLogScale ? 'log' : 'auto'}
-                    domain={evolLogScale ? [1, 'auto'] : [0, 'auto']}
-                    allowDataOverflow={evolLogScale}
-                    tickFormatter={v => evolMedida === 'valor'
-                      ? (v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v)
-                      : (v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : String(v))
-                    }
-                    tick={{ fontSize: 11, fill: '#94a3b8' }} width={55} axisLine={false} tickLine={false}
-                  />
-                  <Tooltip
-                    formatter={(v: number, name: string) => {
-                      const s = (t5.skus as any[]).find((x: any) => x.sku === name)
-                      return [
-                        evolMedida === 'valor' ? fmtFull(v) : v?.toLocaleString('en-US'),
-                        s ? s.descripcion.substring(0, 22) : name,
-                      ]
-                    }}
-                    contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                  />
-                  <Legend
-                    formatter={(name: string) => {
-                      const s = (t5.skus as any[]).find((x: any) => x.sku === name)
-                      return s ? s.descripcion.substring(0, 18) : name
-                    }}
-                  />
-                  {(t5.skus as any[]).map((sku: any, i: number) => (
-                    <Line key={sku.sku} type="monotone" dataKey={sku.sku} name={sku.sku}
-                      stroke={SKU_COLORS[i % SKU_COLORS.length]} strokeWidth={2.5} dot={false}
-                      activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: SKU_COLORS[i % SKU_COLORS.length] }}
-                      connectNulls />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            )
-          })() : <Empty msg="Sin datos de SKUs" />}
-        </div>
-
-        {/* ── Sección 3: Sell-In vs Sell-Out ── */}
-        <div className="space-y-4">
-
-          {/* Sell-In dark block */}
-          {sellin && (() => {
-            const qVal = sellinQ?.ingresos?.valor ?? 0
-            const lVal = sellinL?.ingresos?.valor ?? 0
-            const siBreak = [
-              qVal > 0 ? `Queso ${fmt$(qVal)}` : null,
-              lVal > 0 ? `Leche ${fmt$(lVal)}` : null,
-            ].filter(Boolean).join(' + ') || 'YTD 2026'
-
-            const catRows  = proyData?.catRows ?? []
-            let proyTotal = 0, proyReal = 0, proyLastMes = 0
-            for (const r of catRows) {
-              proyTotal += r.valor_proyectado
-              proyReal  += (r.real_usd ?? 0)
-              if ((r.real_usd ?? 0) > 0) proyLastMes = Math.max(proyLastMes, r.mes)
+        {/* Chart: Acumulado YTD 2025 vs 2026 */}
+        {(ts?.series?.length ?? 0) > 0 && (() => {
+          let ac25 = 0, ac26 = 0
+          const acumData = (ts?.series ?? []).map((m: any) => {
+            ac25 += m.y2025 ?? 0
+            if ((m.y2026 ?? 0) > 0) ac26 += m.y2026
+            return {
+              mes_nombre: MN_SHORT[m.mes] ?? '',
+              acum2025: ac25 > 0 ? ac25 : null,
+              acum2026: (m.y2026 ?? 0) > 0 ? ac26 : null,
             }
-            let proyYTD = 0
-            for (const r of catRows) { if (r.mes <= proyLastMes) proyYTD += r.valor_proyectado }
-            const cumplYTD = proyYTD > 0 ? (proyReal / proyYTD * 100) : 0
-            const cumplFY  = proyTotal > 0 ? (proyReal / proyTotal * 100) : 0
-
-            const qPlan = catRows.filter((r: any) => r.categoria === 'Quesos').reduce((s: number, r: any) => s + r.valor_proyectado, 0)
-            const lPlan = catRows.filter((r: any) => r.categoria === 'Leches').reduce((s: number, r: any) => s + r.valor_proyectado, 0)
-            const planBreak = [
-              qPlan > 0 ? `Queso ${fmt$(qPlan)}` : null,
-              lPlan > 0 ? `Leche ${fmt$(lPlan)}` : null,
-            ].filter(Boolean).join(' + ') || 'Plan completo · CALLEJA'
-
-            const gT = (d: number | null | undefined) => {
-              if (d == null || !isFinite(d)) return 'N/A'
-              if (d >= 100 || d === 0) return 'N/A (sin 2025)'
-              return `${d > 0 ? '+' : ''}${d.toFixed(1)}%`
-            }
-
-            return (
-              <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
-                <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-3">📦 Sell-In · BL Foods → Super Selectos</p>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <div className="bg-white/10 rounded-xl p-4">
-                    <p className="text-[9px] font-semibold text-blue-300 uppercase tracking-widest mb-1">🔥 HOY · SELL-IN REAL YTD 2026</p>
-                    <p className="text-3xl font-bold mb-1">{fmtFull(sellin.ingresos.valor)}</p>
-                    <p className="text-xs text-blue-300 mb-3">{siBreak}</p>
-                    <div className="border-t border-white/10 pt-3 grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-[8px] uppercase tracking-widest text-blue-300 mb-1">Crecimiento YTD vs 2025</p>
-                        <p className="text-sm font-bold text-yellow-300">{gT(sellin.ingresos.delta)}</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] uppercase tracking-widest text-blue-300 mb-1">Cumplimiento YTD vs Plan</p>
-                        <p className="text-sm font-bold text-yellow-300">{cumplYTD.toFixed(1)}%</p>
-                        <p className="text-[10px] text-blue-300 mt-0.5">Plan YTD: {fmtFull(proyYTD)}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-white/10 rounded-xl p-4">
-                    <p className="text-[9px] font-semibold text-blue-300 uppercase tracking-widest mb-1">📊 PROYECCIÓN · CIERRE FY 2026</p>
-                    <p className="text-3xl font-bold mb-1">{fmtFull(proyTotal)}</p>
-                    <p className="text-xs text-blue-300 mb-3">{planBreak}</p>
-                    <div className="border-t border-white/10 pt-3 grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-[8px] uppercase tracking-widest text-blue-300 mb-1">Crecimiento FY Esperado vs 2025</p>
-                        <p className="text-sm font-bold text-yellow-300">N/A (sin 2025)</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] uppercase tracking-widest text-blue-300 mb-1">Cumplimiento FY Proyectado</p>
-                        <p className="text-sm font-bold text-yellow-300">{cumplFY.toFixed(1)}%</p>
-                      </div>
-                    </div>
-                  </div>
+          })
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-1">
+                <div>
+                  <h4 className="text-sm font-bold text-gray-800">Acumulado YTD</h4>
+                  <p className="text-[11px] text-gray-400">Suma corriente Ene → mes en curso · USD</p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-slate-400"/> 2025</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"/> 2026</span>
                 </div>
               </div>
-            )
-          })()}
-
-          {/* Sell-Out dark block */}
-          {selloutKpi && (() => {
-            const soQ = selloutKpi.ytd_2026?.quesos ?? 0
-            const soL = selloutKpi.ytd_2026?.leches ?? 0
-            const soBreak = [
-              soQ > 0 ? `Queso ${fmt$(soQ)}` : null,
-              soL > 0 ? `Leche ${fmt$(soL)}` : null,
-            ].filter(Boolean).join(' + ') || 'YTD 2026'
-
-            const nMeses  = selloutKpi.ultimo_mes || 1
-            const qAvgMes = soQ / nMeses
-            const lAvgMes = soL / nMeses
-            const fyBreak = [
-              qAvgMes > 0 ? `Queso ${fmt$(qAvgMes * 12)}` : null,
-              lAvgMes > 0 ? `Leche ${fmt$(lAvgMes * 12)}` : null,
-            ].filter(Boolean).join(' + ') || `Promedio mensual × 12`
-
-            const gT = (d: number) => {
-              if (!isFinite(d) || d >= 100) return 'N/A (sin 2025)'
-              return `${d > 0 ? '+' : ''}${d.toFixed(1)}%`
-            }
-
-            return (
-              <div className="bg-[#1b3b5f] rounded-xl p-5 text-white">
-                <p className="text-[10px] font-semibold text-blue-200 uppercase tracking-widest mb-3">🛍️ Sell-Out YTD 2026 & Proyección Fiscal</p>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <div className="bg-white/10 rounded-xl p-4">
-                    <p className="text-[9px] font-semibold text-blue-300 uppercase tracking-widest mb-1">🔥 HOY · SELL-OUT REAL YTD 2026</p>
-                    <p className="text-3xl font-bold mb-1">{fmtFull(selloutKpi.ytd_2026.total)}</p>
-                    <p className="text-xs text-blue-300 mb-3">{soBreak}{ts?.ultimo_mes_nombre ? ` · Ene–${ts.ultimo_mes_nombre}` : ''}</p>
-                    <div className="border-t border-white/10 pt-3 grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-[8px] uppercase tracking-widest text-blue-300 mb-1">YTD 2026 vs YTD 2025</p>
-                        <p className="text-sm font-bold text-yellow-300">
-                          {selloutKpi.ytd_2025.total > 0 ? gT(selloutKpi.delta_ytd) : 'Sin datos 2025'}
-                        </p>
-                        <p className="text-[10px] text-blue-300 mt-0.5">vs {fmtFull(selloutKpi.ytd_2025.total)} en 2025</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] uppercase tracking-widest text-blue-300 mb-1">Promedio Mensual</p>
-                        <p className="text-sm font-bold text-yellow-300">{fmtFull(selloutKpi.ytd_2026.total / nMeses)}</p>
-                        <p className="text-[10px] text-blue-300 mt-0.5">/mes · {nMeses} meses</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="bg-white/10 rounded-xl p-4">
-                    <p className="text-[9px] font-semibold text-blue-300 uppercase tracking-widest mb-1">📈 PROYECCIÓN · SELL-OUT FY 2026</p>
-                    <p className="text-3xl font-bold mb-1">{fmtFull(selloutKpi.fy_2026_est)}</p>
-                    <p className="text-xs text-blue-300 mb-3">{fyBreak}</p>
-                    <div className="border-t border-white/10 pt-3 grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-[8px] uppercase tracking-widest text-blue-300 mb-1">FY 2025 (Referencia)</p>
-                        <p className="text-sm font-bold text-yellow-300">{fmtFull(selloutKpi.fy_2025.total)}</p>
-                        <p className="text-[10px] text-blue-300 mt-0.5">año completo</p>
-                      </div>
-                      <div>
-                        <p className="text-[8px] uppercase tracking-widest text-blue-300 mb-1">Crecimiento FY vs 2025</p>
-                        <p className="text-sm font-bold text-yellow-300">
-                          {selloutKpi.fy_2025.total > 0 ? gT(selloutKpi.delta_fy) : 'N/A (sin 2025)'}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })()}
-
-          {/* Vista consolidada */}
-          {selloutKpi && sellin && (
-            <p className="text-xs text-gray-400 leading-relaxed px-1">
-              📋 <span className="font-semibold text-gray-600">Vista consolidada:</span> Sell-out combinado Queso + Leche UHT.
-              {' '}Total FY 2026 sell-out proy: <span className="font-semibold text-gray-700">{fmtFull(selloutKpi.fy_2026_est)}</span>
-              {(proyData?.catRows?.length ?? 0) > 0 && (() => {
-                const t = (proyData.catRows as any[]).reduce((s: number, r: any) => s + r.valor_proyectado, 0)
-                return t > 0 ? <> · Sell-In plan FY: <span className="font-semibold text-gray-700">{fmtFull(t)}</span></> : null
-              })()}
-            </p>
-          )}
-
-          {/* Gráficas mensuales — líneas */}
-          {cp && (cp.quesos?.length > 0 || cp.leches?.length > 0) && (
-            <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-              <div className="mb-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-1">Sell-In vs Sell-Out · Comparativo mensual</p>
-                <p className="text-[11px] text-gray-400 leading-relaxed">
-                  Sell-In = facturas BL Foods → Super Selectos (CIF, asignadas al mes que llegan a PDV).
-                  Sell-Out = venta al consumidor desde sell-out reportado.
-                  Margen comercial = Sell-Out − Sell-In = lo que captura Super Selectos como retailer.
-                  Líneas continuas = real, punteadas = proyectado.
-                </p>
-              </div>
-              <div className="space-y-6">
-                {cp.quesos?.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-600 mb-2">🧀 Queso</p>
-                    <ResponsiveContainer width="100%" height={210}>
-                      <AreaChart data={cp.quesos} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                        <defs>
-                          <linearGradient id="gradCpQ_si" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.25}/>
-                            <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
-                          </linearGradient>
-                          <linearGradient id="gradCpQ_so" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="#c8873a" stopOpacity={0.4}/>
-                            <stop offset="100%" stopColor="#c8873a" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                        <YAxis tickFormatter={v => v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v} tick={{ fontSize: 10, fill: '#94a3b8' }} width={48} axisLine={false} tickLine={false} />
-                        <Tooltip formatter={(v: number, n: string) => [fmtFull(v), n === 'sellin' ? 'Sell-In' : 'Sell-Out']}
-                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
-                        <Legend formatter={(n: string) => n === 'sellin' ? 'Sell-In' : 'Sell-Out'} />
-                        <Area type="monotone" dataKey="sellin"  name="sellin"  stroke="#94a3b8" strokeWidth={2} fill="url(#gradCpQ_si)" dot={false} activeDot={{ r: 4 }} connectNulls />
-                        <Area type="monotone" dataKey="sellout" name="sellout" stroke="#c8873a" strokeWidth={2.5} fill="url(#gradCpQ_so)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#c8873a' }} connectNulls />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
-                {cp.leches?.length > 0 && (
-                  <div className="border-t border-gray-50 pt-5">
-                    <p className="text-xs font-semibold text-gray-600 mb-2">🥛 Leche UHT</p>
-                    <ResponsiveContainer width="100%" height={210}>
-                      <AreaChart data={cp.leches} margin={{ top: 4, right: 8, left: 0, bottom: 4 }}>
-                        <defs>
-                          <linearGradient id="gradCpL_si" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="#94a3b8" stopOpacity={0.25}/>
-                            <stop offset="100%" stopColor="#94a3b8" stopOpacity={0}/>
-                          </linearGradient>
-                          <linearGradient id="gradCpL_so" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%"   stopColor="#3b82f6" stopOpacity={0.4}/>
-                            <stop offset="100%" stopColor="#3b82f6" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="mes_nombre" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                        <YAxis tickFormatter={v => v >= 1e3 ? '$' + (v / 1e3).toFixed(0) + 'K' : '$' + v} tick={{ fontSize: 10, fill: '#94a3b8' }} width={48} axisLine={false} tickLine={false} />
-                        <Tooltip formatter={(v: number, n: string) => [fmtFull(v), n === 'sellin' ? 'Sell-In' : 'Sell-Out']}
-                          contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
-                        <Legend formatter={(n: string) => n === 'sellin' ? 'Sell-In' : 'Sell-Out'} />
-                        <Area type="monotone" dataKey="sellin"  name="sellin"  stroke="#94a3b8" strokeWidth={2} fill="url(#gradCpL_si)" dot={false} activeDot={{ r: 4 }} connectNulls />
-                        <Area type="monotone" dataKey="sellout" name="sellout" stroke="#3b82f6" strokeWidth={2.5} fill="url(#gradCpL_so)" dot={false} activeDot={{ r: 5, strokeWidth: 2, fill: '#fff', stroke: '#3b82f6' }} connectNulls />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                )}
+              <div className="h-[280px] mt-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={acumData} margin={{ top: 10, right: 16, left: 8, bottom: 0 }} barCategoryGap="22%" barGap={10}>
+                    <defs>
+                      <linearGradient id="gradSelAcum25" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#60a5fa" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#93c5fd" stopOpacity={0.85}/>
+                      </linearGradient>
+                      <linearGradient id="gradSelAcum26" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#2a7a58" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#4a9b78" stopOpacity={0.85}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tickFormatter={(v: any) => fmt$(Number(v))} tick={{ fontSize: 11, fill: '#94a3b8' }} width={70} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      formatter={(v: any) => [fmtFull(Number(v)), '']}
+                      cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                    />
+                    <Bar dataKey="acum2025" name="Acum 2025" fill="url(#gradSelAcum25)" radius={[8,8,0,0]} maxBarSize={36}>
+                      <LabelList dataKey="acum2025" position="top" formatter={(v: any) => v ? fmt$(Number(v)) : ''} style={{ fontSize: 9, fill: '#1e3a8a', fontWeight: 700 }} />
+                    </Bar>
+                    <Bar dataKey="acum2026" name="Acum 2026" fill="url(#gradSelAcum26)" radius={[8,8,0,0]} maxBarSize={36}>
+                      <LabelList dataKey="acum2026" position="top" formatter={(v: any) => v ? fmt$(Number(v)) : ''} style={{ fontSize: 9, fill: '#065f46', fontWeight: 700 }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
-          )}
+          )
+        })()}
 
-        </div>
+        {/* Detalle Seguimiento Mensual — tabla con serie mensual 2025 vs 2026 */}
+        {(ts?.series?.length ?? 0) > 0 && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <h4 className="text-sm font-semibold text-gray-800">📋 Detalle Seguimiento Mensual</h4>
+                <p className="text-[11px] text-gray-400">Sell-Out · Selectos SV · USD</p>
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold">Mes</th>
+                    <th className="px-3 py-2 text-right font-semibold">2025 (USD)</th>
+                    <th className="px-3 py-2 text-right font-semibold">2025 (und)</th>
+                    <th className="px-3 py-2 text-right font-semibold bg-amber-50 text-amber-700">2026 (USD)</th>
+                    <th className="px-3 py-2 text-right font-semibold bg-amber-50 text-amber-700">2026 (und)</th>
+                    <th className="px-3 py-2 text-right font-semibold">Delta Valor %</th>
+                    <th className="px-3 py-2 text-right font-semibold">Delta Und %</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {(ts?.series ?? []).map((m: any) => {
+                    const v25 = m.y2025 ?? 0, v26 = m.y2026 ?? 0
+                    const u25 = m.u2025 ?? 0, u26 = m.u2026 ?? 0
+                    const dV = v25 > 0 && v26 !== null ? ((v26 - v25) / v25) * 100 : null
+                    const dU = u25 > 0 && u26 !== null ? ((u26 - u25) / u25) * 100 : null
+                    return (
+                      <tr key={m.mes} className="hover:bg-gray-50/60">
+                        <td className="px-3 py-2 font-semibold text-gray-700">{MN_SHORT[m.mes] ?? '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-600">{v25 > 0 ? fmtFull(v25) : '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-gray-500">{u25 > 0 ? u25.toLocaleString('en-US') : '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-800 bg-amber-50/30">{v26 > 0 ? fmtFull(v26) : '—'}</td>
+                        <td className="px-3 py-2 text-right tabular-nums font-semibold text-gray-800 bg-amber-50/30">{u26 > 0 ? u26.toLocaleString('en-US') : '—'}</td>
+                        <td className={`px-3 py-2 text-right tabular-nums font-semibold ${dV === null ? 'text-gray-300' : dV >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {dV === null ? '—' : (dV > 0 ? '+' : '') + dV.toFixed(1) + '%'}
+                        </td>
+                        <td className={`px-3 py-2 text-right tabular-nums font-semibold ${dU === null ? 'text-gray-300' : dU >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                          {dU === null ? '—' : (dU > 0 ? '+' : '') + dU.toFixed(1) + '%'}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
       </div>
     )
