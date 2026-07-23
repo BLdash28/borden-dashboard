@@ -4007,13 +4007,6 @@ export default function EjecucionSelectos() {
           options: CATEGORIAS_SELECTOS.map(c => ({ value: c })) },
       ]}
     >
-      {/* Leyenda DOH (colores de salud de inventario) */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-2 flex items-center gap-3 text-xs text-gray-400 flex-wrap">
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" />DOH ≤7d</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-yellow-400 inline-block" />DOH ≤21d</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block" />DOH ≤60d</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-400 inline-block" />&gt;60d</span>
-      </div>
       {renderSection()}
     </EjecucionLayout>
   )
