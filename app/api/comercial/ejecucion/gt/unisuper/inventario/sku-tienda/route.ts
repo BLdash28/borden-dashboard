@@ -106,11 +106,13 @@ export async function GET(req: NextRequest) {
     `, params)
 
     // 3) Resolver via dim_producto + consolidar por (sku_resuelto, cadena, punto_venta)
+    // Omitir productos DESCONTINUADOS (marca del catálogo BL Foods).
     type Row = { sku: string; codigo_barras: string; descripcion: string; subcategoria: string | null; cadena: string; punto_venta: string; inv_mano: number; venta_dia: number }
     const consolidated = new Map<string, Row>()
 
     for (const r of snapR.rows) {
       const p = resolve(r.codigo_barras)
+      if (p?.descripcion && /descontinuad/i.test(p.descripcion)) continue
       const sku          = p?.sku          ?? String(r.sku_ret ?? '')
       const descripcion  = p?.descripcion  ?? String(r.desc_ret ?? '')
       const subcategoria = p?.subcategoria ?? (r.subcat_ret ?? null)

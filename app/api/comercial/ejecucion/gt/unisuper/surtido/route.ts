@@ -31,7 +31,11 @@ export async function GET(req: NextRequest) {
     const subcats = csv(sp, 'subcategorias')
 
     const params: unknown[] = []
-    const conds: string[] = [`s.pais = 'GT'`, `s.surtido = 1`, `s.sku_borden IS NOT NULL`]
+    // Omitir productos DESCONTINUADOS del catálogo BL Foods.
+    const conds: string[] = [
+      `s.pais = 'GT'`, `s.surtido = 1`, `s.sku_borden IS NOT NULL`,
+      `NOT EXISTS (SELECT 1 FROM dim_producto dpx WHERE dpx.sku = s.sku_borden AND dpx.descripcion ILIKE '%descontinuad%')`,
+    ]
     if (cadenas.length) {
       const start = params.length
       cadenas.forEach(v => params.push(v))

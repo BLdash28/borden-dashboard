@@ -119,6 +119,8 @@ export async function GET(req: NextRequest) {
 
     for (const r of snapR.rows) {
       const p = resolve(r.codigo_barras)
+      // Omitir productos DESCONTINUADOS (catálogo BL Foods).
+      if (p?.descripcion && /descontinuad/i.test(p.descripcion)) continue
       const sku          = p?.sku          ?? String(r.sku_ret ?? '')
       const descripcion  = p?.descripcion  ?? String(r.desc_ret ?? '')
       const subcategoria = p?.subcategoria ?? (r.subcat_ret ?? null)
