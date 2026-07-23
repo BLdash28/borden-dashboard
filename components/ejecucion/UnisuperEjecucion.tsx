@@ -231,9 +231,15 @@ export default function UnisuperEjecucion() {
   const [opts, setOpts] = useState<FiltrosOpts | null>(null)
 
   // Moneda: la BD guarda ventas_valor en USD; para GTQ multiplicamos por tasa.
-  // Tasa promedio 2026 según unisuper_ingest.py (default 7.80).
+  // Tasa vigente se carga desde /api/tipo-cambio/actual (fallback 7.80).
   const [moneda, setMoneda] = useState<'gtq' | 'usd'>('gtq')
-  const TASA_GTQ_USD = 7.80
+  const [TASA_GTQ_USD, setTasaGtqUsd] = useState(7.80)
+  useEffect(() => {
+    fetch('/api/tipo-cambio/actual?to=GTQ')
+      .then(r => r.json())
+      .then(d => { if (d.tasa && d.tasa > 0) setTasaGtqUsd(d.tasa) })
+      .catch(() => {})
+  }, [])
   const isGtq   = moneda === 'gtq'
   const symbol  = isGtq ? 'Q ' : '$'
   const conv    = (usd: number) => isGtq ? usd * TASA_GTQ_USD : usd
@@ -1991,17 +1997,25 @@ export default function UnisuperEjecucion() {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Moneda — pill group con borde común */}
+            {/* Moneda — pill group: GTQ muestra la tasa vigente inline */}
             <div className="flex flex-col gap-1">
               <span className="text-[10px] uppercase tracking-widest text-gray-400">Moneda</span>
               <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-                {(['gtq','usd'] as const).map(m => (
-                  <button key={m} type="button"
-                    onClick={() => setMoneda(m)}
-                    className={`px-4 py-1.5 text-xs font-semibold transition-colors ${moneda === m ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                    {m.toUpperCase()}
-                  </button>
-                ))}
+                {(['gtq','usd'] as const).map(m => {
+                  const active = moneda === m
+                  return (
+                    <button key={m} type="button"
+                      onClick={() => setMoneda(m)}
+                      className={`px-4 py-1.5 text-xs font-semibold transition-colors ${active ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                      {m.toUpperCase()}
+                      {m === 'gtq' && (
+                        <span className={`ml-1.5 text-[10px] font-normal ${active ? 'text-white/80' : 'text-gray-400'}`}>
+                          · {TASA_GTQ_USD.toFixed(2)}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </div>
             {/* Reset global */}
