@@ -629,8 +629,9 @@ export default function EjecucionSelectos() {
             Se mantienen Hallazgos Críticos y Punto de Reorden abajo. */}
 
 
-        {/* Hallazgos Críticos */}
-        {!L && HallazgosCriticos()}
+        {/* Hallazgos Críticos + Insights NSE removidos por pedido del user (2026-07-23).
+            La función HallazgosCriticos() queda definida en el archivo por si se
+            restaura después. */}
 
         {/* Punto de reorden */}
         {!L && reorden?.rows.length > 0 && (
