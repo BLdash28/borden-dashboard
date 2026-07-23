@@ -298,9 +298,9 @@ export default function EjecucionSelectos() {
       .finally(() => setL('cobertura', false))
   }, [cobCat]) // eslint-disable-line
 
-  // Tendencia mensual Selectos — solo cuando estamos en Pedidos
+  // Tendencia mensual Selectos — se necesita en Resumen, Evolución y Pedidos
   useEffect(() => {
-    if (section !== 'pedidos') return
+    if (!['resumen','evolucion','pedidos'].includes(section)) return
     setSelTend(null)
     const cats = categoriaSel
     const p = new URLSearchParams()
