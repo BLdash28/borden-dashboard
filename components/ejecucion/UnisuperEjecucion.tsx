@@ -150,6 +150,24 @@ interface CobData {
     bucket_menor_3: number; bucket_3_10: number; bucket_mayor_10: number
   }[]
 }
+interface SurtidoData {
+  snapshot_fecha: string | null
+  kpis: {
+    asignados: number; skus_asignados: number; pdvs_asignados: number
+    en_liquidacion: number; con_venta_90d: number; sin_venta_90d: number
+    cumplimiento_pct: number
+  }
+  por_sku: {
+    sku: string; descripcion: string; subcategoria: string
+    pdvs_asignados: number; pdvs_con_venta: number; pdvs_sin_venta: number
+    cumplimiento_pct: number; uds_90d: number; valor_90d: number; en_liquidacion: number
+  }[]
+  por_pdv: {
+    nombre_sucursal: string; cadena: string; skus_asignados: number
+    skus_con_venta: number; skus_sin_venta: number; cumplimiento_pct: number
+  }[]
+  estado_dist: { estado: string; filas: number }[]
+}
 interface InvData {
   disponible: boolean
   kpis?: { fecha_tiendas: string | null; pdv_inv: number; pdv_valor: number; pdv_tiendas_dist: number; skus_total: number }
@@ -276,6 +294,7 @@ export default function UnisuperEjecucion() {
   }
   const [evolVista, setEvolVista] = useState<'mensual' | 'diaria'>('mensual')
   const [cob,  setCob]      = useState<CobData  | null>(null)
+  const [surtido, setSurtido] = useState<SurtidoData | null>(null)
   const [cobDetalle, setCobDetalle] = useState<CobDetalle | null>(null)
   const [inv,  setInv]      = useState<InvData  | null>(null)
   const [invSku, setInvSku] = useState<InvSkuTiendaRow[] | null>(null)
@@ -328,13 +347,14 @@ export default function UnisuperEjecucion() {
       setLoading(l => ({ ...l, cobertura: true }))
       Promise.all([
         fetch('/api/comercial/ejecucion/gt/unisuper/cobertura?' + filterQS).then(r => r.json()),
-        // También traigo el detalle SKU × tienda para las tablas de Quiebres + Inv Bajo
         invSku === null
           ? fetch('/api/comercial/ejecucion/gt/unisuper/inventario/sku-tienda?' + filterQS).then(r => r.json())
           : Promise.resolve({ rows: invSku }),
-      ]).then(([c, sk]) => {
+        fetch('/api/comercial/ejecucion/gt/unisuper/surtido?' + filterQS).then(r => r.json()).catch(() => null),
+      ]).then(([c, sk, su]) => {
         setCob(c)
         if (sk?.rows) setInvSku(sk.rows)
+        if (su && !su.error) setSurtido(su)
       }).finally(() => setLoading(l => ({ ...l, cobertura: false })))
     } else if (section === 'inventarios') {
       setLoading(l => ({ ...l, inventarios: true }))
@@ -1260,6 +1280,123 @@ export default function UnisuperEjecucion() {
             </>
           )
         })()}
+
+        {/* Cumplimiento Surtido (matriz oficial Unisuper vs ventas 90d) */}
+        {surtido && surtido.kpis.asignados > 0 && (() => {
+          const sk = surtido.kpis
+          const bad  = surtido.por_sku.filter(r => r.cumplimiento_pct < 50).length
+          const mid  = surtido.por_sku.filter(r => r.cumplimiento_pct >= 50 && r.cumplimiento_pct < 80).length
+          const ok   = surtido.por_sku.filter(r => r.cumplimiento_pct >= 80).length
+          return (
+            <>
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                <div className="flex items-start justify-between flex-wrap gap-3">
+                  <div>
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest">
+                      Cumplimiento Surtido · Unisuper GT
+                    </p>
+                    <h2 className="text-base font-bold text-gray-800 mt-0.5">
+                      Matriz oficial vs ventas últimos 90d
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Snapshot surtido al <strong>{surtido.snapshot_fecha ?? '—'}</strong> ·
+                      {' '}{sk.skus_asignados} SKUs × {sk.pdvs_asignados} PDVs
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+                  <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+                    <p className="text-[10px] font-semibold text-blue-600 uppercase tracking-widest mb-1">Cumplimiento global</p>
+                    <p className="text-2xl font-bold text-blue-700 tabular-nums">{sk.cumplimiento_pct.toFixed(1)}%</p>
+                    <p className="text-[10px] text-blue-600 mt-0.5">{sk.con_venta_90d} / {sk.asignados} combos vendieron</p>
+                  </div>
+                  <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-4">
+                    <p className="text-[10px] font-semibold text-emerald-600 uppercase tracking-widest mb-1">Vendidos</p>
+                    <p className="text-2xl font-bold text-emerald-700 tabular-nums">{fmtNum(sk.con_venta_90d)}</p>
+                    <p className="text-[10px] text-emerald-600 mt-0.5">Combo PDV × SKU con venta 90d</p>
+                  </div>
+                  <div className="rounded-xl border border-red-100 bg-red-50/60 p-4">
+                    <p className="text-[10px] font-semibold text-red-600 uppercase tracking-widest mb-1">Sin venta 90d</p>
+                    <p className="text-2xl font-bold text-red-700 tabular-nums">{fmtNum(sk.sin_venta_90d)}</p>
+                    <p className="text-[10px] text-red-600 mt-0.5">Asignados pero sin movimiento</p>
+                  </div>
+                  <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-4">
+                    <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-widest mb-1">En liquidación</p>
+                    <p className="text-2xl font-bold text-amber-700 tabular-nums">{fmtNum(sk.en_liquidacion)}</p>
+                    <p className="text-[10px] text-amber-600 mt-0.5">Estado 3-LIQUIDACION</p>
+                  </div>
+                </div>
+
+                {/* Barra apilada cumplimiento por SKU */}
+                <div className="mt-4">
+                  <div className="flex items-center justify-between mb-1.5 text-[11px]">
+                    <span className="text-gray-500">Distribución cumplimiento por SKU (n={surtido.por_sku.length})</span>
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-red-500"/>&lt;50%</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/>50-80%</span>
+                      <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/>≥80%</span>
+                    </div>
+                  </div>
+                  <div className="flex rounded-full overflow-hidden h-3 shadow-inner">
+                    {[['#dc2626', bad], ['#f59e0b', mid], ['#10b981', ok]].map(([c, n], i) => {
+                      const total = surtido.por_sku.length || 1
+                      return <div key={i} style={{ width: `${(n as number) / total * 100}%`, background: c as string }} />
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabla por SKU */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-6 py-4 border-b border-gray-50">
+                  <h3 className="text-sm font-bold text-gray-800">Cumplimiento por SKU</h3>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    Ordenado por menor cumplimiento (peores arriba). PDVs sin venta = potencial quiebre / desatendido.
+                  </p>
+                </div>
+                <div className="overflow-x-auto max-h-[500px]">
+                  <table className="w-full text-xs">
+                    <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left">SKU</th>
+                        <th className="px-3 py-2 text-left">Producto</th>
+                        <th className="px-3 py-2 text-right">PDVs asignados</th>
+                        <th className="px-3 py-2 text-right bg-emerald-50 text-emerald-700">Con venta</th>
+                        <th className="px-3 py-2 text-right bg-red-50 text-red-700">Sin venta</th>
+                        <th className="px-3 py-2 text-right bg-blue-50 text-blue-700">Cumplimiento</th>
+                        <th className="px-3 py-2 text-right">Uds 90d</th>
+                        <th className="px-3 py-2 text-right">Liquidación</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {surtido.por_sku.map(r => (
+                        <tr key={r.sku} className="hover:bg-gray-50/60">
+                          <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{r.sku}</td>
+                          <td className="px-3 py-2 font-medium text-gray-800 max-w-[280px] truncate">{r.descripcion}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{r.pdvs_asignados}</td>
+                          <td className="px-3 py-2 text-right tabular-nums bg-emerald-50/30 font-semibold text-emerald-700">{r.pdvs_con_venta || '—'}</td>
+                          <td className="px-3 py-2 text-right tabular-nums bg-red-50/30 font-semibold text-red-700">{r.pdvs_sin_venta || '—'}</td>
+                          <td className="px-3 py-2 text-right tabular-nums bg-blue-50/40">
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="w-12 bg-gray-100 rounded-full h-1.5 hidden md:block">
+                                <div className={`h-1.5 rounded-full ${r.cumplimiento_pct >= 80 ? 'bg-emerald-500' : r.cumplimiento_pct >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                     style={{ width: `${Math.min(100, r.cumplimiento_pct)}%` }} />
+                              </div>
+                              <span className="font-bold text-blue-700 min-w-[42px]">{r.cumplimiento_pct.toFixed(1)}%</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-gray-700">{fmtNum(r.uds_90d)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-amber-700">{r.en_liquidacion || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )
+        })()}
       </div>
     )
   }
@@ -1954,7 +2091,7 @@ export default function UnisuperEjecucion() {
   const sectionJsx = useMemo(() => renderSection(), [
     section, kpis, tendencia, tendDaily, tendDailyLoading, tendVista, tendMetricas,
     cob, cobDetalle, inv, invSku, invSaludFilter, calidad, top, topN,
-    daily, top5, pedidos, pedidoExpanded, moneda, evolVista, loading,
+    daily, top5, pedidos, pedidoExpanded, moneda, evolVista, loading, surtido,
   ]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
