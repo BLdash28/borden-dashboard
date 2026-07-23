@@ -49,6 +49,25 @@ export default function TipoCambioSection({ moneda, paisNombre, simbolo = '', di
     })
   }, [data])
 
+  // Formato de tasa: 4 decimales para monedas "chicas" (GTQ ~7, USD ~1);
+  // 2 decimales con separador de miles para las "grandes" (COP ~3000, CRC ~450).
+  const stats = data?.stats
+  const magnitudRef = stats?.last?.tasa ?? stats?.avg ?? 1
+  const useThousands = magnitudRef >= 100
+  const fmtTasa = (v: number | null | undefined) => {
+    if (v === null || v === undefined) return '—'
+    return useThousands
+      ? v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : v.toFixed(4)
+  }
+  const fmtDelta = (v: number | null) => {
+    if (v === null) return '—'
+    const s = useThousands
+      ? Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : Math.abs(v).toFixed(4)
+    return (v > 0 ? '+' : v < 0 ? '-' : '') + s
+  }
+
   const download = () => {
     if (!data) return
     const lines = [
@@ -120,27 +139,27 @@ export default function TipoCambioSection({ moneda, paisNombre, simbolo = '', di
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
           <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-4">
             <p className="text-[10px] font-semibold text-amber-600 uppercase tracking-widest mb-1">Tasa vigente</p>
-            <p className="text-2xl font-bold text-amber-800 tabular-nums">{simbolo}{s.last?.tasa.toFixed(4) ?? '—'}</p>
+            <p className="text-2xl font-bold text-amber-800 tabular-nums">{simbolo}{fmtTasa(s.last?.tasa)}</p>
             <div className={`inline-flex items-center gap-1 text-[11px] mt-0.5 ${trendColor}`}>
               <TrendIcon size={12} />
               {s.delta !== null && (
-                <>{s.delta > 0 ? '+' : ''}{s.delta.toFixed(4)} ({(s.delta_pct ?? 0).toFixed(2)}%)</>
+                <>{fmtDelta(s.delta)} ({(s.delta_pct ?? 0).toFixed(2)}%)</>
               )}
               <span className="text-gray-400 ml-1">vs día anterior</span>
             </div>
           </div>
           <div className="rounded-xl border border-gray-100 bg-white p-4">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Promedio {rango}d</p>
-            <p className="text-2xl font-bold text-gray-700 tabular-nums">{simbolo}{s.avg?.toFixed(4) ?? '—'}</p>
+            <p className="text-2xl font-bold text-gray-700 tabular-nums">{simbolo}{fmtTasa(s.avg)}</p>
             <p className="text-[11px] text-gray-400 mt-0.5">Media de la ventana</p>
           </div>
           <div className="rounded-xl border border-gray-100 bg-white p-4">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Mínimo {rango}d</p>
-            <p className="text-2xl font-bold text-emerald-700 tabular-nums">{simbolo}{s.min?.toFixed(4) ?? '—'}</p>
+            <p className="text-2xl font-bold text-emerald-700 tabular-nums">{simbolo}{fmtTasa(s.min)}</p>
           </div>
           <div className="rounded-xl border border-gray-100 bg-white p-4">
             <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Máximo {rango}d</p>
-            <p className="text-2xl font-bold text-red-700 tabular-nums">{simbolo}{s.max?.toFixed(4) ?? '—'}</p>
+            <p className="text-2xl font-bold text-red-700 tabular-nums">{simbolo}{fmtTasa(s.max)}</p>
           </div>
         </div>
       </div>
@@ -166,11 +185,11 @@ export default function TipoCambioSection({ moneda, paisNombre, simbolo = '', di
               <XAxis dataKey="dia_str" tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false}
                 angle={-30} textAnchor="end" interval={Math.floor(chartData.length / 12)} height={40} />
               <YAxis domain={['auto', 'auto']} tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={false} tickLine={false}
-                tickFormatter={(v) => v.toFixed(4)} />
+                tickFormatter={(v) => fmtTasa(v)} />
               <Tooltip
                 cursor={{ stroke: '#f59e0b', strokeWidth: 1 }}
                 contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
-                formatter={(v: number) => [`${simbolo}${v.toFixed(4)}`, `USD → ${moneda}`]}
+                formatter={(v: number) => [`${simbolo}${fmtTasa(v)}`, `USD → ${moneda}`]}
                 labelFormatter={(_, payload) => payload?.[0]?.payload?.fecha ?? ''}
               />
               <Area type="monotone" dataKey="tasa" stroke="#f59e0b" strokeWidth={2}
@@ -212,12 +231,12 @@ export default function TipoCambioSection({ moneda, paisNombre, simbolo = '', di
                   <tr key={r.fecha} className="hover:bg-gray-50/60">
                     <td className="px-4 py-2 text-gray-700 tabular-nums">{r.fecha}</td>
                     <td className="px-4 py-2 text-right tabular-nums font-semibold text-gray-800">
-                      {simbolo}{r.tasa.toFixed(4)}
+                      {simbolo}{fmtTasa(r.tasa)}
                     </td>
                     <td className={`px-4 py-2 text-right tabular-nums ${
                       dlt === null ? 'text-gray-300' : dlt > 0 ? 'text-emerald-600' : dlt < 0 ? 'text-red-600' : 'text-gray-400'
                     }`}>
-                      {dlt === null ? '—' : (dlt > 0 ? '+' : '') + dlt.toFixed(4)}
+                      {fmtDelta(dlt)}
                     </td>
                     <td className="px-4 py-2 text-gray-500">{r.fuente ?? '—'}</td>
                   </tr>
