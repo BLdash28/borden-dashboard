@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/tendencia-chart'
 import { EjecucionLayout, KpiCard } from './shared'
 import { OfertasSection } from './OfertasSection'
+import TipoCambioSection from '@/components/tipo-cambio/TipoCambioSection'
 import { useMercadeoMode } from '@/components/mercadeo/MercadeoModeContext'
 
 // ── Config ────────────────────────────────────────────────────────────────
@@ -36,6 +37,7 @@ const SECTIONS = [
   { key: 'innovaciones',     label: 'Innovaciones'      },
   { key: 'pareto',           label: 'Pareto'            },
   { key: 'precios',          label: 'Lista Precios'     },
+  { key: 'tipo_cambio',      label: 'Tasa de Cambio'    },
 ]
 
 const CADENA_COLORS: Record<string, string> = {
@@ -2485,6 +2487,17 @@ export default function WalmartEjecucion({ pais, bandera, paisNombre, clienteSel
       )
       case 'perdida':         return inv?.disponible ? Inventarios() : <ProximamentePlaceholder section="perdida" />
       case 'precios':         return <ProximamentePlaceholder section="precios" />
+      case 'tipo_cambio':     return (() => {
+        const cfg: Record<string, { moneda: string; simbolo: string; nombre: string }> = {
+          CR: { moneda: 'CRC', simbolo: '₡ ', nombre: 'Costa Rica' },
+          GT: { moneda: 'GTQ', simbolo: 'Q ',  nombre: 'Guatemala'  },
+          HN: { moneda: 'HNL', simbolo: 'L ',  nombre: 'Honduras'   },
+          NI: { moneda: 'NIO', simbolo: 'C$ ', nombre: 'Nicaragua'  },
+          SV: { moneda: 'USD', simbolo: '$ ',  nombre: 'El Salvador'},
+        }
+        const c = cfg[pais] ?? cfg.CR
+        return <TipoCambioSection moneda={c.moneda} paisNombre={c.nombre} simbolo={c.simbolo} />
+      })()
       case 'recomendaciones': return <ProximamentePlaceholder section="recomendaciones" />
       case 'cliente':         return <ProximamentePlaceholder section="cliente" />
       default:                return Resumen()

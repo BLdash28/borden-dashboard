@@ -13,6 +13,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
   ResponsiveContainer, Legend, Cell,
 } from 'recharts'
+import TipoCambioSection from '@/components/tipo-cambio/TipoCambioSection'
 
 // ── Config ────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,7 @@ const SECTIONS = [
   { key: 'calidad',          label: 'Calidad Inventario'  },
   { key: 'innovaciones',     label: 'Innovaciones'        },
   { key: 'precios',          label: 'Lista Precios'       },
+  { key: 'tipo_cambio',      label: 'Tasa de Cambio'      },
 ]
 
 const CADENA_COLORS: Record<string, string> = {
@@ -3334,6 +3336,7 @@ export default function ExitoEjecucion({ initialSection, hideSectionNav }: Exito
       case 'inventarios':   return Inventarios()
       case 'innovaciones':  return Innovaciones()
       case 'precios':       return Precios()
+      case 'tipo_cambio':   return <TipoCambioSection moneda="COP" paisNombre="Colombia" simbolo="$ " />
       default:              return Resumen()
     }
   }
