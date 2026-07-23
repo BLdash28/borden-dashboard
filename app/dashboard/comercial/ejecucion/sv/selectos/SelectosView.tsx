@@ -101,6 +101,18 @@ export default function EjecucionSelectos() {
   const [section, setSection] = useState('resumen')
   // Filtro estándar Categoría (multi-select). Se persiste como CSV en localStorage.
   const [categoriaSel, setCategoriaSel] = useState<string[]>([])
+  // Filtros extras Subcategoría + Producto (SKU) — opciones vienen del endpoint
+  // /api/comercial/ejecucion/sv/selectos/filtros-opciones.
+  const [subcatSel,    setSubcatSel]    = useState<string[]>([])
+  const [productoSel,  setProductoSel]  = useState<string[]>([])
+  const [filtrosOpts,  setFiltrosOpts]  = useState<{
+    subcategorias: { value: string; venta: number }[]
+    skus:          { value: string; descripcion: string; subcategoria: string; venta: number }[]
+  } | null>(null)
+  useEffect(() => {
+    fetch('/api/comercial/ejecucion/sv/selectos/filtros-opciones')
+      .then(r => r.json()).then(setFiltrosOpts).catch(() => {})
+  }, [])
 
   // Compat: derivar `div` legacy desde la selección multi para no romper la lógica
   // interna que hace `div === 'QUESO'` etc. Reglas:
@@ -707,6 +719,83 @@ export default function EjecucionSelectos() {
             height={260}
           />
         </div>
+
+        {/* Chart Venta Valor vs Unidades — patrón Éxito adaptado a Selectos */}
+        {selTend?.total?.length > 0 && (() => {
+          const valUdsData = selTend.total
+            .map((m: any) => ({
+              mes_nombre: m.mes_str ?? m.mes_nombre ?? '',
+              valor: m.valor_usd ?? 0,
+              unidades: m.unidades ?? 0,
+            }))
+            .filter((m: any) => m.valor > 0 || m.unidades > 0)
+          const fmtBarLblUSD = (v: any) => {
+            const n = Number(v); if (!isFinite(n) || n === 0) return ''
+            if (Math.abs(n) >= 1e6) return '$' + (n / 1e6).toFixed(1) + 'M'
+            if (Math.abs(n) >= 1e3) return '$' + (n / 1e3).toFixed(0) + 'K'
+            return '$' + Math.round(n)
+          }
+          const fmtUdsLbl = (v: any) => {
+            const n = Number(v); if (!isFinite(n) || n === 0) return ''
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M'
+            if (n >= 1e3) return (n / 1e3).toFixed(0) + 'K'
+            return String(Math.round(n))
+          }
+          return (
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+              <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-800">Venta Valor vs Unidades</h3>
+                  <p className="text-[11px] text-gray-400">Sell-Out mensual · USD</p>
+                </div>
+                <div className="flex items-center gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-500"/> Venta (USD)</span>
+                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500"/> Unidades</span>
+                </div>
+              </div>
+              <div className="h-[260px] mt-3">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={valUdsData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="25%">
+                    <defs>
+                      <linearGradient id="gradValorSel" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#f59e0b" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#fbbf24" stopOpacity={0.85}/>
+                      </linearGradient>
+                      <linearGradient id="gradUnidadesSel" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity={1}/>
+                        <stop offset="100%" stopColor="#34d399" stopOpacity={0.85}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="left" tickFormatter={(v: any) => fmt$(Number(v))}
+                      tick={{ fontSize: 11, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="right" orientation="right"
+                      tickFormatter={(v: any) => Number(v) >= 1e3 ? (Number(v)/1e3).toFixed(0)+'K' : String(v)}
+                      tick={{ fontSize: 11, fill: '#94a3b8' }} width={45} axisLine={false} tickLine={false} />
+                    <Tooltip
+                      formatter={(v: any, name: string) => name === 'Unidades'
+                        ? [Number(v).toLocaleString('en-US') + ' u', name]
+                        : [fmtFull(Number(v)), name]}
+                      cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                      contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                    />
+                    <Bar yAxisId="left" dataKey="valor" name="Venta (USD)"
+                      fill="url(#gradValorSel)" radius={[8,8,0,0]} maxBarSize={28}>
+                      <LabelList dataKey="valor" position="top" formatter={fmtBarLblUSD}
+                        style={{ fontSize: 9, fill: '#92400e', fontWeight: 700 }} />
+                    </Bar>
+                    <Bar yAxisId="right" dataKey="unidades" name="Unidades"
+                      fill="url(#gradUnidadesSel)" radius={[8,8,0,0]} maxBarSize={28}>
+                      <LabelList dataKey="unidades" position="top" formatter={fmtUdsLbl}
+                        style={{ fontSize: 9, fill: '#065f46', fontWeight: 700 }} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* Punto de reorden */}
         {!L && reorden?.rows.length > 0 && (
@@ -3825,6 +3914,13 @@ export default function EjecucionSelectos() {
       filters={[
         { key: 'categoria', label: 'Categoría', value: categoriaSel, onChange: setCategoriaSel,
           options: CATEGORIAS_SELECTOS.map(c => ({ value: c })) },
+        { key: 'subcategoria', label: 'Subcategoría', value: subcatSel, onChange: setSubcatSel,
+          options: (filtrosOpts?.subcategorias ?? []).map(s => ({ value: s.value })) },
+        { key: 'producto', label: 'Producto', value: productoSel, onChange: setProductoSel,
+          options: (filtrosOpts?.skus ?? [])
+            // Restringir por subcategoría seleccionada si hay
+            .filter(s => subcatSel.length === 0 || subcatSel.includes(s.subcategoria))
+            .map(s => ({ value: s.value, label: `${s.value} · ${s.descripcion ?? ''}` })) },
       ]}
     >
       {renderSection()}
