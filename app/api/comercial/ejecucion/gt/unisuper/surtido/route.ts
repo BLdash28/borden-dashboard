@@ -77,17 +77,14 @@ export async function GET(req: NextRequest) {
     const conVenta = parseInt(k.con_venta_90d ?? '0')
     const cumplimientoPct = asignados > 0 ? (conVenta / asignados) * 100 : 0
 
-    // Por SKU
+    // Por SKU — descripción/categoría/subcategoría desde dim_producto (canónico)
+    // en lugar de las del retailer que vienen con formato '2007398-BORDEN QUESO…'.
     const porSkuR = await pool.query(`
       WITH snap AS (SELECT MAX(snapshot_fecha) AS f FROM surtido_unisuper WHERE pais='GT'),
       base AS (
         SELECT s.sku_borden AS sku,
-               MAX(s.descripcion) AS descripcion,
-               MAX(s.categoria) AS categoria,
-               MAX(s.subcategoria) AS subcategoria,
                COUNT(DISTINCT s.nombre_sucursal) AS pdvs_asignados,
-               SUM(CASE WHEN s.estado_sku ILIKE '%LIQUIDACION%' THEN 1 ELSE 0 END) AS en_liquidacion,
-               ARRAY_AGG(DISTINCT s.nombre_sucursal) AS pdvs_lista
+               SUM(CASE WHEN s.estado_sku ILIKE '%LIQUIDACION%' THEN 1 ELSE 0 END) AS en_liquidacion
         FROM surtido_unisuper s, snap
         WHERE ${where} AND s.snapshot_fecha = snap.f
         GROUP BY s.sku_borden
@@ -101,7 +98,9 @@ export async function GET(req: NextRequest) {
         GROUP BY sku
       )
       SELECT
-        b.sku, b.descripcion, b.subcategoria,
+        b.sku,
+        COALESCE(dp.descripcion, '(sin dim)')  AS descripcion,
+        COALESCE(dp.subcategoria, dp.categoria) AS subcategoria,
         b.pdvs_asignados,
         COALESCE(v.pdvs_vendieron, 0) AS pdvs_con_venta,
         b.pdvs_asignados - COALESCE(v.pdvs_vendieron, 0) AS pdvs_sin_venta,
@@ -110,6 +109,7 @@ export async function GET(req: NextRequest) {
         COALESCE(v.valor_90d, 0) AS valor_90d,
         b.en_liquidacion
       FROM base b
+      LEFT JOIN dim_producto dp ON dp.sku = b.sku
       LEFT JOIN ventas90 v ON v.sku = b.sku
       ORDER BY cumplimiento_pct ASC NULLS LAST, b.pdvs_asignados DESC
     `, params)
