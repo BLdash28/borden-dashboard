@@ -347,9 +347,9 @@ export default function UnisuperEjecucion() {
       setLoading(l => ({ ...l, cobertura: true }))
       Promise.all([
         fetch('/api/comercial/ejecucion/gt/unisuper/cobertura?' + filterQS).then(r => r.json()),
-        invSku === null
-          ? fetch('/api/comercial/ejecucion/gt/unisuper/inventario/sku-tienda?' + filterQS).then(r => r.json())
-          : Promise.resolve({ rows: invSku }),
+        // Siempre refetch de sku-tienda (era cache condicional pero eso mantenía
+        // data viejas sin el join a dim_producto tras el fix del endpoint).
+        fetch('/api/comercial/ejecucion/gt/unisuper/inventario/sku-tienda?' + filterQS).then(r => r.json()),
         fetch('/api/comercial/ejecucion/gt/unisuper/surtido?' + filterQS).then(r => r.json()).catch(() => null),
       ]).then(([c, sk, su]) => {
         setCob(c)
