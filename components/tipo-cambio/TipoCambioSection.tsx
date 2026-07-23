@@ -180,19 +180,21 @@ export default function TipoCambioSection({ moneda, paisNombre, simbolo = '', di
         </div>
       </div>
 
-      {/* Tabla histórico + descargar */}
+      {/* Tabla histórico completo + descargar */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-50 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-bold text-gray-800">Historial de tasas</h3>
-            <p className="text-[11px] text-gray-400 mt-0.5">Últimas 30 tasas · fuente {s.last?.fuente ?? 'BanGuat'}</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {data.count} tasas · rango completo · fuente {s.last?.fuente ?? 'BanGuat'}
+            </p>
           </div>
           <button type="button" onClick={download}
             className="flex items-center gap-1.5 text-xs text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg">
             <Download size={12} /> Descargar CSV
           </button>
         </div>
-        <div className="overflow-x-auto max-h-[400px]">
+        <div className="overflow-x-auto max-h-[500px]">
           <table className="w-full text-xs">
             <thead className="bg-gray-50 text-gray-500 uppercase text-[10px] tracking-wider sticky top-0">
               <tr>
@@ -203,7 +205,7 @@ export default function TipoCambioSection({ moneda, paisNombre, simbolo = '', di
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {[...data.serie].reverse().slice(0, 30).map((r, i, arr) => {
+              {[...data.serie].reverse().map((r, i, arr) => {
                 const prevRow = arr[i + 1]
                 const dlt = prevRow ? r.tasa - prevRow.tasa : null
                 return (
