@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
 import dynamic from 'next/dynamic'
-import { TrendingUp, TrendingDown, Minus, X, RefreshCw } from 'lucide-react'
+import { TrendingUp, TrendingDown, Minus, X, RefreshCw, SlidersHorizontal } from 'lucide-react'
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, AreaChart, Area,
   PieChart, Pie, LabelList,
@@ -216,8 +216,36 @@ export default function UnisuperEjecucion() {
   const [subcatsSel,  setSubcatsSel]  = useState<string[]>([])
   const [pdvsSel,     setPdvsSel]     = useState<string[]>([])
   const [skusSel,     setSkusSel]     = useState<string[]>([])
-  const [showFiltros, setShowFiltros] = useState(false)
+  // Filtros abiertos por default (patrón Éxito). Se persiste en localStorage
+  // para que al recargar mantenga la preferencia del usuario.
+  const [showFiltros, setShowFiltros] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
+    const saved = localStorage.getItem('unisuper-gt-showFiltros')
+    return saved === null ? true : saved === '1'
+  })
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('unisuper-gt-showFiltros', showFiltros ? '1' : '0')
+    }
+  }, [showFiltros])
   const [opts, setOpts] = useState<FiltrosOpts | null>(null)
+
+  // Moneda: la BD guarda ventas_valor en USD; para GTQ multiplicamos por tasa.
+  // Tasa promedio 2026 según unisuper_ingest.py (default 7.80).
+  const [moneda, setMoneda] = useState<'gtq' | 'usd'>('gtq')
+  const TASA_GTQ_USD = 7.80
+  const isGtq   = moneda === 'gtq'
+  const symbol  = isGtq ? 'Q ' : '$'
+  const conv    = (usd: number) => isGtq ? usd * TASA_GTQ_USD : usd
+  const fmtVal     = (usd: number) => symbol + Math.round(conv(usd)).toLocaleString('en-US')
+  const fmtValFull = (usd: number) => symbol + conv(isFinite(usd) ? usd : 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const fmtValK    = (usd: number) => {
+    const v = conv(usd)
+    if (!isFinite(v)) return symbol + '0'
+    if (v >= 1e6) return symbol + (v/1e6).toFixed(2) + 'M'
+    if (v >= 1e3) return symbol + (v/1e3).toFixed(1) + 'K'
+    return symbol + Math.round(v)
+  }
 
   // Data
   const [kpis, setKpis]     = useState<KpisData | null>(null)
@@ -387,13 +415,13 @@ export default function UnisuperEjecucion() {
           <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Sell-Out</p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
-              { label: 'Sell-Out YTD 2026', value: fmtFull(soTotal), sub: `hasta ${soLast}`, icon: '🛒' },
+              { label: 'Sell-Out YTD 2026', value: fmtValFull(soTotal), sub: `hasta ${soLast}`, icon: '🛒' },
               { label: 'vs YTD 2025',
                 value: soDelta !== null ? <Delta d={soDelta} /> : <span className="text-sm text-gray-400">Sin hist.</span>,
-                sub: (kpis.ytd_2025 ?? 0) > 0 ? `2025: ${fmtFull(kpis.ytd_2025 ?? 0)}` : 'Sin dato 2025',
+                sub: (kpis.ytd_2025 ?? 0) > 0 ? `2025: ${fmtValFull(kpis.ytd_2025 ?? 0)}` : 'Sin dato 2025',
                 icon: '📊' },
               { label: 'Unidades YTD', value: soUnits.toLocaleString('en-US'), sub: 'cajas vendidas', icon: '📦' },
-              { label: 'Promedio Mensual', value: fmt$(soAvg), sub: `${kpis.ultimo_mes ?? 0} meses`, icon: '📅' },
+              { label: 'Promedio Mensual', value: fmtVal(soAvg), sub: `${kpis.ultimo_mes ?? 0} meses`, icon: '📅' },
             ].map(c => (
               <div key={c.label} className="rounded-xl border border-gray-100 shadow-sm p-5 bg-white">
                 <div className="flex items-center justify-between mb-1">
@@ -421,7 +449,7 @@ export default function UnisuperEjecucion() {
                       <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: color }} />
                       <p className="text-xs font-semibold text-gray-600 truncate">{c.cadena}</p>
                     </div>
-                    <p className="text-xl font-bold text-gray-800">{fmtFull(c.valor_2026 ?? 0)}</p>
+                    <p className="text-xl font-bold text-gray-800">{fmtValFull(c.valor_2026 ?? 0)}</p>
                     <div className="flex items-center justify-between mt-1">
                       <p className="text-xs text-gray-400">{pctVal.toFixed(1)}% del total</p>
                       {c.delta !== null ? <Delta d={c.delta} /> : <span className="text-[11px] text-gray-300">Sin 2025</span>}
@@ -518,7 +546,7 @@ export default function UnisuperEjecucion() {
                     <Tooltip
                       formatter={(v: any, name: string) => name === 'Unidades'
                         ? [Math.round(Number(v)).toLocaleString('en-US'), name]
-                        : [fmtFull(Number(v)), name]}
+                        : [fmtValFull(Number(v)), name]}
                       cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                       contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}/>
                     <Bar yAxisId="v" dataKey="valor" name="Valor USD" fill="url(#gradUniVv)" radius={[6,6,0,0]} maxBarSize={26}/>
@@ -559,9 +587,9 @@ export default function UnisuperEjecucion() {
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
                                 style={{ background: CADENA_COLORS[c.cadena] ?? '#6b7280' }}>{c.cadena}</span>
                         </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800">{fmt$(c.valor_2026)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800">{fmtVal(c.valor_2026)}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmtNum(c.uni_2026)}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{c.valor_2025 > 0 ? fmt$(c.valor_2025) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{c.valor_2025 > 0 ? fmtVal(c.valor_2025) : <span className="text-gray-300">—</span>}</td>
                         <td className="px-3 py-2.5 text-right"><Delta d={c.delta} /></td>
                         <td className="px-3 py-2.5 text-right tabular-nums bg-amber-50/40 font-bold text-amber-700">{pct.toFixed(1)}%</td>
                       </tr>
@@ -607,7 +635,7 @@ export default function UnisuperEjecucion() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                     <XAxis dataKey="mes_nombre" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} />
                     <YAxis tickFormatter={fmtK} tick={{ fontSize: 10, fill: '#94a3b8' }} width={60} axisLine={false} tickLine={false} />
-                    <Tooltip formatter={(v: any) => fmtFull(Number(v))}
+                    <Tooltip formatter={(v: any) => fmtValFull(Number(v))}
                              contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     <Area type="monotone" dataKey="acum2025" name="Acumulado 2025" stroke="#60a5fa" strokeWidth={2} fill="url(#gradUniAcum25)" connectNulls />
@@ -640,7 +668,7 @@ export default function UnisuperEjecucion() {
                     return (
                       <tr key={c.categoria} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
                         <td className="px-3 py-2.5 font-medium text-gray-700">{c.categoria}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmt$(c.valor_2026)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold">{fmtVal(c.valor_2026)}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{fmtNum(c.uni_2026)}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums bg-amber-50/40 font-bold text-amber-700">{pct.toFixed(1)}%</td>
                       </tr>
@@ -746,7 +774,7 @@ export default function UnisuperEjecucion() {
             </div>
             <div className="rounded-lg px-4 py-2.5 bg-amber-50 border border-amber-100">
               <p className="text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-0.5">YTD 2026 (USD)</p>
-              <p className="text-lg font-bold text-amber-700">{fmt$(soTotal)}</p>
+              <p className="text-lg font-bold text-amber-700">{fmtVal(soTotal)}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(kpis.uni_2026 ?? 0)} und</p>
             </div>
             <div className={`rounded-lg px-4 py-2.5 border ${(dVal ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
@@ -754,7 +782,7 @@ export default function UnisuperEjecucion() {
               <p className={`text-lg font-bold ${(dVal ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>
                 {dVal === null ? '—' : `${dVal > 0 ? '+' : ''}${dVal.toFixed(1)}%`}
               </p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{fmt$(mAct?.y2026 ?? 0)}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{fmtVal(mAct?.y2026 ?? 0)}</p>
             </div>
             <div className={`rounded-lg px-4 py-2.5 border ${(dUds ?? 0) >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
               <p className={`text-[9px] font-bold uppercase tracking-widest mb-0.5 ${(dUds ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{soLast} und vs 2025</p>
@@ -775,7 +803,7 @@ export default function UnisuperEjecucion() {
             </span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Kpi label="Total YTD 2026 (USD)" value={fmt$(soTotal)} sub={`${kpis.ultimo_mes ?? 0} meses acumulados`} color="#c8873a" />
+            <Kpi label="Total YTD 2026 (USD)" value={fmtVal(soTotal)} sub={`${kpis.ultimo_mes ?? 0} meses acumulados`} color="#c8873a" />
             <Kpi label="Total YTD 2026 (und)" value={fmtNum(kpis.uni_2026 ?? 0)} sub={`${kpis.ultimo_mes ?? 0} meses acumulados`} color="#3a6fa8" />
             <Kpi label="Promedio mensual (und)" value={fmtNum(promMensualUds)} sub={`${fmtNum(promMensualUds)} und/mes`} color="#2a7a58" />
             <Kpi label={`Prom. diario (${diasAcumulados}d)`} value={fmtNum(promDiarioUds)} sub={`${fmtNum(promDiarioUds)} und/día`} color="#a04d3a" />
@@ -788,29 +816,29 @@ export default function UnisuperEjecucion() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
               <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio mensual</p>
-              <p className="text-lg font-bold text-gray-800">{fmt$(promMensualVal)}</p>
+              <p className="text-lg font-bold text-gray-800">{fmtVal(promMensualVal)}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promMensualUds)} und/mes</p>
             </div>
             <div className="rounded-lg px-4 py-2.5 bg-gray-50 border border-gray-100">
               <p className="text-[9px] font-bold uppercase tracking-widest text-gray-500 mb-0.5">Promedio diario</p>
-              <p className="text-lg font-bold text-gray-800">{fmt$(promDiarioVal)}</p>
+              <p className="text-lg font-bold text-gray-800">{fmtVal(promDiarioVal)}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">{fmtNum(promDiarioUds)} und/día</p>
             </div>
             <div className="rounded-lg px-4 py-2.5 bg-emerald-50 border border-emerald-100">
               <p className="text-[9px] font-bold uppercase tracking-widest text-emerald-700 mb-0.5">Mejor mes 2026</p>
               <p className="text-lg font-bold text-emerald-700">{mejorMes ? mejorMes.mes_nombre : '—'}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{mejorMes ? fmt$(mejorMes.y2026 ?? 0) : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{mejorMes ? fmtVal(mejorMes.y2026 ?? 0) : '—'}</p>
             </div>
             <div className="rounded-lg px-4 py-2.5 bg-red-50 border border-red-100">
               <p className="text-[9px] font-bold uppercase tracking-widest text-red-700 mb-0.5">Peor mes 2026</p>
               <p className="text-lg font-bold text-red-700">{peorMes ? peorMes.mes_nombre : '—'}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{peorMes ? fmt$(peorMes.y2026 ?? 0) : '—'}</p>
+              <p className="text-[10px] text-gray-500 mt-0.5">{peorMes ? fmtVal(peorMes.y2026 ?? 0) : '—'}</p>
             </div>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
             <div className="rounded-lg px-4 py-2.5 bg-blue-50 border border-blue-100">
               <p className="text-[9px] font-bold uppercase tracking-widest text-blue-700 mb-0.5">Ticket medio</p>
-              <p className="text-lg font-bold text-blue-700">{fmt$(ticketMedio)}</p>
+              <p className="text-lg font-bold text-blue-700">{fmtVal(ticketMedio)}</p>
               <p className="text-[10px] text-gray-500 mt-0.5">por unidad</p>
             </div>
             <div className={`rounded-lg px-4 py-2.5 border ${growthPromedio >= 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
@@ -964,7 +992,7 @@ export default function UnisuperEjecucion() {
                         <Cell key={i} fill={CADENA_COLORS[c.cadena] ?? '#c8873a'} />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: unknown) => [fmt$(Number(v)), '']}
+                    <Tooltip formatter={(v: unknown) => [fmtVal(Number(v)), '']}
                              contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }} />
                   </PieChart>
                 </ResponsiveContainer>
@@ -979,7 +1007,7 @@ export default function UnisuperEjecucion() {
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-700 truncate">{c.cadena}</p>
                         <p className="text-[11px] text-gray-400 tabular-nums">
-                          {fmt$(c.valor)} <span className="text-gray-300">· {pct.toFixed(1)}%</span>
+                          {fmtVal(c.valor)} <span className="text-gray-300">· {pct.toFixed(1)}%</span>
                         </p>
                       </div>
                     </div>
@@ -1018,9 +1046,9 @@ export default function UnisuperEjecucion() {
                           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold text-white"
                                 style={{ background: CADENA_COLORS[c.cadena] ?? '#6b7280' }}>{c.cadena}</span>
                         </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800">{fmt$(c.valor_2026)}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-gray-800">{fmtVal(c.valor_2026)}</td>
                         <td className="px-3 py-2.5 text-right tabular-nums text-gray-600">{fmtNum(c.uni_2026)}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{c.valor_2025 > 0 ? fmt$(c.valor_2025) : <span className="text-gray-300">—</span>}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums text-gray-500">{c.valor_2025 > 0 ? fmtVal(c.valor_2025) : <span className="text-gray-300">—</span>}</td>
                         <td className="px-3 py-2.5 text-right"><Delta d={c.delta} /></td>
                         <td className="px-3 py-2.5 text-right tabular-nums bg-amber-50/40 font-bold text-amber-700">{pct.toFixed(1)}%</td>
                       </tr>
@@ -1128,7 +1156,7 @@ export default function UnisuperEjecucion() {
                           className="text-emerald-700 font-semibold hover:underline">{r.bucket_mayor_10}</button>
                       </td>
                       <td className="px-3 py-2 text-right tabular-nums">{fmtNum(r.uds_90d)}</td>
-                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt$(r.valor_90d)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmtVal(r.valor_90d)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1236,7 +1264,10 @@ export default function UnisuperEjecucion() {
     )
     const k = inv.kpis!
     const rows = inv.rows ?? []
-    const fmtQ = (v: number) => 'Q ' + Math.round(v).toLocaleString('en-US')
+    // pdv_valor viene en GTQ del endpoint. Si moneda='usd', dividimos por tasa.
+    const fmtValorInv = (gtq: number) => isGtq
+      ? 'Q ' + Math.round(gtq).toLocaleString('en-US')
+      : '$' + Math.round(gtq / TASA_GTQ_USD).toLocaleString('en-US')
 
     // Agregación por cadena
     const byCadenaMap = new Map<string, { cadena: string; pdvs: Set<string>; skus: Set<string>; combos: number; con_stock: number; uds: number }>()
@@ -1289,7 +1320,7 @@ export default function UnisuperEjecucion() {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
             <Kpi label="Total unidades"  value={fmtNum(k.pdv_inv)}  sub={`${k.pdv_tiendas_dist} PDVs`}                    color="#3a6fa8" />
-            <Kpi label="Valor inventario" value={fmtQ(k.pdv_valor)} sub="GTQ"                                             color="#c8873a" />
+            <Kpi label="Valor inventario" value={fmtValorInv(k.pdv_valor)} sub={moneda.toUpperCase()} color="#c8873a" />
             <Kpi label="SKUs con stock"   value={String(skusConStock)} sub={`de ${combosTotal.toLocaleString('en-US')} combos`} color="#2a7a58" />
             <Kpi label="Tiendas activas"  value={String(k.pdv_tiendas_dist)} sub={`${porCadena.length} cadenas`}          color="#a04d3a" />
           </div>
@@ -1730,7 +1761,7 @@ export default function UnisuperEjecucion() {
                        tickFormatter={(v: string) => v && v.length > 26 ? v.slice(0, 24) + '…' : v} />
                 <YAxis yAxisId="left"  tickFormatter={fmtK} tick={{ fontSize: 11 }} width={50} />
                 <YAxis yAxisId="right" orientation="right" tickFormatter={v => v + '%'} tick={{ fontSize: 11 }} width={35} domain={[0, 100]} />
-                <Tooltip formatter={(v: any, n: string) => n === 'Acumulado %' ? v + '%' : fmtFull(Number(v))}
+                <Tooltip formatter={(v: any, n: string) => n === 'Acumulado %' ? v + '%' : fmtValFull(Number(v))}
                          contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12, maxWidth: 320 }} />
                 <Bar yAxisId="left" dataKey="valor_2026" name="Valor 2026" radius={[2, 2, 0, 0]}>
                   {top.map((r, i) => (
@@ -1759,7 +1790,7 @@ export default function UnisuperEjecucion() {
               <h3 className="text-sm font-semibold text-gray-700">Detalle por SKU</h3>
               <p className="text-xs text-gray-400">YTD 2026 · sell-out Unisuper GT</p>
             </div>
-            {grandTotal > 0 && <span className="text-xs font-semibold text-gray-500">{fmtFull(grandTotal)} total</span>}
+            {grandTotal > 0 && <span className="text-xs font-semibold text-gray-500">{fmtValFull(grandTotal)} total</span>}
           </div>
           <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
             <table className="w-full text-xs">
@@ -1781,7 +1812,7 @@ export default function UnisuperEjecucion() {
                     <td className="px-3 py-2 text-gray-400 tabular-nums">{i + 1}</td>
                     <td className="px-3 py-2 font-mono text-[10px] text-gray-500">{r.sku}</td>
                     <td className="px-3 py-2 font-medium text-gray-700 max-w-[280px] truncate">{r.descripcion}</td>
-                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmt$(r.valor_2026)}</td>
+                    <td className="px-3 py-2 text-right tabular-nums font-semibold">{fmtVal(r.valor_2026)}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-gray-500">{fmtNum(r.uni_2026)}</td>
                     <td className="px-3 py-2 text-right"><Delta d={r.delta} /></td>
                     <td className="px-3 py-2 text-right tabular-nums bg-amber-50/30 font-bold text-amber-700">{r.share_pct.toFixed(1)}%</td>
@@ -1838,7 +1869,7 @@ export default function UnisuperEjecucion() {
                   </div>
                   <div className="text-right">
                     <p className="text-[9px] uppercase text-gray-400 tracking-widest">Venta {p.moneda}</p>
-                    <p className="text-sm font-semibold text-gray-800 tabular-nums">{fmt$(p.total_venta_neta)}</p>
+                    <p className="text-sm font-semibold text-gray-800 tabular-nums">{fmtVal(p.total_venta_neta)}</p>
                   </div>
                   <span className={`text-xs text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}>▼</span>
                 </div>
@@ -1867,7 +1898,7 @@ export default function UnisuperEjecucion() {
                           <td className="px-3 py-1.5 text-gray-500">{l.subcategoria ?? '—'}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums">{fmtNum(l.cajas)}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums text-gray-600">{l.precio.toFixed(2)}</td>
-                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{fmt$(l.venta_neta)}</td>
+                          <td className="px-3 py-1.5 text-right tabular-nums font-semibold">{fmtVal(l.venta_neta)}</td>
                           <td className="px-3 py-1.5 text-right tabular-nums text-gray-600">{l.margen_pct !== null ? l.margen_pct.toFixed(1) + '%' : '—'}</td>
                         </tr>
                       ))}
@@ -1905,6 +1936,15 @@ export default function UnisuperEjecucion() {
     }
   }
 
+  // Memoizar el JSX del contenido para no re-renderizar al abrir/cerrar filtros
+  // (showFiltros / hayFiltros no están en las deps). Solo se recomputa cuando
+  // cambia algo que realmente afecta el render de la sección.
+  const sectionJsx = useMemo(() => renderSection(), [
+    section, kpis, tendencia, tendDaily, tendDailyLoading, tendVista, tendMetricas,
+    cob, cobDetalle, inv, invSku, invSaludFilter, calidad, top, topN,
+    daily, top5, pedidos, pedidoExpanded, moneda, evolVista, loading,
+  ]) // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="space-y-5">
       {/* Header estilo Éxito: eyebrow + título grande + subtítulo + Actualizar */}
@@ -1921,41 +1961,79 @@ export default function UnisuperEjecucion() {
         </button>
       </div>
 
-      {/* Barra de filtros — card separada */}
-      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
-        <div className="px-5 py-3 flex items-center justify-between flex-wrap gap-3">
-          <button onClick={() => setShowFiltros(v => !v)}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg">
-            ≡ Filtros {showFiltros ? '▲' : '▼'}
-            {hayFiltros && <span className="ml-1 text-amber-600 font-bold">·</span>}
-          </button>
-          {hayFiltros && (
-            <button onClick={limpiarFiltros} className="text-xs text-gray-400 hover:text-gray-600 underline">
-              ↺ Limpiar todo
+      {/* Barra de filtros — patrón Éxito: chips resumen + toggle moneda pill group + reset */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4"
+           style={{ ['--acc' as any]: '#f59e0b', ['--bg' as any]: '#ffffff', ['--surface' as any]: '#ffffff',
+                    ['--border' as any]: '#e5e7eb', ['--t1' as any]: '#111827', ['--t2' as any]: '#374151', ['--t3' as any]: '#6b7280' }}>
+        {/* Barra top: botón filtros + chips resumen · moneda · reset */}
+        <div className="flex items-center flex-wrap gap-3 justify-between">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button type="button" onClick={() => setShowFiltros(v => !v)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-3 py-1.5 rounded-lg">
+              <SlidersHorizontal size={12} /> Filtros {showFiltros ? '▲' : '▼'}
             </button>
-          )}
+            {/* Chips resumen de selección */}
+            {[
+              { label: 'Cadena',       items: cadenasSel, onClear: () => setCadenasSel([]) },
+              { label: 'Subcategoría', items: subcatsSel, onClear: () => setSubcatsSel([]) },
+              { label: 'Tienda',       items: pdvsSel,    onClear: () => setPdvsSel([])    },
+              { label: 'SKU',          items: skusSel,    onClear: () => setSkusSel([])    },
+            ].filter(c => c.items.length > 0).map(c => (
+              <span key={c.label}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium bg-amber-50 text-amber-800 border border-amber-200 rounded-full px-2.5 py-1">
+                <span className="text-amber-500">{c.label}:</span>
+                <span>{c.items.length <= 2 ? c.items.join(', ') : `${c.items.length} sel.`}</span>
+                <button type="button" onClick={c.onClear} className="ml-0.5 rounded-full hover:bg-amber-100 p-0.5" aria-label={`Limpiar ${c.label}`}>
+                  <X size={10}/>
+                </button>
+              </span>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Moneda — pill group con borde común */}
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] uppercase tracking-widest text-gray-400">Moneda</span>
+              <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                {(['gtq','usd'] as const).map(m => (
+                  <button key={m} type="button"
+                    onClick={() => setMoneda(m)}
+                    className={`px-4 py-1.5 text-xs font-semibold transition-colors ${moneda === m ? 'bg-amber-500 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    {m.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Reset global */}
+            {(hayFiltros || moneda !== 'gtq') && (
+              <button type="button"
+                onClick={() => { limpiarFiltros(); setMoneda('gtq') }}
+                className="self-end px-3 py-1.5 text-xs rounded-lg border border-gray-200 bg-white text-gray-500 hover:bg-gray-50 font-medium transition-colors">
+                ↺ Reset
+              </button>
+            )}
+          </div>
         </div>
 
+        {/* Sección expandible con los multi-select — inline como Éxito */}
         {showFiltros && opts && (
-          <div className="px-5 pb-5 border-t border-gray-100 pt-4">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <MultiSelect
-                label="Cadena"
-                options={opts.cadenas.map(c => ({ value: c.value, label: c.value }))}
-                value={cadenasSel} onChange={setCadenasSel} placeholder="Todas" />
-              <MultiSelect
-                label="Subcategoría"
-                options={opts.subcategorias.map(s => ({ value: s.value, label: s.value }))}
-                value={subcatsSel} onChange={setSubcatsSel} placeholder="Todas" />
-              <MultiSelect
-                label="Tienda"
-                options={opts.puntos.map(p => ({ value: p.value, label: p.value }))}
-                value={pdvsSel} onChange={setPdvsSel} placeholder="Todas" />
-              <MultiSelect
-                label="SKU / Producto"
-                options={opts.skus.map(s => ({ value: s.value, label: s.descripcion || s.value }))}
-                value={skusSel} onChange={setSkusSel} placeholder="Todos" />
-            </div>
+          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            <MultiSelect
+              label="Cadena"
+              options={opts.cadenas.map(c => ({ value: c.value, label: c.value }))}
+              value={cadenasSel} onChange={setCadenasSel} placeholder="Todas" />
+            <MultiSelect
+              label="Subcategoría"
+              options={opts.subcategorias.map(s => ({ value: s.value, label: s.value }))}
+              value={subcatsSel} onChange={setSubcatsSel} placeholder="Todas" />
+            <MultiSelect
+              label="Tienda"
+              options={opts.puntos.map(p => ({ value: p.value, label: p.value }))}
+              value={pdvsSel} onChange={setPdvsSel} placeholder="Todas" />
+            <MultiSelect
+              label="SKU / Producto"
+              options={opts.skus.map(s => ({ value: s.value, label: s.descripcion || s.value }))}
+              value={skusSel} onChange={setSkusSel} placeholder="Todos" />
           </div>
         )}
       </div>
@@ -1975,8 +2053,9 @@ export default function UnisuperEjecucion() {
         </div>
       </div>
 
-      {/* Contenido */}
-      <div>{renderSection()}</div>
+      {/* Contenido — memoizado para NO re-renderizar al abrir/cerrar filtros.
+          Solo se recomputa cuando cambian data o toggles relevantes al render. */}
+      <div>{sectionJsx}</div>
 
       {/* Modal Drill-down Cobertura */}
       {cobDetalle && (
@@ -2026,7 +2105,7 @@ export default function UnisuperEjecucion() {
                         <td className="px-4 py-2 text-gray-700 font-medium">{p.punto_venta}</td>
                         <td className="px-4 py-2 text-right tabular-nums">{p.pedidos}</td>
                         <td className="px-4 py-2 text-right tabular-nums">{fmtNum(p.unidades)}</td>
-                        <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmt$(p.valor)}</td>
+                        <td className="px-4 py-2 text-right tabular-nums font-semibold">{fmtVal(p.valor)}</td>
                         <td className="px-4 py-2 text-right text-gray-400 text-[10px]">{p.ultima_venta}</td>
                       </tr>
                     ))}
