@@ -407,9 +407,9 @@ export default function SellInResumen() {
         {loading
           ? <div className="h-52 md:h-64 flex items-center justify-center text-gray-300 text-sm">Cargando...</div>
           : (
-            <div className="h-[240px] md:h-[280px] mt-3">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mensual} margin={{ top: 18, right: 10, left: 0, bottom: 0 }} barCategoryGap="28%" barGap={8}>
+            <div className="h-[240px] md:h-[280px] mt-3 overflow-x-auto">
+            <ResponsiveContainer width={3000} height="100%">
+              <BarChart data={mensual} margin={{ top: 24, right: 10, left: 0, bottom: 0 }} barCategoryGap="8%" barGap={30}>
                 <defs>
                   <linearGradient id="gradSellinResPrev" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%"   stopColor="#3b82f6" stopOpacity={1}/>
@@ -433,18 +433,19 @@ export default function SellInResumen() {
                   cursor={{ fill: 'rgba(148,163,184,0.08)' }}
                   contentStyle={{ borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 />
-                <Bar dataKey={prevKey}     name={prevKey}             fill="url(#gradSellinResPrev)"  radius={[8,8,0,0]} maxBarSize={26}>
+                <Bar dataKey={prevKey}     name={prevKey}             fill="url(#gradSellinResPrev)"  radius={[8,8,0,0]} barSize={36}>
                   <LabelList dataKey={prevKey} position="top" offset={8} formatter={fmtLblK}
-                    style={{ fontSize: 11, fill: '#1e40af', fontWeight: 700 }} />
+                    style={{ fontSize: 12, fill: '#1e40af', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey="proyeccion"  name={`Proyección ${ano}`} fill="url(#gradSellinResProy)"  radius={[8,8,0,0]} maxBarSize={26}>
+                <Bar dataKey="proyeccion"  name={`Proyección ${ano}`} fill="url(#gradSellinResProy)"  radius={[8,8,0,0]} barSize={36}>
                   <LabelList dataKey="proyeccion" position="top" offset={8} formatter={fmtLblK}
-                    style={{ fontSize: 11, fill: '#475569', fontWeight: 700 }} />
+                    style={{ fontSize: 12, fill: '#475569', fontWeight: 700 }} />
                 </Bar>
-                <Bar dataKey={currKey}     name={currKey}             fill="url(#gradSellinResCurr)"  radius={[8,8,0,0]} maxBarSize={26}>
+                <Bar dataKey={currKey}     name={currKey}             fill="url(#gradSellinResCurr)"  radius={[8,8,0,0]} barSize={36}>
                   <LabelList dataKey={currKey} position="top" offset={8} formatter={fmtLblK}
-                    style={{ fontSize: 11, fill: '#92400e', fontWeight: 700 }} />
+                    style={{ fontSize: 12, fill: '#92400e', fontWeight: 700 }} />
                 </Bar>
+                <Customized component={MonthDividers} />
               </BarChart>
             </ResponsiveContainer>
             </div>
