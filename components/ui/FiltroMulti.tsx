@@ -37,12 +37,31 @@ export default function FiltroMulti({
 
   return (
     <div className={`relative ${className}`} ref={ref}>
-      {label && <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">{label}</p>}
+      {label && (
+        <div
+          className="text-[10px] uppercase tracking-widest font-medium mb-1.5"
+          style={{ color: 'var(--t3)' }}
+        >
+          {label}
+        </div>
+      )}
       <button
         onClick={() => setOpen(v => !v)}
-        className={`w-full flex items-center justify-between border rounded-lg px-3 py-1.5 text-sm bg-white transition-colors focus:outline-none ${open ? 'border-amber-400 ring-2 ring-amber-400/20' : 'border-gray-200 hover:border-gray-300'} ${value.length > 0 ? 'text-gray-700' : 'text-gray-400'}`}>
+        className="w-full flex items-center justify-between rounded-lg px-3 py-2.5 text-[13px] border transition-all active:scale-[.98] hover:brightness-[0.98] focus:outline-none"
+        style={{
+          background: 'var(--bg)',
+          borderColor: open ? 'var(--acc)' : 'var(--border)',
+          color: 'var(--acc)',
+          fontWeight: value.length > 0 ? 600 : 500,
+          minHeight: 42,
+        }}
+      >
         <span className="truncate text-left">{display}</span>
-        <ChevronDown size={12} className={`flex-shrink-0 ml-1 text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown
+          size={14}
+          className={`flex-shrink-0 ml-1 transition-transform ${open ? 'rotate-180' : ''}`}
+          style={{ color: 'var(--acc)' }}
+        />
       </button>
 
       {open && (

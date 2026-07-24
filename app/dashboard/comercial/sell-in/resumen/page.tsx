@@ -303,7 +303,12 @@ export default function SellInResumen() {
         {/* 4 primeros arriba (Año/Mes/País/Categoría), 4 abajo (Subcategoría/Cliente/Proveedor/Tipo Negocio) */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-gray-400 mb-1">Año</p>
+            <div
+              className="text-[10px] uppercase tracking-widest font-medium mb-1.5"
+              style={{ color: 'var(--t3)' }}
+            >
+              Año
+            </div>
             <select
               value={ano}
               onChange={e => {
@@ -311,7 +316,14 @@ export default function SellInResumen() {
                 setAno(v)
                 persistir({ ano: v })
               }}
-              className="w-full px-2 py-2 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-400 cursor-pointer"
+              className="w-full px-3 py-2.5 rounded-lg border text-[13px] transition-all focus:outline-none cursor-pointer"
+              style={{
+                background: 'var(--bg)',
+                borderColor: 'var(--border)',
+                color: 'var(--acc)',
+                fontWeight: 600,
+                minHeight: 42,
+              }}
             >
               {[2024, 2025, 2026].map(a => (
                 <option key={a} value={a}>{a}</option>

@@ -244,18 +244,31 @@ export default function SellInSkus() {
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 space-y-3">
         {/* Búsqueda */}
         <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+          <span
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-sm"
+            style={{ color: 'var(--acc)' }}
+          >🔍</span>
           <input
             type="text"
             value={buscarInput}
             onChange={e=>setBuscarInput(e.target.value)}
             onKeyDown={e=>{ if(e.key==='Enter'){setBuscar(buscarInput);trigger(fAnos,fMeses,fPaises,fCats,buscarInput)} }}
             placeholder="Buscar por SKU, código de barras o descripción…"
-            className="w-full pl-8 pr-8 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+            className="w-full pl-9 pr-9 py-2.5 text-[13px] rounded-lg border transition-all focus:outline-none placeholder:opacity-60"
+            style={{
+              background: 'var(--bg)',
+              borderColor: 'var(--border)',
+              color: 'var(--acc)',
+              fontWeight: buscarInput ? 600 : 500,
+              minHeight: 42,
+            }}
           />
           {buscarInput && (
-            <button onClick={()=>{setBuscarInput('');setBuscar('');trigger(fAnos,fMeses,fPaises,fCats,'')}}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-xs">✕</button>
+            <button
+              onClick={()=>{setBuscarInput('');setBuscar('');trigger(fAnos,fMeses,fPaises,fCats,'')}}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs hover:opacity-70"
+              style={{ color: 'var(--acc)' }}
+            >✕</button>
           )}
         </div>
         {/* Filtros cascada */}
