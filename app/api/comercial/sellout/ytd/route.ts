@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { pool } from '@/lib/db/pool'
 import { handleApiError } from '@/lib/api/errors'
 
-export const revalidate = 0
+export const revalidate = 300  // 5 min cache HTTP
 
 const inC = (col: string, vals: string[]) =>
   `${col} IN (${vals.map(v => `'${v.replace(/'/g, "''")}'`).join(',')})`
@@ -18,7 +18,6 @@ export async function GET(req: NextRequest) {
 
     // Año completo — 12 meses
     const meses   = Array.from({ length: 12 }, (_, i) => i + 1)
-    const mesSql  = `mes IN (${meses.join(',')})`
     const paisCond    = paises.length   ? 'AND ' + inC('pais',         paises)   : ''
     const clienteCond = clientes.length ? 'AND ' + inC('cliente',      clientes) : ''
     const catCond     = cats.length     ? 'AND ' + inC('categoria',    cats)     : ''
@@ -31,31 +30,55 @@ export async function GET(req: NextRequest) {
       ? `CASE WHEN UPPER(cliente) IN ('GRUPO EXITO','GRUPO ÉXITO') THEN 'GRUPO ÉXITO' ELSE cliente END`
       : 'categoria'
 
-    // El cutoff garantiza comparación same-period: si 2026 tiene data hasta Jul 11,
-    // 2025 se corta también en Jul 11. Evita "castigar" al mes en curso porque
-    // 2025 tendría el mes completo y 2026 solo días parciales.
+    // 1) Cutoff — último (mes, dia) con ventas en 2026 respetando filtros.
+    //    Se saca en query mínima sobre mv_sellout_mensual (que sí tiene dia).
+    const cutoffR = await pool.query(`
+      SELECT COALESCE(MAX(mes * 100 + dia), 1231) AS cut_num
+      FROM mv_sellout_mensual
+      WHERE ano = 2026
+        ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
+        AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''
+        AND ventas_valor > 0
+    `)
+    const cutNum = parseInt(cutoffR.rows[0]?.cut_num ?? '0') || 1231
+    const cutMes = Math.floor(cutNum / 100)
+    // "Mes completo" incluye todos los meses < cutMes; el mes cutMes tiene corte diario.
+
+    // 2) Data mensual — mv_sellout_agg (pre-agregada mensual, ~4K filas) para
+    //    2026 completo y 2025 hasta el mes anterior al de corte (comparable full-month).
     const r = await pool.query(`
-      WITH cutoff AS (
-        SELECT COALESCE(MAX(mes * 100 + dia), 1231) AS cut_num
-        FROM mv_sellout_mensual
-        WHERE ano = 2026 AND ${mesSql}
-          ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
-          AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''
-          AND ventas_valor > 0
-      )
       SELECT ${dimExpr} AS dim, ano, mes,
         ROUND(SUM(ventas_valor)::numeric, 2) AS valor
-      FROM mv_sellout_mensual, cutoff
-      WHERE ${mesSql}
+      FROM mv_sellout_agg
+      WHERE ano IN (2025, 2026)
         AND (
-          (ano = 2026)
-          OR (ano = 2025 AND mes * 100 + dia <= cutoff.cut_num)
+          ano = 2026
+          OR (ano = 2025 AND mes < ${cutMes})
         )
         ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
         AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''
       GROUP BY ${dimExpr}, ano, mes
       ORDER BY ${dimExpr}, ano, mes
     `)
+
+    // 3) Para el mes en curso (cutMes), 2025 se recorta a día — usa mv_sellout_mensual
+    //    que sí tiene columna dia. Sumamos solo hasta cutNum % 100.
+    const cutDia = cutNum % 100
+    let r2025Parcial: { rows: { dim: string; mes: number; valor: string }[] } = { rows: [] }
+    if (cutDia > 0 && cutMes >= 1 && cutMes <= 12) {
+      const q = await pool.query(`
+        SELECT ${dimExpr} AS dim, mes,
+          ROUND(SUM(ventas_valor)::numeric, 2) AS valor
+        FROM mv_sellout_mensual
+        WHERE ano = 2025 AND mes = ${cutMes} AND dia <= ${cutDia}
+          ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
+          AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''
+        GROUP BY ${dimExpr}, mes
+      `)
+      r2025Parcial = q as any
+    }
+    // Merge parcial 2025 en el resultado principal
+    r.rows.push(...r2025Parcial.rows.map(x => ({ ...x, ano: 2025 })))
 
     // Pivot: dim → mes → { y2025, y2026 }
     const map: Record<string, Record<number, { y2025: number; y2026: number }>> = {}
@@ -101,19 +124,9 @@ export async function GET(req: NextRequest) {
       return t
     }, { total2025: 0, total2026: 0, meses: {} as Record<number, { y2025: number; y2026: number }> })
 
-    // Exponer el cutoff exacto (mes/dia hasta donde se compara) para que el
-    // frontend muestre "Ene → 11 Jul · Mismo período" en vez de solo el mes.
-    const cutoffQ = await pool.query(`
-      SELECT MAX(mes * 100 + dia) AS cut_num
-      FROM mv_sellout_mensual
-      WHERE ano = 2026 AND ${mesSql}
-        ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
-        AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''
-        AND ventas_valor > 0
-    `)
-    const cutNum = parseInt(cutoffQ.rows[0]?.cut_num ?? '0') || 0
-    const ultimoMes = Math.floor(cutNum / 100) || null
-    const ultimoDia = cutNum % 100 || null
+    // Cutoff exacto ya calculado arriba (cutNum) — reutilizamos.
+    const ultimoMes = cutMes || null
+    const ultimoDia = cutDia || null
 
     return NextResponse.json({ rows, totals, meses, dim, ultimoMes, ultimoDia })
   } catch (err) {
