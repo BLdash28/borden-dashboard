@@ -306,11 +306,17 @@ type InnovItem = {
   sin_ventas: boolean
   primera_venta: string | null
   ultima_venta: string | null
+  dias_desde_lanz: number | null
   total_uds: number
   total_cop: number
   total_usd: number
   pdvs_unicos: number
   cadenas_unicas: number
+  stock_und: number
+  pdvs_con_stock: number
+  universo_pdvs: number
+  cobertura_pct: number | null
+  doh: number | null
   monthly: InnovMonthly[]
   daily: InnovDaily[]
 }
@@ -2477,22 +2483,71 @@ export default function ExitoEjecucion({ initialSection, hideSectionNav }: Exito
                   </div>
                 ) : (
                   <>
-                    <div className="grid grid-cols-4 gap-2 mt-3">
-                      <div className="text-center">
-                        <p className="text-[9px] uppercase tracking-widest text-gray-400">Primera venta</p>
-                        <p className="text-xs font-semibold text-gray-800">{it.primera_venta}</p>
+                    {/* Grid de 8 KPIs — mismo patrón que InnovacionesSection */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-x-3 gap-y-2 mt-3">
+                      <div className="text-center px-1">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Primera venta</p>
+                        <p className="text-xs font-semibold text-gray-800 mt-0.5">{it.primera_venta ?? '—'}</p>
+                        {it.dias_desde_lanz !== null && (
+                          <p className="text-[9px] text-gray-400">hace {it.dias_desde_lanz}d</p>
+                        )}
                       </div>
-                      <div className="text-center">
-                        <p className="text-[9px] uppercase tracking-widest text-gray-400">Unidades</p>
-                        <p className="text-sm font-bold text-gray-800">{fmtNum(it.total_uds)}</p>
+                      <div className="text-center px-1">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Última venta</p>
+                        <p className="text-xs font-semibold text-gray-800 mt-0.5">{it.ultima_venta ?? '—'}</p>
+                        {it.ultima_venta && (() => {
+                          const diff = Math.floor((Date.now() - new Date(it.ultima_venta).getTime()) / 86400000)
+                          return (
+                            <p className={`text-[9px] leading-tight ${diff <= 7 ? 'text-emerald-600' : diff <= 30 ? 'text-gray-400' : 'text-amber-600'}`}>
+                              {diff === 0 ? 'hoy' : diff === 1 ? 'ayer' : `hace ${diff}d`}
+                            </p>
+                          )
+                        })()}
                       </div>
-                      <div className="text-center">
-                        <p className="text-[9px] uppercase tracking-widest text-gray-400">Valor {moneda.toUpperCase()}</p>
-                        <p className="text-sm font-bold text-emerald-700">{moneda === 'cop' ? fmtCop(it.total_cop) : fmtFull(it.total_usd)}</p>
+                      <div className="text-center px-1">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Unidades</p>
+                        <p className="text-sm font-bold text-gray-800 mt-0.5">{fmtNum(it.total_uds)}</p>
+                        <p className="text-[9px] text-gray-400 leading-tight">vendidas</p>
                       </div>
-                      <div className="text-center">
-                        <p className="text-[9px] uppercase tracking-widest text-gray-400">PDVs</p>
-                        <p className="text-sm font-bold text-gray-800">{it.pdvs_unicos}</p>
+                      <div className="text-center px-1">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Valor {moneda.toUpperCase()}</p>
+                        <p className="text-sm font-bold text-amber-700 mt-0.5">{moneda === 'cop' ? fmtCop(it.total_cop) : fmtFull(it.total_usd)}</p>
+                        <p className="text-[9px] text-gray-400 leading-tight">acumulado</p>
+                      </div>
+                      <div className="text-center px-1">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Stock actual</p>
+                        <p className="text-sm font-bold text-emerald-700 mt-0.5">{fmtNum(it.stock_und ?? 0)}</p>
+                        <p className="text-[9px] text-gray-400 leading-tight">und en tienda</p>
+                      </div>
+                      <div className="text-center px-1">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">DOH</p>
+                        <p className={`text-sm font-bold mt-0.5 ${
+                          it.doh === null || it.doh === undefined ? 'text-gray-400' :
+                          it.doh <= 7 ? 'text-red-600' :
+                          it.doh <= 14 ? 'text-amber-600' :
+                          it.doh <= 60 ? 'text-emerald-700' :
+                          it.doh <= 120 ? 'text-blue-600' :
+                                          'text-purple-600'
+                        }`}>
+                          {it.doh !== null && it.doh !== undefined ? Math.round(it.doh) : '—'}
+                        </p>
+                        <p className="text-[9px] text-gray-400 leading-tight">días</p>
+                      </div>
+                      <div className="text-center px-1">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">Cobertura</p>
+                        <p className="text-sm font-bold text-blue-700 mt-0.5">
+                          {it.cobertura_pct !== null && it.cobertura_pct !== undefined
+                            ? `${it.cobertura_pct.toFixed(1)}%`
+                            : '—'}
+                        </p>
+                        <p className="text-[9px] text-gray-400 leading-tight tabular-nums">
+                          {it.pdvs_con_stock ?? 0}/{it.universo_pdvs ?? 0} PDVs
+                        </p>
+                      </div>
+                      <div className="text-center px-1">
+                        <p className="text-[9px] uppercase tracking-widest text-gray-400 leading-tight">PDVs</p>
+                        <p className="text-sm font-bold text-gray-800 mt-0.5">{it.pdvs_unicos}</p>
+                        <p className="text-[9px] text-gray-400 leading-tight">con historial</p>
                       </div>
                     </div>
 

@@ -106,6 +106,34 @@ export const GET = withTiming(async function GET(req: NextRequest) {
       const pdvsUniq  = Math.max(...monthly.map(m => m.pdvs), 0)
       const cadUniq   = Math.max(...monthly.map(m => m.cadenas), 0)
 
+      // Inventario actual (último snapshot en inventario_exito) — stock + PDVs con stock
+      const invR = await pool.query(
+        `WITH ult AS (SELECT MAX(fecha_snapshot)::date AS f FROM inventario_exito WHERE pais='CO')
+         SELECT
+           COALESCE(SUM(inv_unidades)::numeric, 0)          AS stock_und,
+           COUNT(DISTINCT punto_venta) FILTER (WHERE inv_unidades > 0) AS pdvs_con_stock
+         FROM inventario_exito i, ult
+         WHERE i.pais='CO' AND i.fecha_snapshot = ult.f
+           AND (i.sku = ANY($1::text[]) OR i.ean13 = ANY($2::text[]))`,
+        [skus, barras],
+      )
+      const stockUnd     = parseFloat(invR.rows[0]?.stock_und ?? '0')
+      const pdvsConStock = parseInt(invR.rows[0]?.pdvs_con_stock ?? '0')
+
+      // Universo de PDVs activos (con al menos 1 venta en 2026 de cualquier SKU)
+      const univR = await pool.query(
+        `SELECT COUNT(DISTINCT punto_venta)::int AS n FROM fact_ventas_exito
+         WHERE pais='CO' AND ano=2026 AND ventas_unidades > 0`,
+      )
+      const universoPdvs = parseInt(univR.rows[0]?.n ?? '0')
+      const coberturaPct = universoPdvs > 0 ? (pdvsConStock / universoPdvs * 100) : null
+
+      // Días desde el lanzamiento (primera venta) y DOH (stock / venta_promedio_diaria)
+      const primDate = pFn ? new Date(Math.floor(pFn/10000), (Math.floor(pFn/100)%100) - 1, pFn%100) : null
+      const diasDesdeLanz = primDate ? Math.floor((Date.now() - primDate.getTime()) / 86400000) : null
+      const ventaProm     = diasDesdeLanz && diasDesdeLanz > 0 ? totalUds / diasDesdeLanz : 0
+      const doh           = ventaProm > 0 ? stockUnd / ventaProm : null
+
       items.push({
         ean13:                it.ean13,
         plu:                  it.plu,
@@ -119,11 +147,17 @@ export const GET = withTiming(async function GET(req: NextRequest) {
         sin_ventas:           totalUds === 0,
         primera_venta:        fmtFecha(pFn),
         ultima_venta:         fmtFecha(uFn),
+        dias_desde_lanz:      diasDesdeLanz,
         total_uds:            Math.round(totalUds),
         total_cop:            Math.round(totalCop),
         total_usd:            Math.round(totalUsd * 100) / 100,
         pdvs_unicos:          pdvsUniq,
         cadenas_unicas:       cadUniq,
+        stock_und:            Math.round(stockUnd),
+        pdvs_con_stock:       pdvsConStock,
+        universo_pdvs:        universoPdvs,
+        cobertura_pct:        coberturaPct !== null ? Math.round(coberturaPct * 10) / 10 : null,
+        doh:                  doh !== null ? Math.round(doh) : null,
         monthly,
         daily,
       })
