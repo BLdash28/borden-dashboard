@@ -216,6 +216,11 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
   }, [])
 
   // ── Cascade: países → categorías ──────────────────────────────────────────
+  // CRÍTICO: los setters SÓLO se llaman si el contenido cambió realmente.
+  // Un `filter` sin guard siempre crea nueva ref → context re-renderiza →
+  // cualquier página consumidora (useEffect con deps sobre estos arrays)
+  // refetch → setState en la página → re-render del provider (cascada) →
+  // LOOP INFINITO de requests hasta ERR_INSUFFICIENT_RESOURCES.
   const fetchCats = useCallback((paises: string[]) => {
     setLoadingCats(true)
     const q = new URLSearchParams({ dim: 'categoria' })
@@ -226,7 +231,10 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
         const fromDb = (d.rows || []).map((r: any) => r.nombre).filter(Boolean)
         const cats = Array.from(new Set([...BASE_CATS, ...fromDb])).sort() as string[]
         setCatsOpts(cats)
-        setFCats(prev => prev.filter(c => cats.includes(c)))
+        setFCats(prev => {
+          const validos = prev.filter(c => cats.includes(c))
+          return validos.length === prev.length ? prev : validos
+        })
       })
       .catch(console.error)
       .finally(() => setLoadingCats(false))
@@ -236,7 +244,11 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
 
   // ── Cascade: países + categorías → subcategorías (lazy) ───────────────────
   const fetchSubcats = useCallback((paises: string[], cats: string[]) => {
-    if (!paises.length && !cats.length) { setSubcatsOpts([]); setFSubcats([]); return }
+    if (!paises.length && !cats.length) {
+      setSubcatsOpts([])
+      setFSubcats(prev => prev.length === 0 ? prev : [])
+      return
+    }
     setLoadingSubcats(true)
     const q = new URLSearchParams({ dim: 'subcategoria' })
     if (paises.length) q.set('paises',     paises.join(','))
@@ -246,7 +258,10 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
       .then(d => {
         const opts = (d.rows || []).map((r: any) => r.nombre).filter(Boolean).sort()
         setSubcatsOpts(opts)
-        setFSubcats(prev => prev.filter(s => opts.includes(s)))
+        setFSubcats(prev => {
+          const validos = prev.filter(s => opts.includes(s))
+          return validos.length === prev.length ? prev : validos
+        })
       })
       .catch(console.error)
       .finally(() => setLoadingSubcats(false))
@@ -266,7 +281,10 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
       .then(d => {
         const opts = (d.rows || []).map((r: any) => r.nombre).filter(Boolean).sort()
         setClientesOpts(opts)
-        setFClientes(prev => prev.filter(c => opts.includes(c)))
+        setFClientes(prev => {
+          const validos = prev.filter(c => opts.includes(c))
+          return validos.length === prev.length ? prev : validos
+        })
       })
       .catch(console.error)
       .finally(() => setLoadingClientes(false))
@@ -276,7 +294,11 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
 
   // ── Cascade: países + clientes → formatos ─────────────────────────────────
   const fetchFormatos = useCallback((paises: string[], clientes: string[]) => {
-    if (!paises.length && !clientes.length) { setFormatosOpts([]); setFFormatos([]); return }
+    if (!paises.length && !clientes.length) {
+      setFormatosOpts([])
+      setFFormatos(prev => prev.length === 0 ? prev : [])
+      return
+    }
     setLoadingFormatos(true)
     const q = new URLSearchParams({ dim: 'formato' })
     if (paises.length)   q.set('paises',   paises.join(','))
@@ -286,7 +308,10 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
       .then(d => {
         const opts = (d.rows || []).map((r: any) => r.nombre).filter(Boolean).sort()
         setFormatosOpts(opts)
-        setFFormatos(prev => prev.filter(f => opts.includes(f)))
+        setFFormatos(prev => {
+          const validos = prev.filter(f => opts.includes(f))
+          return validos.length === prev.length ? prev : validos
+        })
       })
       .catch(console.error)
       .finally(() => setLoadingFormatos(false))
@@ -308,7 +333,8 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
     })
   }, [fAnos, periodos])
 
-  const limpiar = () => {
+  // Memoizada — sin esto, cada render creaba nueva ref y invalidaba `value`.
+  const limpiar = useCallback(() => {
     setFPaises([])
     setFCats([])
     setFSubcats([])
@@ -320,7 +346,7 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
     setFTipoNegocio([])
     setFProveedores([])
     removeScopedFor(STORAGE_KEY, userId)
-  }
+  }, [userId])
 
   const hayFiltros =
     fPaises.length > 0 || fCats.length > 0 || fSubcats.length > 0 ||
@@ -344,32 +370,42 @@ export function DashboardFiltersProvider({ children }: { children: React.ReactNo
   }, [fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses,
       fCadenas, fTipoNegocio, fProveedores])
 
-  return (
-    <Ctx.Provider value={{
-      fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses,
-      fCadenas, fTipoNegocio, fProveedores,
-      anosOpts, paisesOpts: PAISES_OPTS,
-      catsOpts, subcatsOpts, clientesOpts, formatosOpts,
-      mesOpts, periodos,
-      loadingCats, loadingSubcats, loadingClientes, loadingFormatos,
-      curAno, curMes,
-      setPaises:      setFPaises,
-      setCats:        setFCats,
-      setSubcats:     setFSubcats,
-      setClientes:    setFClientes,
-      setFormatos:    setFFormatos,
-      setAnos:        setFAnos,
-      setMeses:       setFMeses,
-      setCadenas:     setFCadenas,
-      setTipoNegocio: setFTipoNegocio,
-      setProveedores: setFProveedores,
-      limpiar,
-      hayFiltros,
-      buildParams,
-    }}>
-      {children}
-    </Ctx.Provider>
-  )
+  // Memoizar el objeto value — cada render creaba nueva ref → cualquier
+  // consumidor con useEffect deps sobre estos valores re-disparaba efectos
+  // aunque el contenido no hubiese cambiado. Con useMemo, la ref sólo cambia
+  // cuando alguno de los inputs realmente cambia.
+  const value = useMemo<FiltersCtx>(() => ({
+    fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses,
+    fCadenas, fTipoNegocio, fProveedores,
+    anosOpts, paisesOpts: PAISES_OPTS,
+    catsOpts, subcatsOpts, clientesOpts, formatosOpts,
+    mesOpts, periodos,
+    loadingCats, loadingSubcats, loadingClientes, loadingFormatos,
+    curAno, curMes,
+    setPaises:      setFPaises,
+    setCats:        setFCats,
+    setSubcats:     setFSubcats,
+    setClientes:    setFClientes,
+    setFormatos:    setFFormatos,
+    setAnos:        setFAnos,
+    setMeses:       setFMeses,
+    setCadenas:     setFCadenas,
+    setTipoNegocio: setFTipoNegocio,
+    setProveedores: setFProveedores,
+    limpiar,
+    hayFiltros,
+    buildParams,
+  }), [
+    fPaises, fCats, fSubcats, fClientes, fFormatos, fAnos, fMeses,
+    fCadenas, fTipoNegocio, fProveedores,
+    anosOpts, catsOpts, subcatsOpts, clientesOpts, formatosOpts,
+    mesOpts, periodos,
+    loadingCats, loadingSubcats, loadingClientes, loadingFormatos,
+    curAno, curMes,
+    hayFiltros, buildParams, limpiar,
+  ])
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
 export function useDashboardFilters(): FiltersCtx {
