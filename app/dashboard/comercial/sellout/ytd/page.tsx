@@ -132,16 +132,22 @@ export default function SellOutYTD() {
     writeScoped(DIM_KEY, dim)
   }, [dim])
 
-  // Cascada de opciones — usa /api/ventas/dimension (mv_sellout_agg)
+  // Cascada de opciones — usa /api/ventas/dimension (mv_sellout_agg).
+  // IMPORTANTE: los setters de context (setClientes/setCategorias/setSubcats)
+  // reemplazan por nueva referencia aunque el contenido sea idéntico. Como
+  // esos valores son deps de otros useEffect en cascada, un `filter` sin
+  // guard genera loop infinito. Solo llamamos al setter si la lista realmente
+  // cambia (hay items que ya no están en las nuevas opciones).
   useEffect(() => {
     const qs = new URLSearchParams({ dim: 'cliente' })
     if (paises.length) qs.set('paises', paises.join(','))
     fetch('/api/ventas/dimension?' + qs).then(r => r.json()).then(j => {
       const opts = (j.rows ?? []).map((r: { nombre: string }) => ({ value: r.nombre })).filter((o: { value: string }) => o.value)
       setClienteOpts(opts)
-      setClientes(prev => prev.filter(c => opts.some((o: { value: string }) => o.value === c)))
+      const validos = clientes.filter(c => opts.some((o: { value: string }) => o.value === c))
+      if (validos.length !== clientes.length) setClientes(validos)
     })
-  }, [paises])
+  }, [paises]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const qs = new URLSearchParams({ dim: 'categoria' })
@@ -150,9 +156,10 @@ export default function SellOutYTD() {
     fetch('/api/ventas/dimension?' + qs).then(r => r.json()).then(j => {
       const opts = (j.rows ?? []).map((r: { nombre: string }) => ({ value: r.nombre })).filter((o: { value: string }) => o.value)
       setCategoriaOpts(opts)
-      setCategorias(prev => prev.filter(c => opts.some((o: { value: string }) => o.value === c)))
+      const validos = categorias.filter(c => opts.some((o: { value: string }) => o.value === c))
+      if (validos.length !== categorias.length) setCategorias(validos)
     })
-  }, [paises, clientes])
+  }, [paises, clientes]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const qs = new URLSearchParams({ dim: 'subcategoria' })
@@ -162,9 +169,10 @@ export default function SellOutYTD() {
     fetch('/api/ventas/dimension?' + qs).then(r => r.json()).then(j => {
       const opts = (j.rows ?? []).map((r: { nombre: string }) => ({ value: r.nombre })).filter((o: { value: string }) => o.value)
       setSubcatOpts(opts)
-      setSubcats(prev => prev.filter(c => opts.some((o: { value: string }) => o.value === c)))
+      const validos = subcats.filter(c => opts.some((o: { value: string }) => o.value === c))
+      if (validos.length !== subcats.length) setSubcats(validos)
     })
-  }, [paises, clientes, categorias])
+  }, [paises, clientes, categorias]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleClient = useCallback(async (clientName: string) => {
     if (expanded.has(clientName)) {
