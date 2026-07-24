@@ -34,7 +34,8 @@ function buildWhere(sp: URLSearchParams) {
     conds.push(`subcategoria IN (${subcats.map((_, i) => `$${start + 1 + i}`).join(',')})`)
   }
   const pdvs = csv(sp, 'punto_venta')
-  if (pdvs.length) {
+  const hasPdvFilter = pdvs.length > 0
+  if (hasPdvFilter) {
     const start = params.length
     pdvs.forEach(v => params.push(v))
     conds.push(`nombre_sucursal IN (${pdvs.map((_, i) => `$${start + 1 + i}`).join(',')})`)
@@ -45,7 +46,7 @@ function buildWhere(sp: URLSearchParams) {
     skus.forEach(v => params.push(v))
     conds.push(`sku IN (${skus.map((_, i) => `$${start + 1 + i}`).join(',')})`)
   }
-  return { where: conds.join(' AND '), params, skus }
+  return { where: conds.join(' AND '), params, skus, hasPdvFilter }
 }
 
 export async function GET(req: NextRequest) {
@@ -56,11 +57,18 @@ export async function GET(req: NextRequest) {
     const meses = usarRangoCompleto ? 0 : Math.max(1, Math.min(48, parseInt(mesesParam)))
     const w = buildWhere(sp)
 
+    // Optimización: si NO se filtra por PDV, se usa mv_unisuper_mensual (preagregada
+    // por ano/mes). Fact table sólo cuando el usuario pide corte por sucursal.
+    const useMV = !w.hasPdvFilter
+    const src = useMV ? 'mv_unisuper_mensual' : 'fact_ventas_unisuper'
+    const anoExpr = useMV ? 'ano' : 'EXTRACT(YEAR FROM fecha)::int'
+    const mesExpr = useMV ? 'mes' : 'EXTRACT(MONTH FROM fecha)::int'
+
     // Rango con data
     const ultR = await pool.query(
-      `SELECT MAX(EXTRACT(YEAR FROM fecha)*100 + EXTRACT(MONTH FROM fecha))::int AS mx,
-              MIN(EXTRACT(YEAR FROM fecha)*100 + EXTRACT(MONTH FROM fecha))::int AS mn
-         FROM fact_ventas_unisuper
+      `SELECT MAX(${anoExpr}*100 + ${mesExpr})::int AS mx,
+              MIN(${anoExpr}*100 + ${mesExpr})::int AS mn
+         FROM ${src}
         WHERE ${w.where}`,
       w.params,
     )
@@ -72,11 +80,11 @@ export async function GET(req: NextRequest) {
 
     // Total mensual
     const totR = await pool.query(
-      `SELECT EXTRACT(YEAR FROM fecha)::int  AS ano,
-              EXTRACT(MONTH FROM fecha)::int AS mes,
+      `SELECT ${anoExpr} AS ano,
+              ${mesExpr} AS mes,
               ROUND(SUM(ventas_valor)::numeric,    2) AS valor_usd,
               ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
-         FROM fact_ventas_unisuper
+         FROM ${src}
         WHERE ${w.where}
         GROUP BY 1, 2
         ORDER BY 1, 2`,
@@ -122,11 +130,11 @@ export async function GET(req: NextRequest) {
     if (w.skus.length > 0) {
       const skuR = await pool.query(
         `SELECT sku, MAX(descripcion) AS descripcion,
-                EXTRACT(YEAR FROM fecha)::int AS ano,
-                EXTRACT(MONTH FROM fecha)::int AS mes,
+                ${anoExpr} AS ano,
+                ${mesExpr} AS mes,
                 ROUND(SUM(ventas_valor)::numeric,    2) AS valor_usd,
                 ROUND(SUM(ventas_unidades)::numeric, 0) AS unidades
-           FROM fact_ventas_unisuper
+           FROM ${src}
           WHERE ${w.where}
           GROUP BY sku, ano, mes
           ORDER BY sku, ano, mes`,

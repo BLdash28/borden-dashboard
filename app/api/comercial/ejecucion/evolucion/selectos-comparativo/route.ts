@@ -26,7 +26,7 @@ export async function GET() {
           ROUND(SUM(venta_neta)::numeric,        2) AS sellin_val,
           ROUND(SUM(cantidad_cajas)::numeric,    0) AS sellin_cajas
         FROM fact_sales_sellin
-        WHERE fecha >= '2026-01-01' AND fecha < '2027-01-01'
+        WHERE ano_pedido = 2026
           AND pais = 'SV'
           AND cliente_nombre ILIKE '%CALLEJA%'
           AND categoria IN ('Quesos', 'Leches')

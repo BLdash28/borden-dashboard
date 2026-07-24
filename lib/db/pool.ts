@@ -1,4 +1,5 @@
 import { Pool } from 'pg'
+import { installQuerySpy } from './query-spy'
 
 declare global {
   // eslint-disable-next-line no-var
@@ -29,3 +30,6 @@ export const pool =
     connectionTimeoutMillis: 8_000,
     statement_timeout: 30_000,
   }))
+
+// Instrumentación de queries (idempotente). Se puede apagar con SQL_SPY=0.
+installQuerySpy(pool)

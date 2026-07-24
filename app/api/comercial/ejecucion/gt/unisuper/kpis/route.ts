@@ -75,33 +75,41 @@ export async function GET(req: NextRequest) {
     const wSinCad = buildWhere(sp, { skipCadena: true })
 
     const [ytdR, cadenaR, subR, monthlyR] = await Promise.all([
-      // YTD 2026 vs mismo período 2025 (recorte por fecha_max de 2026)
+      // YTD 2026 vs mismo período 2025 (recorte por último mes cargado de 2026).
+      // Se calcula sobre mv_unisuper_mensual (más rápido) y se resuelve el
+      // último día de 2026 en query separada mínima para respetar el corte diario.
       pool.query(`
-        WITH cur AS (
-          SELECT SUM(ventas_valor)    AS valor,
-                 SUM(ventas_unidades) AS unidades,
-                 MAX(fecha)::date     AS ultima_fecha,
+        WITH ult AS (
+          SELECT MAX(fecha)::date AS ultima_fecha,
                  EXTRACT(MONTH FROM MAX(fecha))::int AS ultimo_mes
           FROM fact_ventas_unisuper
           WHERE ${w.where} AND EXTRACT(YEAR FROM fecha) = 2026
         ),
+        cur AS (
+          SELECT SUM(ventas_valor)    AS valor,
+                 SUM(ventas_unidades) AS unidades
+          FROM mv_unisuper_mensual
+          WHERE ${w.where} AND ano = 2026
+        ),
         prev AS (
+          -- 2025 comparable: mismo mes cutoff; para el último mes usamos fact base
+          -- porque la MV es mensual y necesitamos corte a día del año pasado.
           SELECT SUM(ventas_valor)    AS valor,
                  SUM(ventas_unidades) AS unidades
           FROM fact_ventas_unisuper
           WHERE ${w.where} AND EXTRACT(YEAR FROM fecha) = 2025
-            AND fecha <= (SELECT (ultima_fecha - INTERVAL '1 year')::date FROM cur)
+            AND fecha <= (SELECT (ultima_fecha - INTERVAL '1 year')::date FROM ult)
         )
         SELECT COALESCE(cur.valor, 0)     AS ytd_2026,
                COALESCE(cur.unidades, 0)  AS uni_2026,
                COALESCE(prev.valor, 0)    AS ytd_2025,
                COALESCE(prev.unidades, 0) AS uni_2025,
-               cur.ultima_fecha,
-               cur.ultimo_mes,
+               ult.ultima_fecha,
+               ult.ultimo_mes,
                CASE WHEN COALESCE(prev.valor, 0) > 0
                     THEN ROUND(((cur.valor - prev.valor) / prev.valor * 100)::numeric, 1)
                     ELSE NULL END AS delta_ytd
-        FROM cur, prev
+        FROM ult, cur, prev
       `, w.params),
 
       // Por cadena — YTD comparable: 2026 hasta hoy, 2025 hasta mismo día del año
@@ -126,13 +134,13 @@ export async function GET(req: NextRequest) {
         GROUP BY f.cadena ORDER BY valor_2026 DESC
       `, [...wSinCad.params, ...wSinCad.params]),
 
-      // Por subcategoría (equivalente a "por categoria" en Walmart)
+      // Por subcategoría (equivalente a "por categoria" en Walmart) — MV
       pool.query(`
         SELECT subcategoria AS categoria,
           SUM(ventas_valor)    AS valor_2026,
           SUM(ventas_unidades) AS uni_2026
-        FROM fact_ventas_unisuper
-        WHERE ${w.where} AND EXTRACT(YEAR FROM fecha) = 2026
+        FROM mv_unisuper_mensual
+        WHERE ${w.where} AND ano = 2026
         GROUP BY subcategoria ORDER BY valor_2026 DESC
       `, w.params),
 

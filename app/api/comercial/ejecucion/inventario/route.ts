@@ -45,18 +45,18 @@ export async function GET(req: NextRequest) {
       LIMIT 200
     `)
 
-    // Venta diaria últimos 90 días por SKU para DOH
+    // Venta diaria últimos 90 días por SKU para DOH — usa mv_ventas_90d
+    // (preagregada, refresh diario) para evitar scan de v_ventas (~1.1M filas).
     const catSubquery = cats.length
       ? `AND fs.sku IN (SELECT sku FROM dim_producto WHERE ${inC('categoria', cats)})`
       : ''
     const ventaR = await pool.query(`
       SELECT
         fs.sku,
-        ROUND((SUM(fs.ventas_unidades) / 90.0)::numeric, 4) AS venta_dia
-      FROM v_ventas fs
-      WHERE MAKE_DATE(fs.ano::int, fs.mes::int, fs.dia::int) >= CURRENT_DATE - INTERVAL '90 days'
+        ROUND((fs.ventas_unidades_90d / 90.0)::numeric, 4) AS venta_dia
+      FROM mv_ventas_90d fs
+      WHERE 1=1
         ${catSubquery}
-      GROUP BY fs.sku
     `)
 
     const ventaMap: Record<string, number> = {}
