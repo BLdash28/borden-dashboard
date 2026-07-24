@@ -564,26 +564,47 @@ export default function SelloutPage() {
             onChange={v => { setFClientes(v); triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, v) }}
             placeholder="Todos"
           />
-          <div className="flex flex-col gap-1">
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Buscar</label>
+          <div className="relative">
+            <div
+              className="text-[10px] uppercase tracking-widest font-medium mb-1.5"
+              style={{ color: 'var(--t3)' }}
+            >
+              Buscar
+            </div>
             <form onSubmit={e => {
               e.preventDefault()
               setBuscar(buscarInput)
               triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, buscarInput)
             }} className="relative">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              <Search
+                size={13}
+                className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{ color: 'var(--acc)' }}
+              />
               <input
                 type="text"
                 value={buscarInput}
                 onChange={e => setBuscarInput(e.target.value)}
                 placeholder="Barras, SKU o descripción…"
-                className="w-full pl-7 pr-7 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400"
+                className="w-full pl-8 pr-8 py-2.5 text-[13px] rounded-lg border transition-all focus:outline-none placeholder:opacity-60"
+                style={{
+                  background: 'var(--bg)',
+                  borderColor: 'var(--border)',
+                  color: 'var(--acc)',
+                  fontWeight: buscarInput ? 600 : 500,
+                  minHeight: 42,
+                }}
               />
               {buscarInput && (
-                <button type="button" onClick={() => {
-                  setBuscarInput(''); setBuscar('')
-                  triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, '')
-                }} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBuscarInput(''); setBuscar('')
+                    triggerCargar(fAnos, fMeses, fPaises, fCats, fSubcats, fClientes, '')
+                  }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 hover:opacity-70"
+                  style={{ color: 'var(--acc)' }}
+                >
                   <X size={12} />
                 </button>
               )}
