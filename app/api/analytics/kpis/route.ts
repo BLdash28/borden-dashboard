@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
     const TTL = 5 * 60 * 1000 // 5 min
 
     const { data, cached } = await withCache(cacheKey, async () => {
-      // mv_sellout_mensual has no dia column — drop dias_con_ventas (set to 0)
+      // mmv_sellout_mensual has no dia column — drop dias_con_ventas (set to 0)
       const [main, prior] = await Promise.all([
         pool.query<{
           total_valor:    string

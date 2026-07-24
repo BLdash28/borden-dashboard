@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
             SELECT codigo_barras, MAX(sku) AS sku, MAX(descripcion) AS descripcion,
               ROUND(SUM(ventas_valor)::numeric,0) AS usd,
               ROUND(SUM(ventas_unidades)::numeric,0) AS unidades
-            FROM mv_sellout_mensual WHERE ${where}
+            FROM mmv_sellout_mensual WHERE ${where}
             GROUP BY codigo_barras ORDER BY usd DESC LIMIT $${i}`, [...params, limite])
           return { top_skus: r.rows }
         },

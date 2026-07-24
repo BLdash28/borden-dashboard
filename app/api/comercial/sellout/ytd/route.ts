@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     const r = await pool.query(`
       WITH cutoff AS (
         SELECT COALESCE(MAX(mes * 100 + dia), 1231) AS cut_num
-        FROM v_ventas
+        FROM mv_sellout_mensual
         WHERE ano = 2026 AND ${mesSql}
           ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
           AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       )
       SELECT ${dimExpr} AS dim, ano, mes,
         ROUND(SUM(ventas_valor)::numeric, 2) AS valor
-      FROM v_ventas, cutoff
+      FROM mv_sellout_mensual, cutoff
       WHERE ${mesSql}
         AND (
           (ano = 2026)
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
     // frontend muestre "Ene → 11 Jul · Mismo período" en vez de solo el mes.
     const cutoffQ = await pool.query(`
       SELECT MAX(mes * 100 + dia) AS cut_num
-      FROM v_ventas
+      FROM mv_sellout_mensual
       WHERE ano = 2026 AND ${mesSql}
         ${paisCond} ${clienteCond} ${catCond} ${subcatCond}
         AND ${dimCol} IS NOT NULL AND ${dimCol} <> ''

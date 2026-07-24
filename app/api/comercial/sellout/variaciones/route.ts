@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
         ano,
         ROUND(SUM(ventas_valor)::numeric,    2)  AS valor,
         ROUND(SUM(ventas_unidades)::numeric,  0)  AS unidades
-      FROM v_sellout_mensual
+      FROM mv_sellout_mensual
       WHERE ano IN (2024, 2025, 2026) ${and}
       GROUP BY ${dimCol}, ano
       ORDER BY ${dimCol}, ano

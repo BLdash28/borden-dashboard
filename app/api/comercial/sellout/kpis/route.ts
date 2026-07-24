@@ -32,13 +32,13 @@ export async function GET(req: NextRequest) {
           CASE WHEN SUM(ventas_unidades) > 0
                THEN SUM(ventas_valor) / SUM(ventas_unidades)
                ELSE 0 END                  AS precio_prom
-        FROM v_sellout_mensual ${buildWhere(ano)}`),
+        FROM mv_sellout_mensual ${buildWhere(ano)}`),
       pool.query(`SELECT
           COALESCE(SUM(ventas_valor),    0) AS valor,
           COALESCE(SUM(ventas_unidades), 0) AS unidades,
           COUNT(DISTINCT punto_venta)       AS pdvs,
           COUNT(DISTINCT sku)               AS skus
-        FROM v_sellout_mensual ${buildWhere(ano - 1)}`),
+        FROM mv_sellout_mensual ${buildWhere(ano - 1)}`),
     ])
 
     const cur  = currR.rows[0]

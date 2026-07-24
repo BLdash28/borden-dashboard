@@ -132,7 +132,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ rows, total_pdvs, avg_cob, avg_ponderada, max_historica, gap_global })
     }
 
-    // Generic: mv_sellout_mensual
+    // Generic: mmv_sellout_mensual
     const filters: string[] = [`ano = ${ano}`]
     if (paises.length) filters.push(inC('pais', paises))
     if (cats.length)   filters.push(inC('categoria', cats))
@@ -143,10 +143,10 @@ export async function GET(req: NextRequest) {
         SELECT sku, MAX(descripcion) AS descripcion, MAX(categoria) AS categoria,
           COUNT(DISTINCT punto_venta) AS pdvs_activos, COUNT(DISTINCT pais) AS paises,
           ROUND(SUM(ventas_valor)::numeric, 2) AS valor
-        FROM mv_sellout_mensual ${where}
+        FROM mmv_sellout_mensual ${where}
         GROUP BY sku ORDER BY pdvs_activos DESC, valor DESC LIMIT 200
       `),
-      pool.query(`SELECT COUNT(DISTINCT punto_venta) AS n FROM mv_sellout_mensual ${where}`),
+      pool.query(`SELECT COUNT(DISTINCT punto_venta) AS n FROM mmv_sellout_mensual ${where}`),
     ])
 
     const total_pdvs = parseInt(totalR.rows[0]?.n ?? '0')
