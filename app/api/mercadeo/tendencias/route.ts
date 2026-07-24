@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const buildWhere = (source: 'mv' | 'raw', extraConds: string[] = []) => {
-      // 'raw' = v_ventas (has dia), 'mv' = mmv_sellout_mensual (no dia)
+      // 'raw' = v_ventas (has dia), 'mv' = mv_sellout_mensual (no dia)
       const baseCond = source === 'raw' ? ['dia > 0'] : []
       const conds: string[] = ['ano > 2000', ...baseCond, ...extraConds]
       const params: any[]   = []
@@ -79,14 +79,14 @@ export async function GET(req: NextRequest) {
         rows = r.rows
 
       } else {
-        // Mensual (default) → mmv_sellout_mensual (fast)
+        // Mensual (default) → mv_sellout_mensual (fast)
         const { where, params } = buildWhere('mv')
         const r = await pool.query(
           `SELECT ano, mes,
                   ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades,
                   COUNT(DISTINCT pais)                   AS n_paises,
                   COUNT(DISTINCT descripcion)            AS n_productos
-           FROM mmv_sellout_mensual ${where}
+           FROM mv_sellout_mensual ${where}
            GROUP BY ano, mes ORDER BY ano, mes`,
           params
         )
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
           const rComp = await pool.query(
             `SELECT ano, mes,
                     ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
-             FROM mmv_sellout_mensual WHERE ${condsComp.join(' AND ')}
+             FROM mv_sellout_mensual WHERE ${condsComp.join(' AND ')}
              GROUP BY ano, mes ORDER BY ano, mes`,
             paramsComp
           )
@@ -128,7 +128,7 @@ export async function GET(req: NextRequest) {
       // Países disponibles para el filtro — use MV for speed
       const { where: wPaises, params: pPaises } = buildWhere('mv')
       const rPaises = await pool.query(
-        `SELECT DISTINCT pais FROM mmv_sellout_mensual ${wPaises} ORDER BY pais`,
+        `SELECT DISTINCT pais FROM mv_sellout_mensual ${wPaises} ORDER BY pais`,
         pPaises
       )
 

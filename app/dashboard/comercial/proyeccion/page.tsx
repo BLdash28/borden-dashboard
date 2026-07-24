@@ -365,7 +365,7 @@ function ProyeccionInner() {
           return (
             <>
               {/* Cuota 2026 */}
-              <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50">
+              <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50 text-center">
                 <p className="text-xs font-semibold text-blue-700 mb-1 md:mb-2 leading-tight">Cuota 2026</p>
                 {otrasProy[0] && (
                   <p className="text-[10px] text-gray-400 mb-1">vs inicial: {difOrig >= 0 ? '+' : '−'}{fmtK(Math.abs(difOrig))}</p>
@@ -374,7 +374,7 @@ function ProyeccionInner() {
               </div>
               {/* Cumplimiento cuota YTD */}
               {cumPct !== null && (
-                <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50">
+                <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50 text-center">
                   <p className="text-xs font-semibold text-blue-700 mb-0.5 md:mb-1 leading-tight">Cumplimiento cuota YTD</p>
                   <p className="text-[10px] text-gray-400 mb-1 md:mb-2">Real / Cuota YTD</p>
                   <p className={`text-lg md:text-2xl font-bold ${cumCls}`}>{cumPct}%</p>
@@ -384,7 +384,7 @@ function ProyeccionInner() {
                 </div>
               )}
               {/* Cuota YTD */}
-              <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50">
+              <div className="bg-white rounded-xl border border-blue-100 shadow-sm p-3 md:p-5 ring-1 ring-blue-50 text-center">
                 <p className="text-xs font-semibold text-blue-700 mb-0.5 md:mb-1 leading-tight">Cuota YTD</p>
                 <p className="text-[10px] text-gray-400 mb-1 md:mb-2">
                   Cuota 2026 hasta {kpis.ultimoMes > 0 ? MES_LABELS[kpis.ultimoMes] : '—'}
@@ -395,13 +395,13 @@ function ProyeccionInner() {
           )
         })()}
         {/* Facing — Esperado vs Actual en un mismo card */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5">
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 text-center">
           <p className="text-xs font-semibold text-gray-500 mb-0.5 md:mb-1 leading-tight">Facing</p>
           <p className="text-[10px] text-gray-400 mb-2">
             Hasta {kpis.ultimoMes > 0 ? MES_LABELS[kpis.ultimoMes] : '—'} / total anual
           </p>
           <div className="grid grid-cols-2 gap-2">
-            <div>
+            <div className="text-center">
               <p className="text-[9px] uppercase tracking-wider text-gray-400 mb-0.5">Esperado</p>
               <p className="text-lg md:text-xl font-bold">
                 {kpis.facing !== null
@@ -410,7 +410,7 @@ function ProyeccionInner() {
                 }
               </p>
             </div>
-            <div>
+            <div className="text-center">
               <p className="text-[9px] uppercase tracking-wider text-gray-400 mb-0.5">Actual</p>
               <p className="text-lg md:text-xl font-bold">
                 {kpis.proy > 0
@@ -427,7 +427,7 @@ function ProyeccionInner() {
         </div>
         {/* Proyección Inicial — Original 2026, mostrada como referencia al final */}
         {otrasProy[0] && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 col-span-2 sm:col-span-1">
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-3 md:p-5 col-span-2 sm:col-span-1 text-center">
             <p className="text-xs font-semibold text-gray-500 mb-1 md:mb-2 leading-tight">Proyección Inicial</p>
             <p className="text-[10px] text-gray-400 mb-1">Original 2026</p>
             <p className="text-lg md:text-2xl font-bold text-gray-900 break-all">{fmt(otrasProy[0].total)}</p>

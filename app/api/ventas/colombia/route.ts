@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
 
       const where = 'WHERE ' + conds.join(' AND ')
 
-      // mmv_sellout_mensual doesn't have codigo_barras or precio_promedio.
+      // mv_sellout_mensual doesn't have codigo_barras or precio_promedio.
       // Use v_ventas (with JOIN to dim_producto) only for the row-level
       // detail query; KPI/cadenas/formatos come from the fast MV.
       const [rowsR, kpiR, cadenasR, formatosR] = await Promise.all([
@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
              COALESCE(subcategoria, '') AS subcategoria,
              ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades,
              ROUND(SUM(ventas_valor)::numeric, 2)    AS ventas_valor
-           FROM mmv_sellout_mensual ${where}
+           FROM mv_sellout_mensual ${where}
            GROUP BY ano, mes, cadena, formato, sku, descripcion, categoria, subcategoria
            ORDER BY ano ASC, mes ASC`,
           params
@@ -90,17 +90,17 @@ export async function GET(req: NextRequest) {
              COUNT(DISTINCT sku)                     AS total_skus,
              COUNT(DISTINCT COALESCE(cadena,''))     AS total_cadenas,
              COUNT(DISTINCT COALESCE(punto_venta,'')) AS total_pdvs
-           FROM mmv_sellout_mensual ${where}`,
+           FROM mv_sellout_mensual ${where}`,
           params
         ),
         // Available cadenas
         pool.query(
-          `SELECT DISTINCT COALESCE(cadena,'') AS cadena FROM mmv_sellout_mensual WHERE pais='CO' AND cadena IS NOT NULL ORDER BY cadena`,
+          `SELECT DISTINCT COALESCE(cadena,'') AS cadena FROM mv_sellout_mensual WHERE pais='CO' AND cadena IS NOT NULL ORDER BY cadena`,
           []
         ),
         // Available formatos
         pool.query(
-          `SELECT DISTINCT COALESCE(formato,'') AS formato FROM mmv_sellout_mensual WHERE pais='CO' AND formato IS NOT NULL ORDER BY formato`,
+          `SELECT DISTINCT COALESCE(formato,'') AS formato FROM mv_sellout_mensual WHERE pais='CO' AND formato IS NOT NULL ORDER BY formato`,
           []
         ),
       ])

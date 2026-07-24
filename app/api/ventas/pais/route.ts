@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
             categorias: catsP, subcategorias: subcatsP, clientes: clientesP } = parsed.data
     const modo = mesQ ? 'mes' : anoQ ? 'ano' : 'todos'
 
-    // mvConds: for mmv_sellout_mensual (no dia column)
+    // mvConds: for mv_sellout_mensual (no dia column)
     // rawConds: for v_ventas (has dia)
     const mvConds: string[]  = []
     const rawConds: string[] = ['dia > 0']
@@ -94,7 +94,7 @@ export async function GET(req: NextRequest) {
         return { rows: r.rows }
       }
 
-      // Time-series: mode='todos' → mmv_sellout_mensual (no dia needed, fast)
+      // Time-series: mode='todos' → mv_sellout_mensual (no dia needed, fast)
       // mode='ano'/'mes' → v_ventas (needs dia column)
       let r
       if (modo === 'todos') {
@@ -102,7 +102,7 @@ export async function GET(req: NextRequest) {
           `SELECT pais, ano, mes,
                   ROUND(SUM(ventas_valor)::numeric, 4)    AS ventas_valor,
                   ROUND(SUM(ventas_unidades)::numeric, 0) AS ventas_unidades
-           FROM mmv_sellout_mensual ${mvWhere}
+           FROM mv_sellout_mensual ${mvWhere}
            GROUP BY pais, ano, mes ORDER BY pais, ano, mes`,
           params
         )

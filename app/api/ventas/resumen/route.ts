@@ -151,7 +151,7 @@ export async function GET(req: NextRequest) {
     const { data: result } = await withCache(
       cacheKey,
       async () => {
-        // mv_ventas_agg: pre-aggregated (3.5K rows, ~100ms) vs mmv_sellout_mensual (773K rows, 43s)
+        // mv_ventas_agg: pre-aggregated (3.5K rows, ~100ms) vs mv_sellout_mensual (773K rows, 43s)
         const MV = 'mv_ventas_agg'
         // For modo='mes': single query on v_ventas gets both dia and semana breakdowns
         const diaSemanasPromise = modo === 'mes'
@@ -160,7 +160,7 @@ export async function GET(req: NextRequest) {
                       EXTRACT(WEEK FROM make_date(ano::int, mes::int, GREATEST(dia::int,1)))::int AS semana,
                       ROUND(SUM(ventas_valor)::numeric,2)    AS ventas_valor,
                       ROUND(SUM(ventas_unidades)::numeric,0) AS ventas_unidades
-               FROM mmv_sellout_mensual WHERE ${where} AND dia > 0
+               FROM mv_sellout_mensual WHERE ${where} AND dia > 0
                GROUP BY dia, semana ORDER BY dia`, params)
               .catch(() => ({ rows: [] as any[] }))
           : Promise.resolve({ rows: [] as any[] })

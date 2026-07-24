@@ -147,9 +147,9 @@ export async function GET(req: NextRequest) {
       async () => {
         const client = await pool.connect()
         try {
-          // mv_sellout_agg: 4K filas terminales (vs 943K en mmv_sellout_mensual). ~200× más rápido para GROUP BY dim.
-          // Excepción: dim=tienda usa punto_venta (no está en mv_sellout_agg), fallback a mmv_sellout_mensual.
-          const source = dim === 'tienda' ? 'mmv_sellout_mensual' : 'mv_sellout_agg'
+          // mv_sellout_agg: 4K filas terminales (vs 943K en mv_sellout_mensual). ~200× más rápido para GROUP BY dim.
+          // Excepción: dim=tienda usa punto_venta (no está en mv_sellout_agg), fallback a mv_sellout_mensual.
+          const source = dim === 'tienda' ? 'mv_sellout_mensual' : 'mv_sellout_agg'
           const r = await client.query(
             `SELECT ${selectExpr}, ` +
             'ROUND(SUM(ventas_valor)::numeric,4)    AS ventas_valor, ' +

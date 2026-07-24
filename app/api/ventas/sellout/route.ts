@@ -93,7 +93,7 @@ export async function GET(req: NextRequest) {
           try {
             await client.query('SET LOCAL statement_timeout = 2000')
             const rc = await client.query(
-              `SELECT COUNT(*) AS total FROM mmv_sellout_mensual ${where}`, params
+              `SELECT COUNT(*) AS total FROM mv_sellout_mensual ${where}`, params
             )
             return parseInt(rc.rows[0]?.total ?? '0')
           } catch {
@@ -117,7 +117,7 @@ export async function GET(req: NextRequest) {
                 codigo_barras, sku, descripcion, categoria, subcategoria,
                 ROUND(ventas_unidades::numeric, 0) AS ventas_unidades,
                 ROUND(ventas_valor::numeric, 2)    AS ventas_valor
-         FROM mmv_sellout_mensual ${where}
+         FROM mv_sellout_mensual ${where}
          ORDER BY ${sortCol} ${sortDir}, ventas_valor DESC, dia DESC
          LIMIT $${idx} OFFSET $${idx + 1}`,
         [...params, pageSize, offset]

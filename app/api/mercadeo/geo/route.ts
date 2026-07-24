@@ -79,14 +79,14 @@ export async function GET(req: NextRequest) {
               ROUND(SUM(ventas_unidades)::numeric, 0)    AS ventas_unidades,
               COUNT(DISTINCT descripcion)                AS n_productos,
               ${subCol[nivel]}                           AS n_sub
-           FROM mmv_sellout_mensual
+           FROM mv_sellout_mensual
            ${where}
            GROUP BY ${col}
            ORDER BY ventas_unidades DESC`,
           params
         ),
         pool.query(
-          `SELECT DISTINCT ano, mes FROM mmv_sellout_mensual
+          `SELECT DISTINCT ano, mes FROM mv_sellout_mensual
            WHERE ano > 2000 ORDER BY ano DESC, mes DESC LIMIT 36`
         ),
       ])

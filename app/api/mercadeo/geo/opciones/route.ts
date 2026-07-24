@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
       const r = await pool.query(
         `SELECT DISTINCT ${col} AS valor
-         FROM mmv_sellout_mensual ${where}
+         FROM mv_sellout_mensual ${where}
          ORDER BY ${col}`,
         params
       )
